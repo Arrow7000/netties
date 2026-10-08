@@ -1,4 +1,5 @@
 import { render } from "solid-js/web";
-import { App } from "./App";
+import { App, initialDoc } from "./App";
+import "./styles.css";
 
-render(() => <App />, document.getElementById("root")!);
+initialDoc().then((doc) => render(() => <App initial={doc} />, document.getElementById("root")!));
