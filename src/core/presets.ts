@@ -8,7 +8,7 @@ import { A, L, R, System } from "./system";
  */
 export function combinators(): System {
   const sys = new System()
-    .addType({ id: "γ", name: "constructor", symbol: "γ", arity: 2 })
+    .addType({ id: "γ", name: "constructor", symbol: "γ", arity: 2, filled: true })
     .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2 })
     .addType({ id: "ε", name: "eraser", symbol: "ε", arity: 0 });
 

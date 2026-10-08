@@ -16,6 +16,8 @@ export interface AgentType {
   /** Short label drawn inside the agent, e.g. "γ". */
   symbol: string;
   arity: number;
+  /** Drawn as a solid shape rather than an outline. */
+  filled?: boolean;
 }
 
 /** Where a wire ends: an agent's port, or one of the net's free ports. */
@@ -36,6 +38,12 @@ export interface Wire {
 }
 
 export const NONE: WireId = -1;
+
+export interface NetJSON {
+  agents: { id: AgentId; type: string; arity: number }[];
+  wires: { id: WireId; ends: [End, End] }[];
+  free: string[];
+}
 
 export const port = (agent: AgentId, slot: number): End => ({ kind: "port", agent, slot });
 export const free = (name: string): End => ({ kind: "free", name });
@@ -151,6 +159,25 @@ export class Net {
     for (const [k, v] of this.free) n.free.set(k, v);
     n.nextAgent = this.nextAgent;
     n.nextWire = this.nextWire;
+    return n;
+  }
+
+  toJSON(): NetJSON {
+    return {
+      agents: [...this.agents.values()].map((a) => ({ id: a.id, type: a.type, arity: a.wires.length - 1 })),
+      wires: [...this.wires.values()].map((w) => ({ id: w.id, ends: w.ends })),
+      free: [...this.free.keys()],
+    };
+  }
+
+  static fromJSON(j: NetJSON): Net {
+    const n = new Net();
+    for (const a of j.agents) {
+      n.agents.set(a.id, { id: a.id, type: a.type, wires: new Array(a.arity + 1).fill(NONE) });
+      n.nextAgent = Math.max(n.nextAgent, a.id + 1);
+    }
+    for (const name of j.free) n.free.set(name, NONE);
+    for (const w of j.wires) n.connect(w.ends[0], w.ends[1], w.id);
     return n;
   }
 

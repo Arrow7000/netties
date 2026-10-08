@@ -25,6 +25,11 @@ export const A = (index: number, slot: number): RuleEnd => ({ kind: "agent", ind
 const ruleEndKey = (e: RuleEnd): string =>
   e.kind === "agent" ? `a${e.index}:${e.slot}` : `i${e.side}:${e.slot}`;
 
+export interface SystemJSON {
+  types: AgentType[];
+  rules: Rule[];
+}
+
 export const pairKey = (a: string, b: string): string => `${a}|${b}`;
 
 export class System {
@@ -35,6 +40,17 @@ export class System {
     if (this.types.has(t.id)) throw new Error(`duplicate agent type ${t.id}`);
     this.types.set(t.id, t);
     return this;
+  }
+
+  toJSON(): SystemJSON {
+    return { types: [...this.types.values()], rules: [...this.rules.values()] };
+  }
+
+  static fromJSON(j: SystemJSON): System {
+    const sys = new System();
+    j.types.forEach((t) => sys.addType(t));
+    j.rules.forEach((r) => sys.addRule(r));
+    return sys;
   }
 
   type(id: string): AgentType {
