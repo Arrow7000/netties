@@ -3,6 +3,8 @@ import type { AgentId } from "../core/net";
 export interface Pt {
   x: number;
   y: number;
+  /** The segment arriving at this point is a smooth S-curve rather than a straight line. */
+  s?: boolean;
 }
 
 /** Which way an agent's principal port points. Agents only ever point up or down. */

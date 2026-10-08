@@ -38,7 +38,7 @@ export function labelPos(p: Placed, arity: number): Pt {
 /** A standalone SVG of a net, for export and for eyeballing layouts. */
 export function toSVG(net: Net, sys: System, placement: Placement, routed: Routed, ink: Ink, pad = 24): string {
   const b = routed.bounds;
-  for (const f of routed.free.values()) b.y1 = Math.max(b.y1, f.y + 14);
+  for (const f of routed.free.values()) [b.y0, b.y1] = [Math.min(b.y0, f.y - 14), Math.max(b.y1, f.y + 14)];
   const vb = [b.x0 - pad, b.y0 - pad, b.x1 - b.x0 + 2 * pad, b.y1 - b.y0 + 2 * pad];
   const out: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(" ")}" width="${vb[2]! * 2}" height="${vb[3]! * 2}">`,
@@ -70,7 +70,7 @@ export function toSVG(net: Net, sys: System, placement: Placement, routed: Route
   }
   for (const [name, f] of routed.free) {
     out.push(
-      `<text x="${f.x}" y="${f.y + 9}" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="9" text-anchor="middle" fill="${ink.ink}">${name}</text>`,
+      `<text x="${f.x}" y="${f.dir === "up" ? f.y - 4 : f.y + 9}" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="9" text-anchor="middle" fill="${ink.ink}">${name}</text>`,
     );
   }
   out.push(`</svg>`);

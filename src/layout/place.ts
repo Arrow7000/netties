@@ -1,6 +1,6 @@
 import { type AgentId, type Net, endKey, port } from "../core/net";
-import { G, type Placement, shape } from "./geometry";
-import { type Gap, type Routed, crossings, length, route } from "./route";
+import { G, type Orient, type Placement, shape } from "./geometry";
+import { type Routed, crossings, length, route } from "./route";
 
 /**
  * Automatic placement.
@@ -11,12 +11,17 @@ import { type Gap, type Routed, crossings, length, route } from "./route";
  * at an active pair (two roots tip to tip), or nowhere yet. (A loop of
  * parents is a vicious circle; we cut it at one agent.)
  *
- * Each tree is drawn with its root at the bottom pointing down and its
- * children stacked above, every aux port getting its own column so wires
- * can run straight up. An active pair is two trees facing each other: one
- * pointing down from above, one rotated to point up from below. These
- * units sit side by side, and the router joins the remaining wires with
- * caps, cups and lanes in the gaps between units.
+ * Each tree is drawn with its children stacked behind its root, every aux
+ * port getting its own column so wires can run straight. A unit is a lone
+ * tree (pointing up or down) or an active pair (one tree pointing down from
+ * above, one pointing up from below).
+ *
+ * Units are then stacked in levels: when a unit's upward wire meets
+ * another's downward wire, the second goes above the first so the two face
+ * each other and join with a short S-curve, Lafont-style. Within a level,
+ * units slide sideways to line up with what they connect to. Finally we
+ * try flipping units and keep whatever routes with fewer crossings and
+ * shorter wires.
  */
 
 export interface AutoLayout {
@@ -28,6 +33,7 @@ export interface AutoLayout {
 interface Tree {
   /** [agent, x offset, depth] relative to the root's tip. */
   nodes: [AgentId, number, number][];
+  /** Columns of the loose aux wires: [endKey, x offset]. */
   cols: [string, number][];
   l: number;
   r: number;
@@ -36,8 +42,18 @@ interface Tree {
 interface Unit {
   roots: [AgentId] | [AgentId, AgentId];
   trees: Tree[];
-  /** For pairs: put the second root's tree on top instead of the first's. */
+  /** Lone tree: point up instead of down. Pair: put the second tree on top. */
   flip: boolean;
+}
+
+/** A unit drawn at the origin: the tip of a lone tree, or the middle of a pair. */
+interface UnitGeom {
+  nodes: [AgentId, number, number, Orient][];
+  cols: [string, number, Orient][];
+  l: number;
+  r: number;
+  top: number;
+  bottom: number;
 }
 
 export function structure(net: Net) {
@@ -131,8 +147,8 @@ export function autoLayout(net: Net): AutoLayout {
     } else units.push({ roots: [r], trees: [lay(r)], flip: false });
   }
 
-  // Trees whose loose ends mostly go to free ports read better at the bottom,
-  // where their wires can drop straight down.
+  // Trees whose loose ends mostly go to free ports read better at the
+  // bottom of a pair, where their wires drop straight out.
   const freeStubs = (t: Tree) =>
     t.cols.filter(([k]) => {
       const [a, s] = k.split(":").map(Number);
@@ -140,31 +156,18 @@ export function autoLayout(net: Net): AutoLayout {
     }).length;
   for (const u of units) if (u.trees.length === 2) u.flip = freeStubs(u.trees[0]!) > freeStubs(u.trees[1]!);
 
-  let order = initialOrder(net, units);
-  let best = arrange(net, order, units);
-
-  // Local search over unit order and pair orientation, while it's cheap.
-  if (units.length > 1 && units.length <= 14 && net.wires.size <= 200) {
+  let best = arrange(net, units);
+  if (units.length <= 24 && net.wires.size <= 300) {
     let bestCost = cost(best.routed);
     for (let pass = 0; pass < 3; pass++) {
       let improved = false;
-      const tryCandidate = (cand: number[]) => {
-        const l = arrange(net, cand, units);
-        const c = cost(l.routed);
-        if (c < bestCost - 0.5) [best, bestCost, order, improved] = [l, c, cand, true];
-        return c;
-      };
-      for (let i = 0; i + 1 < order.length; i++) {
-        const cand = [...order];
-        [cand[i], cand[i + 1]] = [cand[i + 1]!, cand[i]!];
-        tryCandidate(cand);
-      }
       for (const u of units) {
-        if (u.trees.length !== 2) continue;
+        // A lone tree rooted at a free port, or nothing, can point either way.
         u.flip = !u.flip;
-        const before = bestCost;
-        tryCandidate(order);
-        if (bestCost === before) u.flip = !u.flip;
+        const l = arrange(net, units);
+        const c = cost(l.routed);
+        if (c < bestCost - 0.5) [best, bestCost, improved] = [l, c, true];
+        else u.flip = !u.flip;
       }
       if (!improved) break;
     }
@@ -172,94 +175,155 @@ export function autoLayout(net: Net): AutoLayout {
   return best;
 }
 
-const cost = (r: Routed) => crossings(r.wires) * 400 + [...r.wires.values()].reduce((s, p) => s + length(p), 0);
+const cost = (r: Routed) =>
+  crossings(r.wires) * 300 + r.arounds * 400 + [...r.wires.values()].reduce((s, p) => s + length(p), 0);
 
-/** Order units so that connected ones sit next to each other. */
-function initialOrder(net: Net, units: Unit[]): number[] {
-  const unitOf = new Map<AgentId, number>();
-  const { parent } = structure(net);
-  const rootOf = (a: AgentId): AgentId => {
-    let r = a;
-    for (let p = parent.get(r); p !== undefined; p = parent.get(r)) r = p;
-    return r;
-  };
-  units.forEach((u, i) => u.roots.forEach((r) => unitOf.set(r, i)));
-  const adj = units.map(() => new Map<number, number>());
-  for (const w of net.wires.values()) {
-    const [a, b] = w.ends;
-    if (a.kind !== "port" || b.kind !== "port") continue;
-    const ua = unitOf.get(rootOf(a.agent))!;
-    const ub = unitOf.get(rootOf(b.agent))!;
-    if (ua === ub) continue;
-    adj[ua]!.set(ub, (adj[ua]!.get(ub) ?? 0) + 1);
-    adj[ub]!.set(ua, (adj[ub]!.get(ua) ?? 0) + 1);
-  }
-  const order: number[] = [];
-  const placed = new Set<number>();
-  for (let s = 0; s < units.length; s++) {
-    if (placed.has(s)) continue;
-    // Depth-first, following the strongest connections first.
-    const stack = [s];
-    while (stack.length) {
-      const u = stack.pop()!;
-      if (placed.has(u)) continue;
-      placed.add(u);
-      order.push(u);
-      const next = [...adj[u]!].filter(([v]) => !placed.has(v)).sort((x, y) => x[1] - y[1]);
-      stack.push(...next.map(([v]) => v));
+function geom(net: Net, u: Unit): UnitGeom {
+  const g: UnitGeom = { nodes: [], cols: [], l: Infinity, r: -Infinity, top: 0, bottom: 0 };
+  const add = (t: Tree, tipY: number, pointing: Orient) => {
+    const s = pointing === "down" ? 1 : -1;
+    for (const [id, dx, d] of t.nodes) {
+      const h = shape(net.agent(id).wires.length - 1).h;
+      const y = tipY - s * (d * G.layerH + h / 2);
+      g.nodes.push([id, s * dx, y, pointing]);
+      g.top = Math.min(g.top, y - h / 2);
+      g.bottom = Math.max(g.bottom, y + h / 2);
     }
+    for (const [k, dx] of t.cols) g.cols.push([k, s * dx, pointing === "down" ? "up" : "down"]);
+    g.l = Math.min(g.l, s > 0 ? t.l : -t.r);
+    g.r = Math.max(g.r, s > 0 ? t.r : -t.l);
+  };
+  if (u.trees.length === 1) add(u.trees[0]!, 0, u.flip ? "up" : "down");
+  else {
+    const [top, bottom] = u.flip ? [u.trees[1]!, u.trees[0]!] : [u.trees[0]!, u.trees[1]!];
+    add(top, -G.pairGap / 2, "down");
+    add(bottom, G.pairGap / 2, "up");
   }
-  return order;
+  return g;
 }
 
-/** Place units left to right, route, then widen any gap that needs room for more lanes. */
-function arrange(net: Net, order: number[], units: Unit[]): AutoLayout {
-  const widths = order.map(() => G.unitGap);
-  let result: AutoLayout | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const placement: Placement = new Map();
-    const columns = new Map<string, number>();
-    const extents: [number, number][] = [];
-    let cursor = 0;
-    order.forEach((ui, i) => {
-      const u = units[ui]!;
-      const [top, bottom] = u.flip ? [u.trees[1], u.trees[0]] : [u.trees[0], u.trees[1]];
-      const l = Math.min(top!.l, bottom ? -bottom.r : Infinity);
-      const r = Math.max(top!.r, bottom ? -bottom.l : -Infinity);
-      const x0 = cursor - l;
-      const tipY = bottom ? -G.pairGap / 2 : 0;
-      for (const [id, dx, d] of top!.nodes) {
-        const h = shape(net.agent(id).wires.length - 1).h;
-        placement.set(id, { x: x0 + dx, y: tipY - d * G.layerH - h / 2, orient: "down" });
-      }
-      for (const [k, dx] of top!.cols) columns.set(k, x0 + dx);
-      if (bottom) {
-        for (const [id, dx, d] of bottom.nodes) {
-          const h = shape(net.agent(id).wires.length - 1).h;
-          placement.set(id, { x: x0 - dx, y: G.pairGap / 2 + d * G.layerH + h / 2, orient: "up" });
-        }
-        for (const [k, dx] of bottom.cols) columns.set(k, x0 - dx);
-      }
-      extents.push([cursor, cursor + r - l]);
-      cursor += r - l + (widths[i] ?? G.unitGap);
-    });
-    const gaps: Gap[] = [];
-    if (extents.length) {
-      gaps.push({ x0: -Infinity, x1: extents[0]![0] - G.wireGap / 2 });
-      for (let i = 1; i < extents.length; i++) gaps.push({ x0: extents[i - 1]![1], x1: extents[i]![0] });
-      gaps.push({ x0: extents[extents.length - 1]![1] + G.wireGap / 2, x1: Infinity });
+function arrange(net: Net, units: Unit[]): AutoLayout {
+  const geoms = units.map((u) => geom(net, u));
+
+  // Which unit each loose wire end belongs to, and which way it leaves.
+  const stub = new Map<string, { unit: number; dx: number; dir: Orient }>();
+  geoms.forEach((g, i) => g.cols.forEach(([k, dx, dir]) => stub.set(k, { unit: i, dx, dir })));
+
+  // above[a] holds units that should sit above a; links are all connections for alignment.
+  const above = units.map(() => new Set<number>());
+  const below = units.map(() => new Set<number>());
+  const links: { a: number; b: number; da: number; db: number; facing: boolean }[] = [];
+  for (const w of net.wires.values()) {
+    const [e0, e1] = w.ends;
+    if (e0.kind !== "port" || e1.kind !== "port") continue;
+    const s0 = stub.get(endKey(e0));
+    const s1 = stub.get(endKey(e1));
+    if (!s0 || !s1 || s0.unit === s1.unit) continue;
+    const facing = s0.dir !== s1.dir;
+    if (facing) {
+      const [lo, hi] = s0.dir === "up" ? [s0.unit, s1.unit] : [s1.unit, s0.unit];
+      above[lo]!.add(hi);
+      below[hi]!.add(lo);
     }
-    const routed = route(net, placement, { columns, gaps: gaps.length ? gaps : undefined });
-    result = { placement, columns, routed };
-    let widened = false;
-    for (let i = 0; i < order.length - 1; i++) {
-      const need = (routed.laneCount[i + 1]! + 1) * G.wireGap * 1.4;
-      if (need > widths[i]!) {
-        widths[i] = need;
-        widened = true;
-      }
-    }
-    if (!widened) break;
+    links.push({ a: s0.unit, b: s1.unit, da: s0.dx, db: s1.dx, facing });
   }
-  return result!;
+
+  // Levels, counted downwards. Longest path from the top, ignoring edges
+  // that would close a cycle.
+  const level = units.map(() => 0);
+  const done = units.map(() => 0);
+  const visit = (u: number): number => {
+    if (done[u] === 2) return level[u]!;
+    if (done[u] === 1) return -1; // cycle: ignore this edge
+    done[u] = 1;
+    let l = 0;
+    for (const a of above[u]!) {
+      const la = visit(a);
+      if (la >= 0) l = Math.max(l, la + 1);
+    }
+    done[u] = 2;
+    return (level[u] = l);
+  };
+  units.forEach((_, u) => visit(u));
+  // Pull units that only hang above others down to sit just above them.
+  for (let pass = 0; pass < 2; pass++) {
+    units.forEach((_, u) => {
+      if (above[u]!.size || !below[u]!.size) return;
+      level[u] = Math.min(...[...below[u]!].map((b) => level[b]!)) - 1;
+    });
+  }
+  // Units with no vertical ties join the level of something they connect to.
+  for (const { a, b, facing } of links) {
+    if (facing) continue;
+    if (!above[a]!.size && !below[a]!.size) level[a] = level[b]!;
+    else if (!above[b]!.size && !below[b]!.size) level[b] = level[a]!;
+  }
+  const minLevel = Math.min(0, ...level);
+  const levels: number[][] = [];
+  level.forEach((l, u) => (levels[l - minLevel] ??= []).push(u));
+  for (let i = 0; i < levels.length; i++) levels[i] ??= [];
+
+  // Horizontal positions: start packed, then repeatedly slide units to line
+  // up with what they connect to, keeping order and spacing within a level.
+  const x = units.map(() => 0);
+  const pack = (lv: number[], want: number[]) => {
+    const order = [...lv].sort((a, b) => want[a]! - want[b]! || a - b);
+    let prevRight = -Infinity;
+    for (const u of order) {
+      x[u] = Math.max(want[u]!, prevRight + G.unitGap - geoms[u]!.l);
+      prevRight = x[u]! + geoms[u]!.r;
+    }
+    // Recentre the level on what it wanted, so pushing doesn't drift rightwards.
+    const shift = order.reduce((s, u) => s + want[u]! - x[u]!, 0) / Math.max(1, order.length);
+    for (const u of order) x[u] = x[u]! + shift;
+  };
+  {
+    let cursor = 0;
+    for (const lv of levels) {
+      cursor = 0;
+      for (const u of lv) {
+        x[u] = cursor - geoms[u]!.l;
+        cursor = x[u]! + geoms[u]!.r + G.unitGap;
+      }
+    }
+  }
+  for (let it = 0; it < 8; it++) {
+    const want = [...x];
+    const sum = units.map(() => 0);
+    const weight = units.map(() => 0);
+    for (const { a, b, da, db, facing } of links) {
+      const w = facing ? 1 : 0.25;
+      sum[a]! += w * (x[b]! + db - da);
+      weight[a]! += w;
+      sum[b]! += w * (x[a]! + da - db);
+      weight[b]! += w;
+    }
+    units.forEach((_, u) => {
+      if (weight[u]) want[u] = sum[u]! / weight[u]!;
+    });
+    for (const lv of levels) pack(lv, want);
+  }
+
+  // Vertical positions: stack the levels with room between them for the
+  // wires that cross over.
+  const y = units.map(() => 0);
+  let base = 0;
+  levels.forEach((lv, i) => {
+    if (!lv.length) return;
+    const top = Math.min(...lv.map((u) => geoms[u]!.top));
+    if (i > 0) {
+      const prev = levels[i - 1]!;
+      const prevBottom = prev.length ? Math.max(...prev.map((u) => y[u]! + geoms[u]!.bottom)) : base;
+      base = prevBottom + G.layerH * 1.1 - top;
+    }
+    for (const u of lv) y[u] = base;
+  });
+
+  const placement: Placement = new Map();
+  const columns = new Map<string, number>();
+  geoms.forEach((g, u) => {
+    for (const [id, dx, dy, orient] of g.nodes) placement.set(id, { x: x[u]! + dx, y: y[u]! + dy, orient });
+    for (const [k, dx] of g.cols) columns.set(k, x[u]! + dx);
+  });
+  return { placement, columns, routed: route(net, placement, { columns }) };
 }
