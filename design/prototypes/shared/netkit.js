@@ -5,7 +5,7 @@
 (function () {
   "use strict";
   const clone = (o) => JSON.parse(JSON.stringify(o));
-  const G = { portGap: 16, radius: 9, circleR: 8, stroke: 1.4, halo: 6, freeMargin: 30 };
+  const G = { portGap: 16, radius: 9, circleR: 8, agentH: 30, stroke: 1.4, halo: 6, freeMargin: 30 };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const lerp = (a, b, t) => a + (b - a) * t;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -66,6 +66,16 @@
     { const tS = typed.types.find((t) => t.id === "S"), t0 = typed.types.find((t) => t.id === "0"), tP = typed.types.find((t) => t.id === "+");
       typed.states[0].agents.push(makeAgent(tS, 1901, 120, -40, "down"), makeAgent(t0, 1902, 160, -40, "down"), makeAgent(tP, 1903, 140, 40, "up")); }
     ex.push(typed);
+    // A bigger rule system (10 agent types) on a real layout, to try the rule grid overflow.
+    { const two = ex.find((e) => e.name === "2 × 2");
+      const big = clone(two); big.name = "2 × 2 with 10 agent types"; big.big = true;
+      big.types.push(
+        { id: "−", name: "subtract", symbol: "−", arity: 2, filled: false, circle: false },
+        { id: "P", name: "predecessor", symbol: "P", arity: 1, filled: false, circle: false },
+        { id: "T", name: "true", symbol: "T", arity: 0, filled: false, circle: true },
+        { id: "F", name: "false", symbol: "F", arity: 0, filled: true, circle: true });
+      big.rules.push("−|0", "−|S", "P|0", "P|S", "δ|T", "δ|F", "ε|T", "ε|F", "δ|δ", "ε|ε");
+      ex.push(big); }
     for (const e of ex) for (const s of e.states) normaliseState(s);
     for (const e of ex) e.family = e.types.some((t) => t.id === "γ") ? "comb" : "arith";
     return d;
@@ -89,7 +99,7 @@
       }
       return { id, type: type.id, x: cx, y: cy, orient, outline: { circle: { cx, cy, r } }, ports };
     }
-    const w = (n + 1) * G.portGap, h = w * 0.62;
+    const w = (n + 1) * G.portGap, h = G.agentH || 30;
     const wide = cy - s * h / 2, apex = cy + s * h / 2;
     const ports = [[cx, apex]];
     for (let i = 1; i <= n; i++) ports.push([cx + s * (i - (n + 1) / 2) * G.portGap, wide]);
@@ -235,6 +245,9 @@
   .nk-ring-o.pre{stroke-dasharray:3 2;opacity:.75}
   .nk-pair-o{fill:none;stroke:var(--active);stroke-width:4.4;stroke-linejoin:round;opacity:.55}
   .nk-pair-o.stuck{stroke:var(--stuck);opacity:.4}
+  .nk-pair-o.alt,.nk-pair-o.plain{stroke:var(--accent);opacity:.4}
+  .nk-activeb.alt{stroke:var(--accent);stroke-dasharray:2.2 1.8;opacity:.75}
+  .nk-activeb.alt.hot{stroke-dasharray:none;opacity:.85}
   .nk-port-hit{fill:transparent;cursor:crosshair}
   .nk-port-empty{fill:var(--paper);stroke:var(--ink);stroke-width:1.1}
   .nk-port-hover{fill:none;stroke:var(--accent);stroke-width:1.4}
@@ -291,7 +304,16 @@
       this.sel = new Set(); this.pre = new Set();
       this.hover = null; this.drag = null; this.preview = null; this.anim = null;
       this.nid = 1000; this.listeners = {};
+      this.alt = false; this.ext = null;
       this._bind();
+      if (this.o.altMode) {
+        const setAlt = (v) => { if (this.alt === v) return; this.alt = v; this.host.classList.toggle("alt", v); this.render(); this.emit("altchange", v); if (this.hover) { const d = this.describe(this.hover); this.emit("hover", { target: this.hover, hint: d && d.hint }); } };
+        this._setAlt = setAlt;
+        addEventListener("keydown", (e) => { if (e.key === "Alt") { e.preventDefault(); setAlt(true); } });
+        addEventListener("keyup", (e) => { if (e.key === "Alt") { e.preventDefault(); setAlt(false); } });
+        addEventListener("blur", () => setAlt(false));
+        this.host.addEventListener("pointermove", (e) => setAlt(e.altKey));
+      }
       new ResizeObserver(() => this.render()).observe(host);
     }
     on(ev, fn) { (this.listeners[ev] ||= []).push(fn); return this; }
@@ -493,6 +515,12 @@
       const hotPair = hotW != null ? this.state.wires.find((w) => w.id === hotW) : null;
       const hotSt = hotPair ? this.status(hotPair) : null;
       const pairAgents = new Set(hotSt ? [hotPair.ends[0].agent, hotPair.ends[1].agent] : []);
+      const altOn = !!(this.o.altMode && this.alt);
+      const extW = new Set(this.ext && this.ext.wires || []);
+      for (const id of extW) { const w = s.wires.find((x) => x.id === id); if (w) w.ends.forEach((e) => e.agent != null && pairAgents.add(e.agent)); }
+      for (const id of this.ext && this.ext.agents || []) pairAgents.add(id);
+      if (this.o.hoverRing && H && H.kind === "agent" && !D) pairAgents.add(H.id);
+      const extSt = (() => { for (const id of extW) { const w = s.wires.find((x) => x.id === id); const st = w && this.status(w); if (st) return st; } return null; })();
       let out = "";
 
       // old wires and dying agents fade out during a step
@@ -516,12 +544,14 @@
         const st = an ? null : this.status(w);
         const P = pts(p);
         out += `<polyline class="nk-halo" points="${P}"/>`;
-        if (st === "active") out += `<polyline class="nk-activeb${hotW === w.id ? " hot" : ""}" points="${P}"/>`;
-        if (st === "stuck") out += `<polyline class="nk-stuckb${hotW === w.id ? " hot" : ""}" points="${P}"/>`;
+        const isHot = hotW === w.id || extW.has(w.id);
+        if (st === "active") out += `<polyline class="nk-activeb${isHot ? " hot" : ""}${altOn ? " alt" : ""}" points="${P}"/>`;
+        if (st === "stuck") out += `<polyline class="nk-stuckb${isHot ? " hot" : ""}" points="${P}"/>`;
+        if (!st && extW.has(w.id)) out += `<polyline class="nk-wsel pre" points="${P}"/>`;
         if (this.sel.has("w:" + w.id)) out += `<polyline class="nk-wsel" points="${P}"/>`;
         else if (this.pre.has("w:" + w.id)) out += `<polyline class="nk-wsel pre" points="${P}"/>`;
         out += `<polyline class="nk-wire" points="${P}"/>`;
-        if (!an) out += `<polyline class="nk-whit${st ? " act" : ""}" data-k="wire" data-id="${w.id}" points="${P}"/>`;
+        if (!an) out += `<polyline class="nk-whit${st ? " act st-" + st : ""}" data-k="wire" data-id="${w.id}" points="${P}"/>`;
       }
       out += "</g>";
 
@@ -534,7 +564,7 @@
         if (an && an.newIds.has(a.id)) op = smooth(0.15, 0.55, T);
         if (fadeIds.has(a.id)) op = 0.3;
         out += `<g class="nk-agent" data-k="agent" data-id="${a.id}" transform="translate(${o[0].toFixed(2)},${o[1].toFixed(2)})" opacity="${op}">`;
-        if (pairAgents.has(a.id)) out += ringSVG(a, "nk-pair-o" + (hotSt === "stuck" ? " stuck" : ""));
+        if (pairAgents.has(a.id)) { const stt = hotSt || extSt; out += ringSVG(a, "nk-pair-o" + (stt === "stuck" ? " stuck" : stt === "active" && altOn ? " alt" : !stt ? " plain" : "")); }
         const isSel = this.sel.has("a:" + a.id), isPre = this.pre.has("a:" + a.id);
         if (isSel || isPre) out += ringSVG(a, "nk-ring-o" + (isSel ? "" : " pre")) + ringSVG(a, "nk-ring-i");
         if (this._flash && this._flash.id === a.id) { const k = (performance.now() - this._flash.t0) / 500; out += `<g opacity="${(1 - k).toFixed(2)}">${ringSVG(a, "nk-ring-o")}</g>` + ringSVG(a, "nk-ring-i"); }
@@ -595,9 +625,11 @@
       if (hotSt && this.o.firePill && !D && !an) {
         const p0 = this.endPos(hotPair.ends[0]), p1 = this.endPos(hotPair.ends[1]);
         const bx = Math.max(p0[0], p1[0]) + 18 / z, by = (p0[1] + p1[1]) / 2;
-        const label = hotSt === "active" ? (this.o.fireLabel || "Click to fire") : "Stuck: no rule";
+        const sel = hotSt === "active" && altOn;
+        const label = hotSt === "active" ? (sel ? (this.o.selectLabel || "Click to select the wire") : (this.o.fireLabel || "Click to fire")) : (this.o.stuckLabel || "Stuck: no rule");
         const w = (label.length * 5.6 + 16) / z, h = 18 / z;
-        out += `<g class="nk-firepill"><rect x="${bx}" y="${by - h / 2}" width="${w}" height="${h}" rx="${h / 2}" fill="${hotSt === "active" ? "var(--active)" : "var(--stuck)"}"/><text x="${bx + w / 2}" y="${by}" text-anchor="middle" dominant-baseline="central" fill="var(--on-active,#000)" style="font-size:${(10 / z).toFixed(2)}px;${hotSt === "stuck" ? "fill:#fff" : ""}">${label}</text></g>`;
+        const fill = sel ? "var(--accent)" : hotSt === "active" ? "var(--active)" : "var(--stuck)";
+        out += `<g class="nk-firepill"><rect x="${bx}" y="${by - h / 2}" width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/><text x="${bx + w / 2}" y="${by}" text-anchor="middle" dominant-baseline="central" fill="var(--on-active,#000)" style="font-size:${(10 / z).toFixed(2)}px;${hotSt === "stuck" || sel ? "fill:#fff" : ""}">${label}</text></g>`;
       }
       this.world.innerHTML = out;
     }
@@ -637,7 +669,20 @@
     }
 
     /* ---------- tooltip */
+    setHighlight(h) { this.ext = h; this.render(); }
+    changeType(ids, typeId) {
+      const t = this.types[typeId]; if (!t) return;
+      const moved = new Set();
+      for (const id of ids) {
+        const a = this.agent(id); if (!a) continue;
+        const b = makeAgent(t, a.id, a.x, a.y, a.orient);
+        if (JSON.stringify(b.ports) !== JSON.stringify(a.ports)) moved.add(a.id);
+        Object.assign(a, b);
+      }
+      this._recurveAround(moved); this.render(); this.emit("change", "Change type to " + t.symbol);
+    }
     _showTip(html, cx, cy, cls = "") {
+      if (this.o.tips === false) return;
       const r = this.host.getBoundingClientRect();
       this.tip.className = "nk-tip on " + cls; this.tip.innerHTML = html;
       const tw = this.tip.offsetWidth, th = this.tip.offsetHeight;
