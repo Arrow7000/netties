@@ -23,7 +23,46 @@ code{font-size:13px}
 </head>
 <body>
 <main>
-<h1>netties: three directions</h1>
+<h1>netties prototypes</h1>
+<p>Throwaway, clickable prototypes, one design round at a time. The newest round comes first.</p>
+
+<section>
+<h2 style="font-size:19px">Round 2: polarity and typed ports</h2>
+<p>Three ways to show which way each port points (gives or takes) and what it carries (its type name, like "number" or "list"). Brief: <code>design/brief-types.md</code>. All three start from the real app's look and share everything else: the drag rules (ports that fit turn blue, ports that don't turn grey, letting go on one refuses and says why), the hover panel's plain sentences ("Takes a number. Wire it to a port that gives one."), and a light rule editor that shows each interface port's type and refuses a mistake (open the rule <i>+ with S</i>, then "Try joining x to y"). The plain combinators look exactly like today in all three. Every net is a real engine layout, except "Length of a list", which is laid out by hand to show a second type name. Stepping replays recorded steps; drawn wires are simple curves.</p>
+</section>
+
+<section>
+<h2><a href="types-a/">A. Arrows on the wires</a></h2>
+<p>Every wire gets one small arrowhead in the middle, pointing from the port that gives to the port that takes, so a typed net reads like a flow chart: numbers flow from <i>0</i> through the <i>S</i> chain into <i>+</i> and out. Empty ports carry a tiny arrow too, so you can read a port before you wire it. When a system has more than one type name, the wires are labelled with it ("number", "list"); with one name there are no labels at all. The type settings sit at the top of the palette: a <b>Types: Required</b> chip for strictness and a chip for each name. In the type editor you click a port in the picture, then pick Gives or Takes and a name. If that change would break wires already on the canvas, they're marked in red, the canvas slides over so you can see them, and the button becomes "Save and cut 2 wires". Switching to Required walks you through each port that's missing a direction; switching to Untyped happens straight away, with Undo. The rule grid stays the familiar triangle: pairs that can never meet are hatched, with a ✓ when every pair that can meet has a rule.</p>
+<p class="tr"><b>Gains:</b> direction is visible all the time and needs no explaining; it's the most familiar picture, and the canvas barely changes. <b>Costs:</b> adds a mark to every wire, so dense nets get busier, and name labels are left out where they'd collide. The arrows say nothing about empty ports beyond a tiny mark, and the grid still lists pairs that could never come up.</p>
+</section>
+
+<section>
+<h2><a href="types-b/">B. Tabs and slots</a></h2>
+<p>The type is drawn into the agent itself, like jigsaw pieces: a port that gives has a little tab sticking out, a port that takes has a matching slot cut in, and a wire always runs from a tab into a slot. The shape of the joint is the type name: round for "number", square for "list", pointed when there's no name (the directed combinators). Untyped ports stay plain, so an untyped net looks exactly like today. Everything about types lives in one <b>Types</b> sheet (button at the top of the palette): strictness as three cards, the names with how many ports use each, and a table of every port of every agent type for quick filling in, including "Guess from the canvas". In the editor and the table, a choice that would break a wire on the canvas is greyed out with the reason, and an "Unplug it" button, the same way ports grey out while you drag. The rule grid becomes a rectangle: rows give, columns take. Pairs that both give or both take aren't in it at all, so the directed combinators' nine rules fill a 3 × 3 grid exactly. A file that doesn't type-check isn't opened until you choose: cut the bad wire, open it untyped, or don't open it.</p>
+<p class="tr"><b>Gains:</b> a port explains itself before it's wired, and "these two fit" is something you can see. The rectangle grid makes the guarantee obvious. One place to see and fix every type at once. <b>Costs:</b> changes Lafont's outlines, and the joints are small at normal zoom. Only a few names can have their own shape. The sheet is one more screen, and its table gets wide for agents with many ports.</p>
+</section>
+
+<section>
+<h2><a href="types-c/">C. Signs on demand</a></h2>
+<p>At rest a typed net looks exactly like Lafont's figures. A port's type appears as Lafont's own sign, <b>+</b> for gives and <b>−</b> for takes, coloured by its type name (teal for "number", plum for "list", black for no name), only where you need it: on empty ports and loose ends (you still have to wire them), on whatever you point at or select, on every port while you drag a wire, and on every port of a name when you point at that name in the palette (click it to keep them shown). The signs are also the controls: click one, on the canvas or in the editor, and pick a plain sentence like "Takes a number". Pointing at a choice that would break wires shows them in red first. Strictness sits with the rules, as Untyped / Optional / Required. Pointing at a level previews what it would do (Untyped strips the signs and hatching; Required shows a <b>?</b> on every port that still needs a direction) before you click. The rule grid groups agent types by what their principal port does, so pairs that can never meet form two labelled hatched blocks, "both give" and "both take". A file that doesn't type-check opens frozen: the bad wire is red and nothing runs until you choose.</p>
+<p class="tr"><b>Gains:</b> keeps the drawing clean and faithful; dense nets stay readable; colour appears only when you ask for it. Previews before every change. <b>Costs:</b> you can't see the flow of a whole net at a glance, only the part you point at, so it teaches less by default. Colour for names is a new meaning to learn. Signs are small click targets.</p>
+</section>
+
+<section>
+<h2>Try in each (round 2)</h2>
+<ul>
+<li>Load "3 + 2". Drag <i>0</i>, <i>S</i> and <i>+</i> in from the palette, then drag from the new <i>0</i>: ports that take a number fit, the ones that give turn grey, and hovering one says why.</li>
+<li>Click <i>+</i> in the palette and change aux port 2 to "gives". See what it does to the wires already on the canvas.</li>
+<li>Load "Length of a list" (two names, δ and ε untyped). Switch it to Required and fill in the missing ports; try guessing them from the wiring (B and C).</li>
+<li>Switch "3 + 2" to Untyped: it looks like today's app again. Undo brings the types back.</li>
+<li>Load "Directed commutation" and the plain "Commutation" side by side to compare a polarised system with an untyped one. In an untyped system, find where types can be turned on (A: the type editor; B: the Net menu; C: the expanded rule grid).</li>
+<li>Hover the rule grid's hatched cells, and click one. Open "Net → Open file…" to load a file that doesn't type-check.</li>
+<li>Switch to dark mode (top right).</li>
+</ul>
+</section>
+
+<h2 style="font-size:19px;margin:28px 0 6px">Round 1: three directions</h2>
 <p>Throwaway, clickable prototypes. Every net is a real layout from the engine (<code>design/assets/nets.json</code>). Editing and stepping are mocked: stepping replays each example's recorded steps, and wires you draw are simple curves where the real tool would route them. All three share one drawing and gesture kit (<code>shared/netkit.js</code>), so they differ only in layout and interaction model.</p>
 
 <section>
@@ -46,7 +85,7 @@ code{font-size:13px}
 </section>
 
 <section>
-<h2>Try in each</h2>
+<h2>Try in each (round 1)</h2>
 <ul>
 <li>Drag an agent from the palette onto the canvas. Click a type to open its editor and switch it to a circle; agents on the canvas change live.</li>
 <li>Drag from an empty port to another one. Drag over a port that already has a wire to see it refused. Let go on empty canvas to leave a loose end, which auto layout moves to the edge.</li>

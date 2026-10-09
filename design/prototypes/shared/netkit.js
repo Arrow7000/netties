@@ -362,6 +362,7 @@
       return { a, b, ta, tb, status: this.status(w), effect: effectFor(a.type, b.type), key: a.type + "|" + b.type };
     }
     polarity(end) {
+      if (this.o.typing) { const t = this.o.typing.endType(this, end); return t ? (t.pol === "give" ? "out" : "in") : null; }
       if (!this.typed) return null;
       if (end.free != null) { const w = this.wireOfFree(end.free); if (!w) return null; const o = w.ends.find((e) => e.free !== end.free); const p = o && this.polarity(o); return p ? (p === "in" ? "out" : "in") : null; }
       const a = this.agent(end.agent); const t = a && POLARITY[a.type]; return t ? t[end.slot] : null;
@@ -520,6 +521,8 @@
       for (const id of extW) { const w = s.wires.find((x) => x.id === id); if (w) w.ends.forEach((e) => e.agent != null && pairAgents.add(e.agent)); }
       for (const id of this.ext && this.ext.agents || []) pairAgents.add(id);
       if (this.o.hoverRing && H && H.kind === "agent" && !D) pairAgents.add(H.id);
+      const HK = this.o.hooks || {};
+      const shapeOf = (a) => (HK.agent ? HK.agent(a, this.types[a.type], this) : agentShapeSVG(a, this.types[a.type]));
       const extSt = (() => { for (const id of extW) { const w = s.wires.find((x) => x.id === id); const st = w && this.status(w); if (st) return st; } return null; })();
       let out = "";
 
@@ -532,7 +535,7 @@
           out += "</g>";
         }
         const a2 = 1 - smooth(0.05, 0.5, T);
-        if (a2 > 0.01) { out += `<g opacity="${a2.toFixed(3)}">`; for (const a of an.dying) out += agentShapeSVG(a, this.types[a.type]); out += "</g>"; }
+        if (a2 > 0.01) { out += `<g opacity="${a2.toFixed(3)}">`; for (const a of an.dying) out += shapeOf(a); out += "</g>"; }
       }
       // wires
       const wa = an ? smooth(0.08, 0.4, T) : 1;
@@ -551,6 +554,7 @@
         if (this.sel.has("w:" + w.id)) out += `<polyline class="nk-wsel" points="${P}"/>`;
         else if (this.pre.has("w:" + w.id)) out += `<polyline class="nk-wsel pre" points="${P}"/>`;
         out += `<polyline class="nk-wire" points="${P}"/>`;
+        if (HK.wire && !an) out += HK.wire(w, p, this, { active: st === "active", hot: isHot }) || "";
         if (!an) out += `<polyline class="nk-whit${st ? " act st-" + st : ""}" data-k="wire" data-id="${w.id}" points="${P}"/>`;
       }
       out += "</g>";
@@ -568,7 +572,7 @@
         const isSel = this.sel.has("a:" + a.id), isPre = this.pre.has("a:" + a.id);
         if (isSel || isPre) out += ringSVG(a, "nk-ring-o" + (isSel ? "" : " pre")) + ringSVG(a, "nk-ring-i");
         if (this._flash && this._flash.id === a.id) { const k = (performance.now() - this._flash.t0) / 500; out += `<g opacity="${(1 - k).toFixed(2)}">${ringSVG(a, "nk-ring-o")}</g>` + ringSVG(a, "nk-ring-i"); }
-        out += agentShapeSVG(a, this.types[a.type]);
+        out += shapeOf(a);
         out += "</g>";
       }
 
@@ -592,6 +596,13 @@
           const isBad = D && (D.kind === "carry" || D.kind === "new") && this._typeClash(D, { agent: a.id, slot: i });
           if (empty && !isBad && !(D && D.from && D.from.agent === a.id && D.from.slot === i)) mark = `<circle cx="${p[0]}" cy="${p[1]}" r="2.6" class="nk-port-empty"/>` + mark;
           if (!D && H && H.kind === "port" && H.agent === a.id && H.slot === i) mark += `<circle cx="${p[0]}" cy="${p[1]}" r="5.2" class="nk-port-hover"/>`;
+          if (HK.port) {
+            const dragging = !!(D && (D.kind === "carry" || D.kind === "new"));
+            const isOrigin = !!(dragging && D.from && D.from.agent === a.id && D.from.slot === i);
+            const tg = dragging && D.target && D.target.kind === "port" && D.target.agent === a.id && D.target.slot === i ? D.target : null;
+            const r = HK.port({ a, i, p, wired, empty, dragging, isOrigin, target: tg, bad: dragging && !isOrigin ? this._typeClash(D, { agent: a.id, slot: i }) : null, hover: !D && H && H.kind === "port" && H.agent === a.id && H.slot === i, carryingThis, view: this, def: mark });
+            if (r != null) mark = r;
+          }
           out += mark + `<circle cx="${p[0]}" cy="${p[1]}" r="6.5" class="nk-port-hit" data-k="port" data-agent="${a.id}" data-slot="${i}"/>`;
         });
       }
@@ -600,7 +611,8 @@
         const o = an ? offEnd({ free: f.name }) : [0, 0];
         const x = f.x + o[0], y = f.y + o[1], ly = f.dir === "up" ? y - 9 : y + 10;
         const isT = D && D.target && D.target.kind === "free" && D.target.name === f.name;
-        out += `<circle cx="${x}" cy="${y}" r="2.4" class="nk-free"/><text x="${x}" y="${ly}" class="nk-free-label">${esc(f.name)}</text>`;
+        const fh = HK.free ? HK.free(f, x, y, this, { target: isT ? D.target : null, dragging: !!(D && (D.kind === "carry" || D.kind === "new")), hover: !D && H && H.kind === "free" && H.name === f.name }) : null;
+        out += fh != null ? fh : `<circle cx="${x}" cy="${y}" r="2.4" class="nk-free"/><text x="${x}" y="${ly}" class="nk-free-label">${esc(f.name)}</text>`;
         if (D && (D.kind === "carry" || D.kind === "new") && !(D.carryFree === f.name)) out += `<circle cx="${x}" cy="${y}" r="${isT ? 6.5 : 5}" class="${isT ? (D.target.ok ? "nk-port-target" : "nk-port-refuse") : "nk-port-cand"}"/>`;
         if (!D && H && H.kind === "free" && H.name === f.name) out += `<circle cx="${x}" cy="${y}" r="5.2" class="nk-port-hover"/>`;
         if (!an) out += `<circle cx="${x}" cy="${y}" r="7" class="nk-free-hit" data-k="free" data-name="${esc(f.name)}"/>`;
@@ -613,6 +625,7 @@
         const path = curve(D.anchor, D.anchorDir, tp, td);
         const P = pts(path);
         out += `<polyline class="nk-wire ${D.kind === "new" ? "newwire" : "carried"}" points="${P}" style="pointer-events:none"/>`;
+        if (HK.drag) out += HK.drag(D, path, this) || "";
         if (D.kind === "carry" && D.carryFree == null) out += `<circle cx="${D.cur[0]}" cy="${D.cur[1]}" r="2.2" class="nk-free" style="pointer-events:none"/>`;
         if (D.target) {
           const tx = D.target.pos[0] + 10 / z, ty = D.target.pos[1] - 10 / z;
@@ -622,6 +635,7 @@
         }
       }
       if (pv && !an) out += this._previewSVG(pv);
+      if (HK.overlay && !an) out += HK.overlay(this) || "";
       if (hotSt && this.o.firePill && !D && !an) {
         const p0 = this.endPos(hotPair.ends[0]), p1 = this.endPos(hotPair.ends[1]);
         const bx = Math.max(p0[0], p1[0]) + 18 / z, by = (p0[1] + p1[1]) / 2;
@@ -719,6 +733,7 @@
 
     /* ---------- gestures */
     _typeClash(D, end) {
+      if (this.o.typing) return this.o.typing.clash(this, D, end);
       // The anchor end (where the wire stays attached) decides what fits:
       // a wire joins an output to an input. Joining a loose end means meeting
       // whatever sits at that wire's far end.
@@ -740,7 +755,7 @@
             if (t.kind === "port") {
         if (D.from && D.from.agent === t.agent && D.from.slot === t.slot) return D.kind === "carry" ? { ...t, ok: true, note: "Put it back", back: true } : null;
         const w = this.wireAt(t.agent, t.slot);
-        if (this._typeClash(D, t) && !(w && D.kind === "carry" && w.id === D.wire)) { const pol = this.polarity(D.originEnd); return { ...t, ok: false, note: "Doesn't fit", why: `This wire comes from a Nat ${pol === "out" ? "output" : "input"}, and this port is ${pol === "out" ? "an output" : "an input"} too. A wire has to join an output to an input of the same type.`, typed: true }; }
+        { const c = this._typeClash(D, t); if (c && !(w && D.kind === "carry" && w.id === D.wire)) { const pol = this.polarity(D.originEnd); return { ...t, ok: false, note: c.note || "Doesn't fit", why: c.why || `This wire comes from a Nat ${pol === "out" ? "output" : "input"}, and this port is ${pol === "out" ? "an output" : "an input"} too. A wire has to join an output to an input of the same type.`, typed: true }; } }
         if (w && !(D.kind === "carry" && w.id === D.wire)) return { ...t, ok: false, note: "Already has a wire", why: "Each port takes exactly one wire. Unplug the wire that's there first, or pick an empty port." };
         if (w && D.kind === "carry" && w.id === D.wire) return { ...t, ok: false, note: "Same wire", why: "That's the other end of this same wire." };
         if (this._typeClash(D, t)) { const pol = this.polarity(D.originEnd); return { ...t, ok: false, note: "Doesn't fit", why: `This wire starts at a Nat ${pol === "out" ? "output" : "input"}, and this port is ${pol === "out" ? "an output" : "an input"} too. A wire has to join an output to an input of the same type.`, typed: true }; }
@@ -750,7 +765,7 @@
         if (D.carryFree === t.name) return null;
         const v = this.wireOfFree(t.name);
         if (D.kind === "carry" && v && v.id === D.wire) return { ...t, ok: false, note: "Same wire", why: "That's the other end of this same wire. Joining them would leave a loop with no ports." };
-        if (this._typeClash(D, { free: t.name })) return { ...t, ok: false, note: "Doesn't fit", why: "Both ends would be the same direction. A wire has to join an output to an input.", typed: true };
+        { const c = this._typeClash(D, { free: t.name }); if (c) return { ...t, ok: false, note: c.note || "Doesn't fit", why: c.why || "Both ends would be the same direction. A wire has to join an output to an input.", typed: true }; }
         return { ...t, ok: true, note: "Join to this loose end" };
       }
       return null;
@@ -985,7 +1000,7 @@
       const prevName = first ? null : this.ex.name;
       this.exIndex = i; this.stepIndex = 0; this.dirty = false;
       const ex = this.ex;
-      this.types = clone(ex.types); this.rules = clone(ex.rules);
+      this.types = clone(ex.types); this.rules = clone(ex.rules); this.sys = clone(ex.sys || null);
       this.components = clone(COMPONENTS[ex.family]);
       this.stats = { steps: 0, interactions: 0, perRule: {}, maxAgents: ex.states[0].agents.length, history: [] };
       this._ctx();
@@ -996,10 +1011,10 @@
       this.emit("update");
     }
     _ctx() { this.view.setContext({ types: [...this.types, ...this.components], rules: this.rules, typed: !!this.ex.typed }); }
-    snapshot() { return clone({ exIndex: this.exIndex, stepIndex: this.stepIndex, state: this.view.state, types: this.types, rules: this.rules, components: this.components, stats: this.stats, dirty: this.dirty }); }
+    snapshot() { return clone({ exIndex: this.exIndex, stepIndex: this.stepIndex, state: this.view.state, types: this.types, rules: this.rules, components: this.components, stats: this.stats, dirty: this.dirty, sys: this.sys || null }); }
     restore(sn) {
       this.stop();
-      Object.assign(this, clone({ exIndex: sn.exIndex, stepIndex: sn.stepIndex, types: sn.types, rules: sn.rules, components: sn.components, stats: sn.stats, dirty: sn.dirty }));
+      Object.assign(this, clone({ exIndex: sn.exIndex, stepIndex: sn.stepIndex, types: sn.types, rules: sn.rules, components: sn.components, stats: sn.stats, dirty: sn.dirty, sys: sn.sys || null }));
       this._ctx(); this.view.setState(sn.state); this.emit("update");
     }
     _push(label, reset) {
@@ -1145,5 +1160,6 @@
   }
   function overChrome(ev) { const el = document.elementFromPoint(ev.clientX, ev.clientY); return !!(el && el.closest("[data-chrome]")); }
 
-  window.NetKit = { Session, load, miniSVG, pairGlyph, translateAgent, View, glyph, makeAgent, agentShapeSVG, ringSVG, agentBox, stateBounds, effectFor, paletteDrag, clone, G, POLARITY, curve, portDir, esc };
+  function addEffects(map) { Object.assign(EFFECTS, map); }
+  window.NetKit = { addEffects, normaliseState, Session, load, miniSVG, pairGlyph, translateAgent, View, glyph, makeAgent, agentShapeSVG, ringSVG, agentBox, stateBounds, effectFor, paletteDrag, clone, G, POLARITY, curve, portDir, esc };
 })();

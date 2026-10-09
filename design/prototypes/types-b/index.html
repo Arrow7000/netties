@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties types: tabs and slots</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=STIX+Two+Text:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/types-chrome.css">
+<style>
+/* ---- direction B: tabs and slots on the ports ---- */
+.jb-cap{fill:none;stroke:var(--ink);stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;pointer-events:none}
+.jb-cap.dim{stroke:var(--faint)}
+.jb-plug{stroke:var(--ink);stroke-width:1.4;stroke-linecap:butt;pointer-events:none}
+.jb-leg{fill:var(--paper);stroke:currentColor;stroke-width:1.2;stroke-linejoin:round}
+.jb-fog{fill:var(--paper);opacity:.72;pointer-events:none}
+.jb-fogr{fill:none;stroke:var(--faint);stroke-width:1;stroke-dasharray:1.6 1.2;pointer-events:none}
+.jb-miss{fill:var(--paper);stroke:var(--text);stroke-width:.9;stroke-dasharray:1.4 1}
+.jb-misst{font:700 5.4px var(--ui-font);fill:var(--text);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.jb-badw{fill:none;stroke:var(--stuck);stroke-width:2.2;stroke-dasharray:3 2.4}
+.jlegend{display:flex;flex-wrap:wrap;gap:4px 12px;margin:8px 0 0;font-size:11.5px;color:var(--muted);align-items:center}
+.jlegend span{display:inline-flex;align-items:center;gap:4px;color:var(--ink)}
+.jlegend span em{font-style:italic;color:var(--text)}
+.jlegend .k{color:var(--muted)}
+.ptag{display:inline-flex;align-items:center;gap:4px;color:var(--ink)}
+.ptag svg{color:var(--ink)}
+/* the Types sheet */
+#typesPop{right:262px;top:64px;width:560px;max-height:calc(100vh - 150px);overflow:auto;padding:16px 18px 18px}
+#typesPop h3{margin:0;font-size:14px}
+#typesPop h4{margin:16px 0 6px;font-size:12px;font-weight:600}
+#typesPop .sub{font-size:12px;color:var(--muted);margin:2px 0 12px}
+.lv3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.lvc{border:1px solid var(--line-2);border-radius:10px;padding:9px 10px;text-align:left;background:var(--chrome);cursor:pointer;display:flex;flex-direction:column;gap:3px;color:var(--text)}
+.lvc:hover{border-color:var(--text)}
+.lvc b{font-weight:600;font-size:12.5px;display:flex;align-items:center;gap:6px}
+.lvc b i{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--line-2);flex:none}
+.lvc span{font-size:11.5px;color:var(--muted)}
+.lvc[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.lvc[aria-pressed=true] b i{border-color:var(--accent);background:radial-gradient(var(--accent) 45%,transparent 50%)}
+.lvc.pend{border-style:dashed;border-color:var(--text)}
+.lvnote{margin-top:8px;border-radius:10px;padding:10px 12px;font-size:12px;background:var(--chrome-2);display:flex;flex-direction:column;gap:8px}
+.lvnote.danger{background:color-mix(in srgb,var(--stuck) 7%,var(--chrome));border:1px solid color-mix(in srgb,var(--stuck) 45%,var(--line))}
+.lvnote .acts{display:flex;gap:6px;flex-wrap:wrap}
+.lvnote .acts .btn{height:28px;font-size:12px}
+.btn.dangerfill{background:var(--stuck);color:#fff}
+.names{display:flex;flex-direction:column;gap:4px}
+.nrow{display:grid;grid-template-columns:46px 1fr auto 28px;gap:8px;align-items:center;color:var(--ink)}
+.nrow .inp{height:30px}
+.nrow .u{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.ptab{width:100%;border-collapse:separate;border-spacing:0 3px;font-size:12px}
+.ptab th{font-weight:500;color:var(--muted);text-align:left;padding:0 4px 2px;font-size:11.5px}
+.ptab td{padding:0 3px}
+.ptab td.ag{white-space:nowrap;color:var(--ink);padding-right:8px}
+.ptab td.ag .sym{font-size:15px;margin-right:4px;color:var(--text)}
+.ptab td.ag small{color:var(--muted)}
+.pick{height:28px;width:100%;border:1px solid var(--line);border-radius:7px;background:var(--chrome);display:flex;align-items:center;gap:5px;padding:0 7px;cursor:pointer;font:500 11.5px var(--ui-font);color:var(--text);white-space:nowrap}
+.pick:hover{border-color:var(--line-2);background:var(--chrome-2)}
+.pick .u{color:var(--faint);font-weight:400}
+.pick.miss{border-style:dashed;border-color:var(--stuck);color:var(--stuck)}
+.pick.guess{border-style:dotted;border-color:var(--accent)}
+.pick.sel{outline:2px solid var(--accent);outline-offset:1px}
+.pick svg.car{width:10px;height:10px;margin-left:auto;color:var(--muted)}
+/* option menu */
+.menu .mi.off{opacity:1;cursor:default}
+.menu .mi.off .mt{color:var(--faint)}
+.menu .mi.off .ms{color:var(--muted)}
+.menu .mi .why{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
+.menu .mi .why .unp{display:inline-block;border:1px solid var(--line-2);background:var(--chrome);border-radius:6px;font:500 11px var(--ui-font);padding:1px 7px;margin-left:4px;cursor:pointer;color:var(--text)}
+.menu .mi .jg{width:22px;flex:none;display:flex;justify-content:center;color:var(--ink)}
+/* editor port rows */
+.prow{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center}
+.prow .pl{font-size:12px;font-weight:500;line-height:1.15}
+.prow .pl small{display:block;color:var(--muted);font-weight:400;font-size:11px}
+.prows{display:flex;flex-direction:column;gap:5px}
+.ed-prev .stage [data-port]{cursor:pointer}
+/* rectangle grid */
+.rg.rect .hd.corner{font:500 9.5px var(--ui-font);color:var(--faint);font-style:normal;flex-direction:column;align-items:flex-end;justify-content:flex-end;line-height:1.1;padding:0 3px 2px 0}
+.rect-cap{font-size:11.5px;color:var(--muted);margin-top:8px}
+.axis{font-size:11px;color:var(--muted);margin:0 0 4px}
+.axis b{font-weight:600;color:var(--text)}
+.gate li{margin:4px 0}
+.gate ul{margin:0 0 12px;padding-left:18px;color:var(--text);font-size:12.5px}
+</style>
+</head>
+<body>
+<div id="canvas"></div>
+
+<div class="island" id="top-left" data-chrome>
+  <div class="brand"><svg viewBox="-12 -14 24 28" aria-hidden="true"><polygon points="-9,-13 9,-13 0,-2" class="brand-filled"/><polygon points="-9,13 9,13 0,2" class="brand-hollow"/></svg>netties</div>
+  <div class="sep"></div>
+  <button class="btn" id="exBtn" aria-haspopup="menu">Examples <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn" id="fileBtn" aria-haspopup="menu">Net <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+</div>
+<div class="island" id="top-mid" data-chrome>
+  <div class="seg" role="tablist" aria-label="Screen">
+    <button role="tab" aria-pressed="true" data-screen="net">Net</button>
+    <button role="tab" aria-pressed="false" data-screen="comb">Combinator translation</button>
+  </div>
+</div>
+<div class="island" id="top-right" data-chrome>
+  <button class="btn icon" id="undo" title="Undo"><svg viewBox="0 0 16 16"><path d="M6 4L3 7l3 3M3.5 7H10a3 3 0 010 6H8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <button class="btn icon" id="redo" title="Redo"><svg viewBox="0 0 16 16"><path d="M10 4l3 3-3 3M12.5 7H6a3 3 0 000 6h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <div class="sep"></div>
+  <button class="btn icon" id="theme" title="Switch theme"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 2.5a5.5 5.5 0 010 11z" fill="currentColor"/></svg></button>
+</div>
+
+<div class="island banner" id="banner" data-chrome></div>
+
+<aside class="island" id="panel" data-chrome aria-label="Palette">
+  <section>
+    <div class="sec-h"><h2>Agents</h2><button class="btn ghost" id="newType"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5"/></svg>New type</button></div>
+    <div id="sysStrip"></div>
+    <div class="tiles" id="typeTiles"></div>
+    <div class="sec-h" style="margin-top:12px"><h2>Components</h2><button class="btn ghost" id="newComp" title="Select some agents first"><svg viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.5"/><path d="M8 6v4M6 8h4" stroke="currentColor" stroke-width="1.3"/></svg>From selection</button></div>
+    <div id="compHint">Select some agents and make them a component to reuse them.</div>
+    <div class="tiles" id="compTiles"></div>
+    <div class="hintline">Drag onto the canvas to add. Click to edit.</div>
+  </section>
+  <section id="rulesSec">
+    <div class="sec-h"><h2>Rules</h2><button class="btn ghost" id="gridExpand" title="Open a bigger rule grid"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5L9 7M6.5 13.5h-4v-4M2.5 13.5L7 9" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Expand</button></div>
+    <div id="gridHost"></div>
+  </section>
+</aside>
+
+<div class="island panel" id="hovp" aria-live="polite"></div>
+<div class="island panel" id="selp" data-chrome></div>
+<div id="altBadge" data-chrome><kbd>Alt</kbd> held: clicking an active pair selects its wire instead of firing it</div>
+<div class="pop" id="gridPop" data-chrome role="dialog" aria-label="Rule grid"></div>
+<div class="menu" id="typeMenu" data-chrome></div>
+<div class="menu" id="levelMenu" data-chrome></div>
+<div class="menu" id="nameMenu" data-chrome></div>
+<div class="island" id="stats" data-chrome title="Stats for this run">
+  <div class="chip"><b id="stSteps">0</b><span>steps</span></div>
+  <div class="chip"><b id="stInter">0</b><span>interactions</span></div>
+  <div class="chip"><b id="stAgents">0</b><span>agents</span></div>
+</div>
+
+<div class="island" id="run" data-chrome aria-label="Run">
+  <button class="btn ghost" id="step" title="Fire one active pair (Space)"><svg viewBox="0 0 16 16"><path d="M4 3.5l6 4.5-6 4.5z" fill="currentColor"/><path d="M12 3.5v9" stroke="currentColor" stroke-width="1.6"/></svg>Step</button>
+  <button class="btn ghost" id="stepAll" title="Fire every active pair at once"><svg viewBox="0 0 16 16"><path d="M2 3.5l5 4.5-5 4.5zM8 3.5l5 4.5-5 4.5z" fill="currentColor"/></svg>Step all</button>
+  <button class="btn run" id="runBtn"><svg viewBox="0 0 16 16"><path d="M4.5 3l8 5-8 5z" fill="currentColor"/></svg><span>Run</span></button>
+  <div class="sep"></div>
+  <div class="speed" title="Animation speed">
+    <button class="btn icon" id="slowmo" title="Slow motion (0.2×)" aria-pressed="false"><svg viewBox="0 0 16 16"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.5v3l2 1.5M6.5 1.8h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+    <input type="range" id="speed" min="0" max="100" value="50" aria-label="Speed">
+    <output id="speedOut">1×</output>
+  </div>
+</div>
+
+<div class="island" id="viewctl" data-chrome>
+  <div class="seg" aria-label="Layout mode">
+    <button aria-pressed="true" data-layout="auto" title="The engine places agents">Auto layout</button>
+    <button aria-pressed="false" data-layout="manual" title="You place agents">Manual</button>
+  </div>
+  <button class="btn" id="tidy" title="Tidy up positions (manual layout)">Tidy</button>
+  <div class="sep"></div>
+  <button class="btn icon" id="zoomOut" title="Zoom out"><svg viewBox="0 0 16 16"><path d="M3.5 8h9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn zoomval" id="zoomVal" title="Reset to 100%">100%</button>
+  <button class="btn icon" id="zoomIn" title="Zoom in"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn" id="fit" title="Fit net to view (F)"><svg viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Fit</button>
+</div>
+
+<div class="menu" id="exMenu" role="menu" data-chrome></div>
+<div class="menu" id="fileMenu" role="menu" data-chrome>
+  <button class="mi" data-act="text"><div class="mt">Text view<span class="ms">Edit the net as text</span></div></button>
+  <button class="mi" data-act="open"><div class="mt">Open file…<span class="ms">Opens sum.inet, which doesn't type-check</span></div></button>
+  <button class="mi" data-act="save"><div class="mt">Save file</div></button>
+  <hr>
+  <button class="mi" data-act="share"><div class="mt">Copy share link</div></button>
+  <button class="mi" data-act="svg"><div class="mt">Export SVG</div></button>
+  <hr>
+  <button class="mi danger" data-act="clear"><div class="mt">Clear net<span class="ms">Removes everything. You can undo it.</span></div></button>
+</div>
+
+<div class="pop" id="typeEd" data-chrome role="dialog" aria-label="Agent type"></div>
+<div class="scrim" id="ruleScrim"><div class="sheet" id="ruleSheet" data-chrome></div></div>
+<div id="comb"><div class="box"><h2>Combinator translation</h2>Translates each agent type and rule into the three Lafont combinators. This screen isn't part of the prototype.<br><br><button class="btn ghost" id="combBack">Back to the net</button></div></div>
+<div id="toast" role="status"><span id="toastText"></span><button id="toastUndo">Undo</button></div>
+
+<script src="../shared/netkit.js"></script>
+<script src="../shared/typekit.js"></script>
+<script src="../shared/types-chrome.js"></script>
+<script src="joints.js"></script>
+<script>
+(async function () {
+  const TK = TypeKit, NK = NetKit, J = Joints, esc = NK.esc;
+  const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)];
+
+  /* =====================================================================
+     Direction B: direction lives on the ports, as joints in the outline.
+     A port that gives has a tab, a port that takes has a slot; tabs fit
+     slots of the same shape, and the shape is the type name. Everything
+     about types (strictness, names, every port) lives in one Types sheet.
+     ===================================================================== */
+  let S = null, missingMarks = false;
+  const typed = () => S && TK.level(S) !== "untyped";
+  const showTypes = () => S && S.sys && (typed() || S.sys.pending);
+
+  const hooks = {
+    agent(a, type) { return showTypes() && type && type.ports ? J.agentSVG(a, type, S.sys) : NK.agentShapeSVG(a, type); },
+    port(c) {
+      if (!showTypes()) return null;
+      const pt = TK.portOf(S, c.a.type, c.i) || (S.sys.pending ? (S.typeById(c.a.type).ports || [])[c.i] : null);
+      const shape = J.shapeOf(S.sys, pt), [x, y] = c.p, d = NK.portDir(c.a, c.i);
+      let plug = "";
+      if (shape && pt.pol === "take" && c.wired && !c.carryingThis) { const q = J.plugs(c.a, S.typeById(c.a.type).ports, S.sys)[c.i]; if (q) plug = `<line x1="${x}" y1="${y}" x2="${q[0]}" y2="${q[1]}" class="jb-plug"/>`; }
+      if (c.dragging) {
+        if (c.isOrigin) return `<circle cx="${x}" cy="${y}" r="4.2" class="nk-port-origin"/>`;
+        if (c.target) return plug + c.def;
+        if (!c.empty) return plug;
+        if (c.bad) return `<circle cx="${x}" cy="${y}" r="5.6" class="jb-fog"/><circle cx="${x}" cy="${y}" r="5.6" class="jb-fogr"/>`;
+        return `<circle cx="${x}" cy="${y}" r="6" class="nk-port-cand" style="opacity:.8"/>` + (shape ? "" : `<circle cx="${x}" cy="${y}" r="2.6" class="nk-port-empty"/>`);
+      }
+      let s = plug;
+      if (!shape) s += c.def; else if (c.hover) s += `<circle cx="${x}" cy="${y}" r="5.6" class="nk-port-hover"/>`;
+      if (missingMarks && !shape) s += `<circle cx="${x + d[0] * 8}" cy="${y + d[1] * 8}" r="3.6" class="jb-miss"/><text x="${x + d[0] * 8}" y="${y + d[1] * 8 + 0.2}" class="jb-misst">?</text>`;
+      return s;
+    },
+    free(f, x, y, v, c) {
+      const ly = f.dir === "up" ? y - 10 : y + 11;
+      const label = `<text x="${x}" y="${ly}" class="nk-free-label">${esc(f.name)}</text>`;
+      const cutR = f.cut && !c.dragging ? `<circle cx="${x}" cy="${y}" r="6" class="tk-cut"/>` : "";
+      if (!showTypes()) return cutR ? `<circle cx="${x}" cy="${y}" r="2.4" class="nk-free"/>` + label + cutR : null;
+      const w = v.wireOfFree(f.name), o = w && w.ends.find((e) => e.free !== f.name), pt = o && o.free == null ? TK.endType(S, v, o) : null;
+      const toNet = f.dir === "up" ? [0, 1] : [0, -1];
+      const cap = pt && pt.pol ? J.capSVG(x, y, toNet, pt, S.sys) : null;
+      if (!cap) return cutR ? `<circle cx="${x}" cy="${y}" r="2.4" class="nk-free"/>` + label + cutR : null;
+      const plug = pt.pol === "give" ? `<line x1="${x}" y1="${y}" x2="${x - toNet[0] * (J.D - 0.4)}" y2="${y - toNet[1] * (J.D - 0.4)}" class="jb-plug"/>` : "";
+      let s = plug + cap + label + cutR;
+      if (c.dragging) {
+        const D = v.drag;
+        if (D.carryFree === f.name) return s;
+        if (c.target) s += `<circle cx="${x}" cy="${y}" r="6.5" class="${c.target.ok ? "nk-port-target" : "nk-port-refuse"}"/>`;
+        else if (v._typeClash(D, { free: f.name })) s += `<circle cx="${x}" cy="${y}" r="6.2" class="jb-fog"/><circle cx="${x}" cy="${y}" r="6.2" class="jb-fogr"/>`;
+        else s += `<circle cx="${x}" cy="${y}" r="6" class="nk-port-cand"/>`;
+      } else if (c.hover) s += `<circle cx="${x}" cy="${y}" r="6" class="nk-port-hover"/>`;
+      return s;
+    },
+  };
+
+  function glyphB(type, o = {}) {
+    const a = NK.makeAgent(type, 0, 0, 0, o.orient || "down"), b = NK.agentBox(a);
+    const stub = o.stub || 8, pad = o.labels ? 15 : stub + 2;
+    const ports = o.ports || type.ports, on = o.typed !== false && ports;
+    let s = `<svg class="nk-glyph" viewBox="${b.x0 - pad} ${b.y0 - pad} ${b.x1 - b.x0 + 2 * pad} ${b.y1 - b.y0 + 2 * pad}" width="${o.w || o.size || 40}" height="${o.h || o.size || 40}" aria-hidden="true">`;
+    a.ports.forEach((p, i) => { const d = NK.portDir(a, i); s += `<line x1="${p[0]}" y1="${p[1]}" x2="${p[0] + d[0] * stub}" y2="${p[1] + d[1] * stub}" class="nk-gstub"/>`; });
+    s += on ? J.agentSVG(a, type, S.sys, ports) : NK.agentShapeSVG(a, type);
+    if (on) { const pl = J.plugs(a, ports, S.sys); a.ports.forEach((p, i) => { if (pl[i]) s += `<line x1="${p[0]}" y1="${p[1]}" x2="${pl[i][0]}" y2="${pl[i][1]}" class="jb-plug"/>`; }); }
+    if (o.labels) a.ports.forEach((p, i) => {
+      const d = NK.portDir(a, i), q = [p[0] + d[0] * (stub + 5), p[1] + d[1] * (stub + 5)];
+      if (o.sel === i) s += `<circle cx="${p[0]}" cy="${p[1]}" r="6" class="ep-sel"/>`;
+      if (o.missing && o.missing.includes(i)) s += `<circle cx="${q[0]}" cy="${q[1]}" r="3.4" class="jb-miss"/><text x="${q[0]}" y="${q[1] + 0.2}" class="jb-misst">?</text>`;
+      else if (i) s += `<text x="${q[0]}" y="${q[1]}" class="nk-gnum">${i}</text>`;
+      s += `<circle cx="${p[0]}" cy="${p[1]}" r="6.5" class="ep-hit" data-port="${i}"/>`;
+    });
+    return s + "</svg>";
+  }
+  function miniTyped(st, types, o = {}) {
+    const T = Object.fromEntries(types.map((t) => [t.id, t]));
+    const b = NK.stateBounds({ agents: st.agents, wires: st.wires, free: st.iface || [] }), pad = o.pad || 14;
+    let s = `<svg viewBox="${b.x0 - pad} ${b.y0 - pad} ${b.x1 - b.x0 + 2 * pad} ${b.y1 - b.y0 + 2 * pad}" width="${o.w || 160}" height="${o.h || 180}" style="overflow:visible">`;
+    for (const w of st.wires) { const P = w.path.map((q) => q.join(",")).join(" "); s += `<polyline class="nk-halo" points="${P}"/>${w.active ? `<polyline class="nk-activeb" points="${P}"/>` : ""}${w.bad ? `<polyline class="jb-badw" points="${P}"/>` : ""}<polyline class="nk-wire" points="${P}"/>`; }
+    const on = showTypes();
+    for (const a of st.agents) {
+      const t = T[a.type]; s += on && t.ports ? J.agentSVG(a, t, S.sys) : NK.agentShapeSVG(a, t);
+      if (on && t.ports) { const pl = J.plugs(a, t.ports, S.sys); a.ports.forEach((p, i) => { if (pl[i] && st.wires.some((w) => w.ends.some((e) => e.agent === a.id && e.slot === i))) s += `<line x1="${p[0]}" y1="${p[1]}" x2="${pl[i][0]}" y2="${pl[i][1]}" class="jb-plug"/>`; }); }
+    }
+    for (const f of st.iface || []) {
+      const toNet = f.dir === "up" ? [0, 1] : [0, -1];
+      // an interface end shows the joint it offers inside the rule
+      const cap = on && f.type && f.type.pol ? J.capSVG(f.x, f.y, toNet, { pol: TK.opp(f.type.pol), name: f.type.name }, S.sys) : null;
+      s += (cap || `<circle cx="${f.x}" cy="${f.y}" r="2.4" class="nk-free"/>`) + `<text x="${f.x}" y="${f.y + (f.dir === "up" ? -9 : 10)}" class="nk-free-label">${esc(f.name)}</text>`;
+    }
+    return s + "</svg>";
+  }
+
+  const app = await TypesChrome.start({
+    key: "types-b", hooks,
+    glyph: (t, o) => glyphB(t, Object.assign({ typed: !!showTypes() }, o)),
+    miniTyped,
+    onSession: (s) => (S = s),
+    fileMenu: (m) => {
+      m.querySelector("[data-act=types]") && m.querySelector("[data-act=types]").remove();
+      if (!showTypes()) m.insertAdjacentHTML("afterbegin", `<button class="mi" data-act="types"><div class="mt">Types…<span class="ms">This system is untyped. Give its ports types.</span></div></button><hr data-act="types-hr">`);
+      else { const hr = m.querySelector("[data-act=types-hr]"); hr && hr.remove(); }
+    },
+    fileAction: (a) => { if (a === "types") { openTypes(); return true; } return false; },
+    afterPalette: () => renderLegend(),
+  });
+  const { view, toast, ui } = app;
+  const words = app.words;
+  words.badge = (pt) => { const sh = J.shapeOf(S.sys, pt); return sh ? `<span class="ptag">${J.jointSVG(sh, pt.pol)}</span> ` : ""; };
+
+  /* ---------------------------------------------------------------- palette: Types button + shape legend */
+  const hdr = $("#panel .sec-h");
+  hdr.insertAdjacentHTML("beforeend", "");
+  const typesBtn = document.createElement("button");
+  typesBtn.className = "btn ghost"; typesBtn.id = "typesBtn"; typesBtn.innerHTML = "Types"; typesBtn.title = "Strictness, names and every port's type";
+  typesBtn.style.marginLeft = "auto"; typesBtn.style.marginRight = "6px";
+  hdr.insertBefore(typesBtn, $("#newType"));
+  typesBtn.onclick = (e) => { e.stopPropagation(); $("#typesPop").classList.contains("on") ? closeTypes() : openTypes(); };
+  function renderLegend() {
+    typesBtn.style.display = showTypes() ? "" : "none";
+    let el = $("#jlegend"); if (!el) { $("#typeTiles").insertAdjacentHTML("afterend", `<div id="jlegend"></div>`); el = $("#jlegend"); }
+    if (!showTypes()) { el.innerHTML = ""; return; }
+    const used = new Set(); for (const t of S.types) for (const p of t.ports || []) if (p && p.pol) used.add(p.name || "");
+    const items = [...S.sys.names.filter((n) => used.has(n.id)).map((n) => [J.shapeOf(S.sys, { pol: "give", name: n.id }), n.label]), ...(used.has("") ? [["vee", "no name"]] : [])];
+    const pend = S.sys.pending ? TK.missing(S).length : 0;
+    el.innerHTML = `<div class="jlegend">${items.map(([sh, l]) => `<span>${J.legendSVG(sh, 16)}<em>${esc(l)}</em></span>`).join("")}</div>
+      <div class="hintline" style="margin-top:4px">${pend ? `<b style="color:var(--text)">${pend} port${pend === 1 ? "" : "s"} still need${pend === 1 ? "s" : ""} a direction.</b> ` : ""}A tab gives, a slot takes. A wire joins a tab to a slot of the same shape.</div>`;
+  }
+
+  /* ---------------------------------------------------------------- option menu for one port (editor rows and the sheet's table) */
+  // Each choice that would leave a wire on the canvas ill-typed is greyed out, with the reason and a way out.
+  function choices() {
+    const out = [];
+    for (const n of S.sys.names) for (const pol of ["give", "take"]) out.push({ pol, name: n.id });
+    out.push({ pol: "give", name: null }, { pol: "take", name: null });
+    return out;
+  }
+  const same = (a, b) => (!a || !a.pol) ? (!b || !b.pol) : !!b && a.pol === b.pol && (a.name || null) === (b.name || null);
+  function blockers(typeId, slot, ports, pt) {
+    const ov = NK.clone(ports); ov[slot] = pt;
+    return TK.conflicts(S, view, typeId, ov).filter((c) => c.wire.ends.some((e) => e.agent != null && view.agent(e.agent).type === typeId && e.slot === slot));
+  }
+  function openPortMenu(anchor, typeId, slot, ports, onPick) {
+    const m = $("#nameMenu");
+    const cur = ports[slot], req = S.sys.level === "required" || S.sys.pending;
+    const opts = choices(); if (!req) opts.push(null);
+    const draw = () => {
+      m.innerHTML = `<div class="mh">${slot === 0 ? "Principal port" : "Aux port " + slot} of <span class="sym">${esc(S.typeById(typeId).symbol)}</span></div>` + opts.map((pt, k) => {
+        const b = blockers(typeId, slot, ports, pt), off = b.length && !same(pt, cur);
+        const label = pt ? TK.cap(TK.phrase(S, pt)) + (pt.name ? "" : " anything") : "Untyped";
+        const sub = pt ? (pt.name ? "" : "No name: fits a port of any name") : "Fits any port, giving or taking";
+        return `<button class="mi${same(pt, cur) ? " cur" : ""}${off ? " off" : ""}" data-k="${k}"><span class="jg">${pt ? J.jointSVG(J.shapeOf(S.sys, pt), pt.pol, 18) : ""}</span><span class="mt">${esc(label)}${sub && !off ? `<span class="ms">${sub}</span>` : ""}${off ? `<span class="why">Can't: ${esc(b[0].why)} <span class="unp" role="button" data-unplug="${k}">Unplug ${b.length === 1 ? "it" : b.length + " wires"}</span></span>` : ""}</span></button>`;
+      }).join("") + (pts => pts)(`<hr><button class="mi" id="pmNames"><span class="jg"></span><span class="mt">New name…<span class="ms">In the Types sheet</span></span></button>`);
+      m.querySelectorAll("[data-k]").forEach((el) => (el.onclick = (e) => {
+        const k = +el.dataset.k, pt = opts[k];
+        if (e.target.dataset.unplug != null) {
+          e.stopPropagation();
+          const b = blockers(typeId, slot, ports, pt);
+          TK.cut(view, b.map((x) => x.wire.id), Object.fromEntries(b.map((x) => [x.wire.id, x.why]))); app.commit("Unplug " + b.length + " wire" + (b.length === 1 ? "" : "s"));
+          toast(`Unplugged ${b.length === 1 ? "the wire" : b.length + " wires"} into loose ends, marked in red.`, true);
+          draw(); return;
+        }
+        if (el.classList.contains("off")) return;
+        ui.closeMenus(); onPick(pt ? { pol: pt.pol, name: pt.name } : null);
+      }));
+      $("#pmNames").onclick = () => { ui.closeMenus(); openTypes("names"); };
+    };
+    draw(); ui.placeMenu(m, anchor);
+  }
+  const pickLabel = (pt, req) => pt && pt.pol ? `${J.jointSVG(J.shapeOf(S.sys, pt), pt.pol)} ${esc(TK.phrase(S, pt))}${pt.name ? "" : ` <span class="u">anything</span>`}` : req ? "Pick a direction" : `<span class="u">untyped</span>`;
+  const CAR = `<svg class="car" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`;
+
+  /* ---------------------------------------------------------------- Q3: the type editor lists every port */
+  let ed = null;
+  function openEditor(id, slot) {
+    const t = S.typeById(id); if (!t || t.component) return ui.openComponent(t);
+    closeTypes();
+    ed = { id, draft: NK.clone(t), sel: slot == null ? -1 : slot };
+    if (showTypes()) TK.ensurePorts(ed.draft); else ed.draft.ports = null;
+    renderEditor(); $("#typeEd").classList.add("on");
+    const el = $(`.tile[data-id="${CSS.escape(id)}"]`), r = el ? el.getBoundingClientRect() : { top: 80 };
+    const p = $("#typeEd"); p.style.top = Math.min(Math.max(64, r.top - 40), innerHeight - p.offsetHeight - 16) + "px";
+  }
+  function closeEditor() { $("#typeEd").classList.remove("on"); ed = null; view.render(); }
+  ui.openEditor = openEditor; ui.closeEditor = closeEditor; ui.isEditing = () => !!ed;
+  function renderEditor() {
+    const t = ed.draft, orig = S.typeById(ed.id), on = showTypes();
+    const req = S.sys && (S.sys.level === "required" || S.sys.pending);
+    const missing = on ? t.ports.map((p, i) => (!p || !p.pol ? i : -1)).filter((i) => i >= 0) : [];
+    const rules = S.rulesFor(t.id);
+    const rows = on ? t.ports.map((p, i) => `<div class="prow"><span class="pl">${i === 0 ? "Principal" : "Aux " + i}<small>${esc((orig.roles && orig.roles[i]) || "")}</small></span><button class="pick${(!p || !p.pol) && req ? " miss" : ""}${ed.sel === i ? " sel" : ""}" data-slot="${i}">${pickLabel(p, req)}${CAR}</button></div>`).join("") : "";
+    $("#typeEd").innerHTML = `<div class="ed-grid">
+      <div class="ed-prev"><div class="stage" id="stage">${glyphB(t, { size: 200, labels: true, typed: !!on, sel: ed.sel, missing, stub: 12 })}</div>
+        <div class="legend"><span><i class="d"></i>principal port</span><span><i class="o"></i>aux ports, numbered</span></div>
+        ${on ? `<div class="legend" style="margin-top:2px"><span>${J.jointSVG("round", "give", 16)} gives</span><span>${J.jointSVG("round", "take", 16)} takes</span></div>` : ""}</div>
+      <div class="ed-form">
+        <div class="ed-head"><h3>Agent type</h3><button class="btn icon" id="edClose" title="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5"/></svg></button></div>
+        <div class="two"><div class="row"><label for="edSym">Symbol</label><input class="inp symbol" id="edSym" maxlength="3" value="${esc(t.symbol)}"></div>
+        <div class="row"><label for="edName">Name</label><input class="inp" id="edName" placeholder="e.g. duplicator" value="${esc(t.name)}"></div></div>
+        <div style="display:flex;gap:18px"><div class="row"><span class="lab">Aux ports</span><div><span class="stepper"><button id="arM" aria-label="Fewer">−</button><output>${t.arity}</output><button id="arP" aria-label="More">+</button></span></div></div>
+        <div class="row"><span class="lab">Fill</span><div class="seg"><button aria-pressed="${!t.filled}" data-fill="0">Hollow</button><button aria-pressed="${!!t.filled}" data-fill="1">Filled</button></div></div></div>
+        ${on ? `<div class="row"><span class="lab">Ports</span><div class="prows">${rows}</div><div class="hintline" style="margin-top:2px">Choices that would break a wire on the canvas are greyed out, with the reason.</div></div>` : ""}
+        <div class="ed-note"><b>The symbol and fill are only labels.</b> What <span class="sym">${esc(t.symbol)}</span> does comes from its rules${rules.length ? ":" : ". It has none yet."}
+          ${rules.length ? `<div class="rl">${rules.map((k) => `<button data-k="${esc(k)}">${ui.ruleLabel(k)}</button>`).join("")}</div>` : ""}</div>
+        <div class="ed-foot"><button class="btn danger" id="edDel">Delete type</button>
+          <span><button class="btn" id="edCancel">Cancel</button> <button class="btn primary" id="edSave"${req && missing.length ? ` aria-disabled="true" title="Every port needs a direction first"` : ""}>Save</button></span></div>
+      </div></div>`;
+    const R = () => renderEditor();
+    $("#edSym").oninput = (e) => { t.symbol = e.target.value || "?"; };
+    $("#edSym").onchange = R;
+    $("#edName").oninput = (e) => (t.name = e.target.value);
+    $("#arM").onclick = () => { if (t.arity > 0) { t.arity--; t.circle = t.arity === 0; if (t.ports) TK.ensurePorts(t); R(); } };
+    $("#arP").onclick = () => { if (t.arity < 5) { t.arity++; t.circle = false; if (t.ports) TK.ensurePorts(t); R(); } };
+    $$("#typeEd [data-fill]").forEach((b) => (b.onclick = () => { t.filled = b.dataset.fill === "1"; R(); }));
+    $$("#typeEd .pick").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const i = +b.dataset.slot; ed.sel = i; openPortMenu(b, ed.id, i, t.ports, (pt) => { t.ports[i] = pt; R(); }); }));
+    $$("#stage [data-port]").forEach((c) => (c.onclick = (e) => { e.stopPropagation(); ed.sel = +c.dataset.port; R(); const b = $(`#typeEd .pick[data-slot="${ed.sel}"]`); if (b) b.click(); }));
+    $$("#typeEd .rl button").forEach((b) => (b.onclick = () => ui.openRule(b.dataset.k)));
+    $("#edClose").onclick = $("#edCancel").onclick = () => closeEditor();
+    $("#edDel").onclick = () => { const id = ed.id; closeEditor(); S.deleteType(id); app.refresh(); toast("Deleted the agent type.", true); };
+    $("#edSave").onclick = () => {
+      if ($("#edSave").getAttribute("aria-disabled")) { toast("Every port needs a direction first: this system requires one."); return; }
+      const ty = S.typeById(ed.id), d = ed.draft;
+      Object.assign(ty, { symbol: d.symbol, name: d.name, arity: d.arity, filled: d.filled, circle: d.arity === 0 });
+      if (d.ports) ty.ports = NK.clone(d.ports);
+      S._ctx(); view.regenType(ty.id); app.commit("Edit " + ty.symbol); closeEditor();
+    };
+  }
+
+  /* ---------------------------------------------------------------- Q4: the Types sheet */
+  const pop = document.createElement("div"); pop.className = "pop"; pop.id = "typesPop"; pop.dataset.chrome = ""; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Types");
+  document.body.appendChild(pop);
+  let tsNote = null, guessed = new Set();
+  function openTypes(focus) { if (ed) closeEditor(); ui.closeGridPop(); tsNote = null; renderTypes(); pop.classList.add("on"); if (focus === "names") setTimeout(() => { const i = $("#newNameIn"); i && i.focus(); }, 0); }
+  function closeTypes() { pop.classList.remove("on"); guessed = new Set(); }
+  document.addEventListener("pointerdown", (e) => { if (pop.classList.contains("on") && !e.target.closest("#typesPop,#typesBtn,.menu,#fileMenu,#toast")) closeTypes(); });
+  const LV = [
+    ["untyped", "Untyped", "Any port can join any other."],
+    ["optional", "Optional", "Ports may have a type. Untyped ones fit anything."],
+    ["required", "Required", "Every port gives or takes. Names stay optional."],
+  ];
+  function renderTypes() {
+    const lv = S.sys ? S.sys.level : "untyped", pend = S.sys && S.sys.pending, on = showTypes();
+    const miss = on ? TK.missing(S) : [];
+    const n = TK.portCount(S);
+    let note = "";
+    if (tsNote === "untyped") note = `<div class="lvnote danger"><span><b>Remove all types?</b> The ${n} typed ports go back to untyped, and pairs that can never meet go back to "no rule yet". You can undo it.</span><span class="acts"><button class="btn dangerfill" id="tsRemove">Remove types</button><button class="btn ghost" id="tsKeep">Keep them</button></span></div>`;
+    else if (pend) note = `<div class="lvnote"><span>${miss.length ? `<b>${miss.length} port${miss.length === 1 ? "" : "s"} need${miss.length === 1 ? "s" : ""} a direction</b> before types can be required. They're marked in the table below.` : `<b>Every port has a direction.</b> You can switch now.`}</span><span class="acts">${miss.length ? `<button class="btn ghost" id="tsGuess" title="Look at how each untyped port is wired on the canvas">Guess from the canvas</button>` : ""}<button class="btn primary" id="tsSwitch"${miss.length ? ` aria-disabled="true" disabled` : ""}>Switch to Required</button><button class="btn ghost" id="tsStay">Stay optional</button></span>${guessed.size ? `<span style="color:var(--muted)">Dotted cells were guessed from the wiring: the opposite of what each port is wired to, with no name so it still fits anything.</span>` : ""}</div>`;
+    const names = on ? S.sys.names : [];
+    const usage = (id) => { let k = 0; for (const t of S.types) for (const p of t.ports || []) if (p && p.name === id) k++; return k; };
+    const maxA = Math.max(...S.types.map((t) => t.arity));
+    pop.innerHTML = `<div class="ed-head"><h3>Types in this system</h3><button class="btn icon" id="tsClose" title="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5"/></svg></button></div>
+      <div class="sub">Saved with the system, like its agent types and rules.</div>
+      <div class="lv3">${LV.map(([id, t, d]) => `<button class="lvc${pend && id === "required" ? " pend" : ""}" data-lv="${id}" aria-pressed="${(pend ? pend : lv) === id && tsNote !== "untyped" || tsNote === id}"><b><i></i>${t}</b><span>${d}</span></button>`).join("")}</div>
+      ${note}
+      ${on ? `<h4>Names</h4><div class="names">${names.map((nm) => `<div class="nrow" data-n="${nm.id}">${J.legendSVG(J.shapeOf(S.sys, { pol: "give", name: nm.id }), 18)}<input class="inp" value="${esc(nm.label)}" data-rename="${nm.id}"><span class="u">${usage(nm.id)} port${usage(nm.id) === 1 ? "" : "s"}</span><button class="btn icon" data-del="${nm.id}" title="Delete this name. Its ports keep their direction and fit any name."><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.4"/></svg></button></div>`).join("")}
+        <div class="nrow"><span style="color:var(--faint)">${J.legendSVG(J.shapeOf(S.sys, { pol: "give", name: "__new" + names.length }) || "round", 18).replace(/jb-leg/g, "jb-leg")}</span><input class="inp" id="newNameIn" placeholder="${names.length ? "Add another name, like bool" : "Add a name, like number"}"><span class="u">Enter to add</span><span></span></div></div>
+        <h4>Ports</h4>
+        <table class="ptab"><thead><tr><th>Agent</th><th>Principal</th>${Array.from({ length: maxA }, (_, i) => `<th>Aux ${i + 1}</th>`).join("")}</tr></thead><tbody>
+        ${S.types.map((t) => `<tr><td class="ag"><span class="sym">${esc(t.symbol)}</span><small>${esc(t.name || "")}</small></td>${Array.from({ length: maxA + 1 }, (_, i) => i > t.arity ? "<td></td>" : `<td><button class="pick${(!t.ports || !t.ports[i] || !t.ports[i].pol) && (pend || lv === "required") ? " miss" : ""}${guessed.has(t.id + ":" + i) ? " guess" : ""}" data-t="${esc(t.id)}" data-slot="${i}">${pickLabel(t.ports && t.ports[i], pend || lv === "required")}</button></td>`).join("")}</tr>`).join("")}
+        </tbody></table>` : `<div class="lvnote" style="margin-top:12px"><span>No types: the canvas, the palette and the rules look exactly as they do without types. Pick <b>Optional</b> or <b>Required</b> to give ports a direction.</span></div>`}`;
+    $("#tsClose").onclick = closeTypes;
+    if (pend && miss.length) { const ts = new Set(miss.map((m) => m.type)); requestAnimationFrame(() => ui.reveal(view.state.wires.filter((w) => w.ends.some((e) => e.agent != null && ts.has((view.agent(e.agent) || {}).type))).map((w) => w.id), pop)); }
+    $$("#typesPop [data-lv]").forEach((b) => (b.onclick = () => pickLevel(b.dataset.lv)));
+    if ($("#tsRemove")) $("#tsRemove").onclick = () => { TK.setLevel(S, "untyped"); delete S.sys.pending; tsNote = null; missingMarks = false; app.commit("Remove types"); renderTypes(); toast(`Removed the types of ${n} ports. This system is untyped now.`, true); };
+    if ($("#tsKeep")) $("#tsKeep").onclick = () => { tsNote = null; renderTypes(); };
+    if ($("#tsStay")) $("#tsStay").onclick = () => { delete S.sys.pending; missingMarks = false; guessed = new Set(); app.commit("Stay optional"); renderTypes(); };
+    if ($("#tsSwitch")) $("#tsSwitch").onclick = () => { delete S.sys.pending; S.sys.level = "required"; missingMarks = false; guessed = new Set(); app.commit("Types required"); renderTypes(); toast("Types are required now. Every port gives or takes.", true); };
+    if ($("#tsGuess")) $("#tsGuess").onclick = () => {
+      let k = 0;
+      for (const m of TK.missing(S)) { const g = TK.guess(S, view, m.type, m.slot); if (g) { S.typeById(m.type).ports[m.slot] = { pol: g.pol, name: null }; guessed.add(m.type + ":" + m.slot); k++; } }
+      app.commit("Guess types"); renderTypes();
+      toast(k ? `Guessed ${k} port${k === 1 ? "" : "s"} from the wiring. ${TK.missing(S).length ? "The rest aren't wired to anything typed, so pick them yourself." : ""}` : "Nothing to guess from: those ports aren't wired to anything typed on the canvas.", !!k);
+    };
+    $$("#typesPop [data-rename]").forEach((i) => (i.onchange = () => { const nm = S.sys.names.find((x) => x.id === i.dataset.rename); if (nm && i.value.trim()) { nm.label = i.value.trim(); app.commit("Rename name"); renderTypes(); } }));
+    $$("#typesPop [data-del]").forEach((b) => (b.onclick = () => { const id = b.dataset.del, nm = S.sys.names.find((x) => x.id === id); for (const t of S.types) for (const p of t.ports || []) if (p && p.name === id) p.name = null; S.sys.names = S.sys.names.filter((x) => x.id !== id); app.commit("Delete name"); renderTypes(); toast(`Deleted "${nm.label}". Its ports keep their direction and fit any name.`, true); }));
+    if ($("#newNameIn")) $("#newNameIn").onkeydown = (e) => { if (e.key === "Enter" && e.target.value.trim()) { S.sys.names.push({ id: "n" + Date.now().toString(36), label: e.target.value.trim() }); app.commit("Add name"); renderTypes(); setTimeout(() => $("#newNameIn") && $("#newNameIn").focus(), 0); } };
+    $$("#typesPop .pick").forEach((b) => (b.onclick = (e) => {
+      e.stopPropagation(); const t = S.typeById(b.dataset.t), i = +b.dataset.slot;
+      TK.ensurePorts(t);
+      openPortMenu(b, t.id, i, t.ports, (pt) => { t.ports[i] = pt; guessed.delete(t.id + ":" + i); app.commit("Set port type"); renderTypes(); });
+    }));
+  }
+  function pickLevel(lv) {
+    const cur = S.sys ? (S.sys.pending || S.sys.level) : "untyped";
+    if (lv === cur && !tsNote) return;
+    if (lv === "untyped") { if (TK.portCount(S)) { tsNote = "untyped"; renderTypes(); return; } TK.setLevel(S, "untyped"); delete S.sys.pending; app.commit("Untyped"); renderTypes(); return; }
+    tsNote = null;
+    if (lv === "optional") { delete S.sys.pending; missingMarks = false; TK.setLevel(S, "optional"); app.commit("Types optional"); renderTypes(); return; }
+    if (S.sys.level === "untyped") TK.setLevel(S, "optional");
+    if (!TK.missing(S).length) { S.sys.level = "required"; app.commit("Types required"); renderTypes(); toast("Every port already had a direction. Types are required now.", true); return; }
+    S.sys.pending = "required"; missingMarks = true; app.commit("Start requiring types"); renderTypes();
+  }
+  S.on("update", () => { if (pop.classList.contains("on") && !pop.contains(document.activeElement)) renderTypes(); });
+
+  /* ---------------------------------------------------------------- Q6: givers × takers */
+  app.grid.render = (host, big) => {
+    if (!typed()) { host.innerHTML = ui.gridHTML(S.types, big ? 36 : Math.max(17, Math.min(24, Math.floor(204 / (S.types.length + 1)) - 2)), big) + ui.legendHTML() + `<div class="hintline">Each cell is a pair of types. Click one to see its rule, or to write one.</div>`; return; }
+    const pol = (t) => TK.principalPol(S, t.id);
+    const giv = S.types.filter((t) => pol(t) === "give"), tak = S.types.filter((t) => pol(t) === "take"), unt = S.types.filter((t) => !pol(t));
+    const rows = [...giv, ...unt], cols = [...tak, ...unt];
+    const cell = big ? 34 : Math.max(18, Math.min(26, Math.floor(196 / (cols.length + 1)) - 2));
+    const head = big ? 92 : cell + 4;
+    let h = `<div class="axis"><b>Rows give</b>, columns take.${unt.length ? ` ${unt.map((t) => esc(t.symbol)).join(" and ")} ${unt.length === 1 ? "is" : "are"} untyped, so ${unt.length === 1 ? "it's" : "they're"} in both.` : ""}</div>`;
+    h += `<div class="rg rect${big ? " big" : ""}" style="grid-template-columns:${head}px repeat(${cols.length},${cell}px);grid-auto-rows:${cell}px">`;
+    h += `<div class="hd corner"></div>` + cols.map((t, j) => `<div class="hd col" data-col="${j}">${esc(t.symbol)}</div>`).join("");
+    rows.forEach((ta, i) => {
+      h += `<div class="hd row" data-row="${i}">${big ? `<small style="font:400 10.5px var(--ui-font);color:var(--muted);margin-right:4px">${esc(ta.name || "")}</small>` : ""}${esc(ta.symbol)}</div>`;
+      cols.forEach((tb, j) => {
+        const ui_ = unt.indexOf(ta), uj = unt.indexOf(tb);
+        if (ui_ >= 0 && uj >= 0 && uj < ui_) { h += "<div></div>"; return; }
+        const c = ui.cellState(ta.id, tb.id);
+        h += `<div class="c ${c.s}${c.live ? " live" : ""}" data-i="${i}" data-j="${j}" data-a="${esc(ta.id)}" data-b="${esc(tb.id)}" role="button" aria-label="${esc(ta.symbol)} with ${esc(tb.symbol)}">${big && (c.s === "has" || c.s === "stuck") ? esc(ta.symbol) + esc(tb.symbol) : ""}</div>`;
+      });
+    });
+    h += "</div>";
+    const cov = ui.coverage(), hidden = cov.never - countNeverShown(rows, cols, unt);
+    const why = `The other ${hidden} pairs both give or both take, so they can never meet and aren't in the grid.${cov.never - hidden ? ` Hatched cells can't meet either: their names differ.` : ""}`;
+    h += cov.has === cov.can ? `<div class="gridsum ok" style="margin:8px 0 0"><span class="ck">✓</span><span>Every pair that can meet has a rule.<small>${why}</small></span></div>` : `<div class="gridsum" style="margin:8px 0 0"><b>${cov.has} of ${cov.can}</b> pairs that can meet have a rule.<small>${why}</small></div>`;
+    h += ui.legendHTML();
+    host.innerHTML = h;
+  };
+  function countNeverShown(rows, cols, unt) { let k = 0; rows.forEach((ta, i) => cols.forEach((tb) => { const a = unt.indexOf(ta), b = unt.indexOf(tb); if (a >= 0 && b >= 0 && b < a) return; if (ui.cellState(ta.id, tb.id).s === "never") k++; })); return k; }
+
+  /* ---------------------------------------------------------------- open question: a file that doesn't type-check */
+  app.openBadFile = function () {
+    // Direction B: don't open it yet. Say what's wrong and let the person choose.
+    const bad = data.badFile; const plus = bad.types.find((t) => t.id === "+");
+    $("#ruleSheet").innerHTML = `<div class="gate"><h3>sum.inet doesn't fit its own types</h3>
+      <p>Its agent types say <span class="sym">+</span> gives a number on aux port 2, but the net wires that port to a port that gives one too:</p>
+      <ul><li>Aux port 2 of <span class="sym">+</span> and the principal port of <span class="sym">S</span> both give a number.</li></ul>
+      <div class="ed-foot"><button class="btn" id="gtCancel">Don't open</button><span style="display:flex;gap:6px"><button class="btn ghost" id="gtUntyped" title="Throws its types away">Open untyped</button><button class="btn primary" id="gtCut">Open with that wire cut</button></span></div></div>`;
+    $("#ruleScrim").classList.add("on");
+    $("#gtCancel").onclick = () => $("#ruleScrim").classList.remove("on");
+    $("#gtUntyped").onclick = () => { $("#ruleScrim").classList.remove("on"); app.loadBad(); TK.setLevel(S, "untyped"); app.commit("Open sum.inet untyped"); toast("Opened sum.inet without its types.", true); };
+    $("#gtCut").onclick = () => {
+      $("#ruleScrim").classList.remove("on"); app.loadBad();
+      const b = view.state.wires.filter((w) => !w.ends.some((e) => e.free != null) && TK.compare(S, TK.endType(S, view, w.ends[0]), TK.endType(S, view, w.ends[1])));
+      TK.cut(view, b.map((w) => w.id), Object.fromEntries(b.map((w) => [w.id, "aux port 2 of + and the principal port of S both give a number"])));
+      app.commit("Open sum.inet"); view.fit(true); toast("Opened sum.inet with 1 wire cut into loose ends, marked in red.", true);
+    };
+  };
+  const data = app.data;
+  app.afterLoad = () => { missingMarks = !!(S.sys && S.sys.pending); renderLegend(); if (pop.classList.contains("on")) renderTypes(); };
+  app.init();
+})();
+</script>
+</body>
+</html>
