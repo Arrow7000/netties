@@ -170,10 +170,19 @@ going to happen:
   Editing its definition updates every instance. An instance dissolves as
   soon as anything inside it interacts.
 
-## Open questions
+## Decisions
 
-1. Should dropping onto a port that's already wired be refused (the
-   proposal above), or should it do something?
-2. On a trackpad, should two-finger scroll pan and pinch zoom, as in Figma?
-3. Should the rule list, component library and examples live in the sidebar,
-   or move to their own places?
+- **Dropping onto a port that's already wired is refused.** Hovering over it
+  explains why.
+- **Trackpad:** two-finger scroll pans and pinch zooms, as in Figma. With a
+  mouse: left-drag draws a selection box, middle- or right-drag pans, and the
+  wheel zooms.
+- **Components sit with the agent types,** in the same palette or right
+  below it. It should be clear which are components, but both are things you
+  drag in and edit, so they belong in the same place.
+- **Rules stay visible in a list,** and it must be obvious that they can be
+  edited, so nobody mistakes them for fixed. The current version gets this
+  right.
+- **Examples move to the top bar,** perhaps as a dropdown, not the sidebar.
+  Loading one replaces the whole net, and the UI should say so rather than
+  treating it as just another bit of functionality.
