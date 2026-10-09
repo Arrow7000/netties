@@ -109,8 +109,8 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
   };
 
   const pick = (t: AgentType) => {
-    if (ed.mode() === "auto") ed.addAgent(t.id);
-    else ed.setArmed(ed.armed() === t.id ? undefined : t.id);
+    if (ed.model.mode() === "auto") ed.model.addAgent(t.id);
+    else ed.model.setArmed(ed.model.armed() === t.id ? undefined : t.id);
   };
 
   const share = async () => {
@@ -130,7 +130,7 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
   const exportSVG = async () => {
     const { toSVG } = await import("../render/svg");
     const css = getComputedStyle(document.documentElement);
-    const l = ed.layout();
+    const l = ed.model.layout();
     const svg = toSVG(ed.net, ed.system, l.placement, l.routed, {
       paper: css.getPropertyValue("--paper").trim(),
       ink: css.getPropertyValue("--ink").trim(),
@@ -157,13 +157,13 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
       <section>
         <h2>Agents</h2>
         <p class="caption">
-          {ed.mode() === "auto" ? "Click an agent to add it to the net." : "Pick an agent, then click the canvas to place it."}
+          {ed.model.mode() === "auto" ? "Click an agent to add it to the net." : "Pick an agent, then click the canvas to place it."}
         </p>
         <ul class="list">
           <For each={types()}>
             {(t) => (
               <li>
-                <div class="type-row" classList={{ armed: ed.armed() === t.id }}>
+                <div class="type-row" classList={{ armed: ed.model.armed() === t.id }}>
                   <button class="place" onClick={() => pick(t)} title={`Add ${t.name}`}>
                     <Glyph type={t} />
                     <span class="name">
@@ -214,13 +214,13 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
 
       <section>
         <h2>Rules</h2>
-        <p class="caption">What happens when two agents meet, tip to tip. Drawing your own rules comes next.</p>
+        <p class="caption">What happens when two agents meet, tip to tip. Click one to redraw it.</p>
         <div class="rules">
           <For each={pairs().filter((p) => p.has)}>
             {(p) => (
-              <span class="pair">
+              <button class="pair" onClick={() => ed.openRule(p.a.id, p.b.id)}>
                 {p.a.symbol} ⋈ {p.b.symbol}
-              </span>
+              </button>
             )}
           </For>
         </div>
@@ -235,9 +235,9 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
             <div class="rules">
               <For each={pairs().filter((p) => !p.has)}>
                 {(p) => (
-                  <span class="pair">
+                  <button class="pair" onClick={() => ed.openRule(p.a.id, p.b.id)}>
                     {p.a.symbol} ⋈ {p.b.symbol}
-                  </span>
+                  </button>
                 )}
               </For>
             </div>

@@ -234,8 +234,124 @@ select {
   cursor: crosshair;
 }
 
-.free-end:hover {
+.free-end:hover,
+.free-end.open {
   fill: var(--pencil-soft);
+  stroke: var(--pencil);
+  stroke-width: 1.2;
+}
+
+.wire.stuck {
+  cursor: pointer;
+}
+
+/* Rule editor */
+
+.rule-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: var(--paper);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.rule-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 14px 6px;
+}
+
+.rule-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.rule-head h2 i {
+  font-size: 22px;
+}
+
+.rule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rule-palette {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 14px 8px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.rule-palette .caption {
+  color: var(--graphite);
+  margin-right: 4px;
+}
+
+.palette-btn {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: 3px;
+  padding: 3px 6px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.palette-btn:hover {
+  border-color: var(--ink);
+}
+
+.rule-status {
+  margin-left: auto;
+  color: var(--graphite);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.rule-status.warn {
+  color: var(--warn);
+}
+
+.rule-body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) 40px minmax(0, 5fr);
+  min-height: 0;
+}
+
+.rule-lhs {
+  background: var(--wash);
+}
+
+.rule-arrow {
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  color: var(--graphite);
+  border-left: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+}
+
+.rule-help {
+  margin: 0;
+  padding: 8px 14px 10px;
+  font-size: 13px;
+  color: var(--graphite);
+  border-top: 1px solid var(--rule);
+}
+
+@media (max-width: 760px) {
+  .rule-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 2fr) 28px minmax(0, 5fr);
+  }
 }
 
 .drag-line {
@@ -551,6 +667,16 @@ select {
 .rules .pair {
   font-style: italic;
   white-space: nowrap;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  margin: 0 -2px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.rules .pair:hover {
+  background: var(--pencil-soft);
 }
 
 details.missing {
@@ -565,6 +691,9 @@ details.missing summary {
 
 details.missing .rules {
   margin-top: 4px;
+}
+
+details.missing .pair {
   color: var(--warn);
 }
 

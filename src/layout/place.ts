@@ -1,6 +1,6 @@
 import { type AgentId, type Net, endKey, port } from "../core/net";
 import { G, type Orient, type Placement, shape } from "./geometry";
-import { type Routed, crossings, length, route } from "./route";
+import { type Pins, type Routed, crossings, length, route } from "./route";
 
 /**
  * Automatic placement.
@@ -89,7 +89,7 @@ export function structure(net: Net) {
   return { parent, children, roots };
 }
 
-export function autoLayout(net: Net): AutoLayout {
+export function autoLayout(net: Net, opts: { pins?: Pins } = {}): AutoLayout {
   const { children, roots } = structure(net);
   const arity = (id: AgentId) => net.agent(id).wires.length - 1;
 
@@ -155,8 +155,14 @@ export function autoLayout(net: Net): AutoLayout {
       return net.partner(port(a!, s!))?.kind === "free";
     }).length;
   for (const u of units) if (u.trees.length === 2) u.flip = freeStubs(u.trees[0]!) > freeStubs(u.trees[1]!);
+  // A lone tree whose root is pinned to the top edge should point up at it.
+  for (const u of units) {
+    if (u.trees.length !== 1) continue;
+    const p = net.partner(port(u.roots[0], 0));
+    if (p?.kind === "free" && opts.pins?.top.includes(p.name)) u.flip = true;
+  }
 
-  let best = arrange(net, units);
+  let best = arrange(net, units, opts.pins);
   if (units.length <= 24 && net.wires.size <= 300) {
     let bestCost = cost(best.routed);
     for (let pass = 0; pass < 3; pass++) {
@@ -164,7 +170,7 @@ export function autoLayout(net: Net): AutoLayout {
       for (const u of units) {
         // A lone tree rooted at a free port, or nothing, can point either way.
         u.flip = !u.flip;
-        const l = arrange(net, units);
+        const l = arrange(net, units, opts.pins);
         const c = cost(l.routed);
         if (c < bestCost - 0.5) [best, bestCost, improved] = [l, c, true];
         else u.flip = !u.flip;
@@ -202,7 +208,7 @@ function geom(net: Net, u: Unit): UnitGeom {
   return g;
 }
 
-function arrange(net: Net, units: Unit[]): AutoLayout {
+function arrange(net: Net, units: Unit[], pins?: Pins): AutoLayout {
   const geoms = units.map((u) => geom(net, u));
 
   // Which unit each loose wire end belongs to, and which way it leaves.
@@ -325,5 +331,5 @@ function arrange(net: Net, units: Unit[]): AutoLayout {
     for (const [id, dx, dy, orient] of g.nodes) placement.set(id, { x: x[u]! + dx, y: y[u]! + dy, orient });
     for (const [k, dx] of g.cols) columns.set(k, x[u]! + dx);
   });
-  return { placement, columns, routed: route(net, placement, { columns }) };
+  return { placement, columns, routed: route(net, placement, { columns, pins }) };
 }

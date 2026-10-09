@@ -3,7 +3,8 @@ import { type AgentId, type End, NONE, type WireId, free, port } from "../core/n
 import { G, type Pt, portPos } from "../layout/geometry";
 import { roundedPath } from "../render/path";
 import { agentOutline, labelPos } from "../render/svg";
-import type { Editor } from "../state/editor";
+import type { System } from "../core/system";
+import type { NetModel } from "../state/model";
 
 type Drag =
   | { kind: "pan"; start: Pt; origin: Pt; moved: boolean }
@@ -13,8 +14,22 @@ type Drag =
 
 const DOCK = 44;
 
-export function Canvas(props: { ed: Editor }) {
-  const ed = props.ed;
+export interface CanvasProps {
+  m: NetModel;
+  system: () => System;
+  /** Called when an active pair's wire is clicked. Without it, active pairs just select. */
+  onFire?: (w: WireId) => void;
+  /** Called when an active pair with no rule is clicked. */
+  onStuck?: (w: WireId) => void;
+  /** Display names for free ports. */
+  freeLabel?: (name: string) => string;
+  /** Read-only: no selecting, dragging or wiring. */
+  readonly?: boolean;
+  class?: string;
+}
+
+export function Canvas(props: CanvasProps) {
+  const ed = props.m;
   let svg!: SVGSVGElement;
   const [view, setView] = createSignal({ x: 0, y: 0, k: 1.5 });
   const [drag, setDrag] = createSignal<Drag>();
@@ -109,7 +124,7 @@ export function Canvas(props: { ed: Editor }) {
   };
 
   const onPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || props.readonly) return;
     const target = e.target as Element;
     const w = toWorld(e);
     const end = endAt(target);
@@ -170,11 +185,12 @@ export function Canvas(props: { ed: Editor }) {
     if (d.kind === "wire") {
       const target = endAt(document.elementFromPoint(e.clientX, e.clientY));
       if (target) ed.connect(d.from, target);
-      else if (d.dock && d.from.kind === "port") ed.makeFree(d.from);
+      else if (d.dock && d.from.kind === "port" && !ed.fixedInterface) ed.makeFree(d.from);
     }
     if (d.kind === "click-wire") {
       const active = ed.activeWires().has(d.id);
-      if (active && !d.shift) ed.fire(d.id);
+      if (active && !d.shift && props.onFire) props.onFire(d.id);
+      else if (ed.stuckWires().has(d.id) && !d.shift && props.onStuck) props.onStuck(d.id);
       else ed.setSelection({ kind: "wire", id: d.id });
     }
   };
@@ -192,13 +208,8 @@ export function Canvas(props: { ed: Editor }) {
     } else setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
   };
 
-  const hoverTarget = createMemo(() => {
-    const d = drag();
-    return d?.kind === "wire" ? d.from : undefined;
-  });
-
   return (
-    <div class="stage" style={{ height: "100%" }}>
+    <div class={`stage ${props.class ?? ""}`} style={{ height: "100%" }}>
       <svg
         ref={svg}
         class="canvas"
@@ -211,8 +222,8 @@ export function Canvas(props: { ed: Editor }) {
         aria-label="Net canvas"
       >
         <g transform={`translate(${view().x} ${view().y}) scale(${view().k})`}>
-          <For each={wireIds()}>{(id) => <Wire ed={ed} id={id} />}</For>
-          <For each={agentIds()}>{(id) => <Agent ed={ed} id={id} dragging={!!hoverTarget()} />}</For>
+          <For each={wireIds()}>{(id) => <Wire ed={ed} id={id} plain={props.readonly} />}</For>
+          <For each={agentIds()}>{(id) => <Agent ed={ed} system={props.system} id={id} />}</For>
           <For each={freeNames()}>
             {(name) => {
               const pt = () => ed.layout().routed.free.get(name);
@@ -220,14 +231,21 @@ export function Canvas(props: { ed: Editor }) {
                 <Show when={pt()}>
                   {(p) => (
                     <g>
-                      <circle class="free-end" data-free={name} cx={p().x} cy={p().y} r={6} />
+                      <circle
+                        class="free-end"
+                        classList={{ open: (ed.rev(), ed.net.free.get(name) === NONE) }}
+                        data-free={name}
+                        cx={p().x}
+                        cy={p().y}
+                        r={6}
+                      />
                       <text
                         class="free-label"
                         x={p().x}
                         y={p().dir === "up" ? p().y - 5 : p().y + 12}
                         text-anchor="middle"
                       >
-                        {name}
+                        {props.freeLabel?.(name) ?? name}
                       </text>
                     </g>
                   )}
@@ -240,7 +258,11 @@ export function Canvas(props: { ed: Editor }) {
           </Show>
         </g>
       </svg>
-      <Show when={drag()?.kind === "wire" && (drag() as Extract<Drag, { kind: "wire" }>).from.kind === "port"}>
+      <Show
+        when={
+          !ed.fixedInterface && drag()?.kind === "wire" && (drag() as Extract<Drag, { kind: "wire" }>).from.kind === "port"
+        }
+      >
         <div class="dock top" classList={{ hot: (drag() as Extract<Drag, { kind: "wire" }>).dock === "top" }}>
           Drop here to leave it as a free port
         </div>
@@ -252,7 +274,7 @@ export function Canvas(props: { ed: Editor }) {
   );
 }
 
-function Wire(props: { ed: Editor; id: WireId }) {
+function Wire(props: { ed: NetModel; id: WireId; plain?: boolean }) {
   const ed = props.ed;
   const d = () => roundedPath(ed.layout().routed.wires.get(props.id) ?? [], G.radius);
   const sel = () => {
@@ -262,7 +284,11 @@ function Wire(props: { ed: Editor; id: WireId }) {
   return (
     <g
       class="wire"
-      classList={{ active: ed.activeWires().has(props.id), stuck: ed.stuckWires().has(props.id), selected: sel() }}
+      classList={{
+        active: !props.plain && ed.activeWires().has(props.id),
+        stuck: !props.plain && ed.stuckWires().has(props.id),
+        selected: sel(),
+      }}
       data-wire={props.id}
     >
       <path class="halo" d={d()} />
@@ -273,7 +299,7 @@ function Wire(props: { ed: Editor; id: WireId }) {
   );
 }
 
-function Agent(props: { ed: Editor; id: AgentId; dragging: boolean }) {
+function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
   const ed = props.ed;
   const p = () => ed.layout().placement.get(props.id);
   const agent = () => {
@@ -282,7 +308,7 @@ function Agent(props: { ed: Editor; id: AgentId; dragging: boolean }) {
   };
   const type = () => {
     const a = agent();
-    return a ? ed.system.types.get(a.type) : undefined;
+    return a ? props.system().types.get(a.type) : undefined;
   };
   const arity = () => (agent()?.wires.length ?? 1) - 1;
   const outline = () => {

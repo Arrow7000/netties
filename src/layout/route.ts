@@ -41,6 +41,16 @@ export interface RouteOptions {
   columns?: Map<string, number>;
   /** Gaps to run lanes through. Computed from agent positions if not given. */
   gaps?: Gap[];
+  /**
+   * Free ports held at fixed places along the top and bottom edges, left to
+   * right, like the interface of a rule. Their wires bend in to meet them.
+   */
+  pins?: Pins;
+}
+
+export interface Pins {
+  top: string[];
+  bottom: string[];
 }
 
 interface Leg {
@@ -55,6 +65,8 @@ type Job =
   | { kind: "around"; id: WireId; up: Leg; down: Leg; upFirst: boolean }
   | { kind: "drop"; id: WireId; leg: Leg; free: string; legFirst: boolean }
   | { kind: "rise"; id: WireId; leg: Leg; free: string; legFirst: boolean }
+  /** To a pinned free port; `around` when the port faces away from its pin's edge. */
+  | { kind: "pin"; id: WireId; leg: Leg; free: string; legFirst: boolean; side: "up" | "down"; around: boolean }
   | { kind: "bare"; id: WireId; free: [string, string] };
 
 /** A horizontal run waiting for its height. */
@@ -83,6 +95,9 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     return { prefix: [t], t: { x: col, y: t.y + s * 2 * JOG, dir: t.dir, s: true } };
   };
 
+  const pinSide = (name: string): "up" | "down" | undefined =>
+    opts.pins?.top.includes(name) ? "up" : opts.pins?.bottom.includes(name) ? "down" : undefined;
+
   // Classify every wire.
   const jobs: Job[] = [];
   for (const w of net.wires.values()) {
@@ -96,7 +111,9 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       const p = (legFirst ? e0 : e1) as Extract<End, { kind: "port" }>;
       const f = (legFirst ? e1 : e0) as Extract<End, { kind: "free" }>;
       const l = leg(p);
-      jobs.push({ kind: l.t.dir === "down" ? "drop" : "rise", id: w.id, leg: l, free: f.name, legFirst });
+      const side = pinSide(f.name);
+      if (side) jobs.push({ kind: "pin", id: w.id, leg: l, free: f.name, legFirst, side, around: l.t.dir !== side });
+      else jobs.push({ kind: l.t.dir === "down" ? "drop" : "rise", id: w.id, leg: l, free: f.name, legFirst });
       continue;
     }
     const a = leg(e0);
@@ -116,6 +133,7 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
   for (const job of jobs) {
     let xs: number[];
     if (job.kind === "around") xs = [job.up.t.x, job.down.t.x];
+    else if (job.kind === "pin" && job.around) xs = [job.leg.t.x];
     else continue;
     let best = 0;
     let bestCost = Infinity;
@@ -159,6 +177,10 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       caps.set(job.id, span(job.up.t.x, lx, job.up.t.y));
       cups.set(job.id, span(lx, job.down.t.x, job.down.t.y));
     }
+    if (job.kind === "pin" && job.around) {
+      const sp = span(job.leg.t.x, laneX.get(job.id)!, job.leg.t.y);
+      (job.leg.t.dir === "up" ? caps : cups).set(job.id, sp);
+    }
   }
   settle(caps, boxes, -1);
   settle(cups, boxes, +1);
@@ -172,9 +194,24 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
   for (const job of jobs) {
     if (job.kind === "drop") bottom = Math.max(bottom, job.leg.t.y);
     if (job.kind === "rise") top = Math.min(top, job.leg.t.y);
+    if (job.kind === "pin") [top, bottom] = [Math.min(top, job.leg.t.y), Math.max(bottom, job.leg.t.y)];
   }
   bottom = (Number.isFinite(bottom) ? bottom : 0) + G.freeMargin;
   top = (Number.isFinite(top) ? top : 0) - G.freeMargin;
+
+  // Pinned ports keep their order, but sit as close as they can to where
+  // their wires naturally arrive.
+  const pinX = new Map<string, number>();
+  const pinTop = top - PIN_RISE;
+  const pinBottom = bottom + PIN_RISE;
+  if (opts.pins) {
+    const natural = new Map<string, number>();
+    for (const job of jobs) {
+      if (job.kind === "pin") natural.set(job.free, job.around ? laneX.get(job.id)! : job.leg.t.x);
+    }
+    const mid = boxes.length ? boxes.reduce((s, b) => s + b.x0 + b.x1, 0) / (2 * boxes.length) : 0;
+    for (const side of [opts.pins.top, opts.pins.bottom]) spread(side, natural, mid).forEach((x, n) => pinX.set(n, x));
+  }
 
   const wires = new Map<WireId, Pt[]>();
   const free = new Map<string, Terminal>();
@@ -224,14 +261,46 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
         wires.set(job.id, job.legFirst ? pts : reversePath(pts));
         break;
       }
+      case "pin": {
+        const t = job.leg.t;
+        const up = job.side === "up";
+        const edge = up ? top : bottom;
+        const end = { x: pinX.get(job.free)!, y: up ? pinTop : pinBottom, s: true };
+        let pts: Pt[];
+        if (!job.around) pts = [...job.leg.prefix, t, { x: t.x, y: edge }, end];
+        else {
+          const lx = laneX.get(job.id)!;
+          const y = (t.dir === "up" ? caps : cups).get(job.id)!.y;
+          pts = [...job.leg.prefix, t, { x: t.x, y }, { x: lx, y }, { x: lx, y: edge }, end];
+        }
+        free.set(job.free, { x: end.x, y: end.y, dir: job.side });
+        wires.set(job.id, job.legFirst ? pts : reversePath(pts));
+        break;
+      }
       case "bare": {
-        const top = bottom - G.layerH / 2;
+        const [sa, sb] = job.free.map(pinSide);
+        if (sa && sb) {
+          const a = { x: pinX.get(job.free[0])!, y: sa === "up" ? pinTop : pinBottom };
+          const b = { x: pinX.get(job.free[1])!, y: sb === "up" ? pinTop : pinBottom };
+          free.set(job.free[0], { ...a, dir: sa });
+          free.set(job.free[1], { ...b, dir: sb });
+          if (sa !== sb) {
+            const ya = sa === "up" ? top : bottom;
+            const yb = sb === "up" ? top : bottom;
+            wires.set(job.id, [a, { x: a.x, y: ya }, { x: b.x, y: yb, s: true }, b]);
+          } else {
+            const y = a.y + (sa === "up" ? 1 : -1) * G.layerH * 0.4;
+            wires.set(job.id, [a, { x: a.x, y }, { x: b.x, y }, b]);
+          }
+          break;
+        }
+        const capY = bottom - G.layerH / 2;
         const a = { x: bareX, y: bottom };
         const b = { x: bareX + G.portGap, y: bottom };
         bareX += G.portGap * 2;
         free.set(job.free[0], { ...a, dir: "down" });
         free.set(job.free[1], { ...b, dir: "down" });
-        wires.set(job.id, [a, { x: a.x, y: top }, { x: b.x, y: top }, b]);
+        wires.set(job.id, [a, { x: a.x, y: capY }, { x: b.x, y: capY }, b]);
         break;
       }
     }
@@ -240,11 +309,51 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
   // Free ports with nothing attached still need a spot.
   for (const [name, w] of net.free) {
     if (free.has(name) || w !== NONE) continue;
+    const side = pinSide(name);
+    if (side) {
+      free.set(name, { x: pinX.get(name)!, y: side === "up" ? pinTop : pinBottom, dir: side });
+      continue;
+    }
     free.set(name, { x: bareX, y: bottom, dir: "down" });
     bareX += G.portGap;
   }
 
-  return { wires, free, bounds: boundsOf(boxes, wires), laneCount: laneUsers.map((u) => u.length), gaps, arounds: jobs.filter((j) => j.kind === "around").length };
+  const arounds = jobs.filter((j) => j.kind === "around" || (j.kind === "pin" && j.around)).length;
+  const bounds = boundsOf(boxes, wires);
+  for (const f of free.values()) {
+    bounds.y0 = Math.min(bounds.y0, f.y);
+    bounds.y1 = Math.max(bounds.y1, f.y);
+  }
+  return { wires, free, bounds, laneCount: laneUsers.map((u) => u.length), gaps, arounds };
+}
+
+/** How far pinned ports sit beyond the net, leaving room for wires to bend in. */
+const PIN_RISE = 30;
+
+/**
+ * Positions for pins in the given order, each as near its natural x as the
+ * order and spacing allow. Pins with no natural position fill in between.
+ */
+function spread(names: string[], natural: Map<string, number>, mid: number): Map<string, number> {
+  const gap = G.portGap * 1.5;
+  const out = new Map<string, number>();
+  if (!names.length) return out;
+  const known = names.filter((n) => natural.has(n));
+  if (!known.length) {
+    names.forEach((n, i) => out.set(n, mid + (i - (names.length - 1) / 2) * gap));
+    return out;
+  }
+  const xs: number[] = [];
+  names.forEach((n, i) => {
+    const want = natural.get(n);
+    const prev = xs[i - 1];
+    if (prev === undefined) xs.push(want ?? natural.get(known[0]!)! - gap * names.indexOf(known[0]!));
+    else xs.push(Math.max(want ?? -Infinity, prev + gap));
+  });
+  // Pushing apart drifts rightwards; shift back so the pins sit centred on where they wanted to be.
+  const drift = known.reduce((s, n) => s + xs[names.indexOf(n)]! - natural.get(n)!, 0) / known.length;
+  names.forEach((n, i) => out.set(n, xs[i]! - drift));
+  return out;
 }
 
 /** The same path walked the other way, keeping each S-curve on its segment. */

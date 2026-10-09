@@ -1,8 +1,9 @@
 import { Net, type NetJSON } from "../core/net";
 import { System, type SystemJSON } from "../core/system";
 import type { Placed } from "../layout/geometry";
+import type { LayoutMode } from "./model";
 
-export type LayoutMode = "auto" | "manual";
+export type { LayoutMode };
 
 /** Everything needed to restore a session. */
 export interface Doc {
