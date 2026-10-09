@@ -153,3 +153,33 @@ describe("translation", () => {
     commutes(ex.net(s), s, "restricted");
   });
 });
+
+describe("following the source step by step", () => {
+  it("each source interaction maps to a run of combinator interactions ending at the translated result", async () => {
+    const { reduceWith, isCellRoot } = await import("./catchup");
+    const { interact } = await import("./reduce");
+    const ex = examples.find((e) => e.name === "2 × 2")!;
+    const s = ex.system();
+    const source = ex.net(s);
+    const tr = translation(s);
+    const c = combinators();
+    let steps = 0;
+    while (source.activePairs().length) {
+      // Fire one source pair, and its counterpart in a fresh translation.
+      const { net, tagOf } = tr.net(source);
+      const w = source.activePairs()[0]!;
+      const [a, b] = source.wire(w).ends as { agent: number }[];
+      const roots = [...net.agents.keys()].filter((id) => [a!.agent, b!.agent].includes(tagOf.get(id)!) && isCellRoot(net, id));
+      const cut = net.activePairs().find((x) => net.wire(x).ends.every((e) => e.kind === "port" && roots.includes(e.agent)));
+      expect(cut).toBeDefined();
+      interact(source, s, w);
+      const r = reduceWith(net, c, {
+        allow: (x) => x === cut || !net.wire(x).ends.every((e) => e.kind === "port" && isCellRoot(net, e.agent)),
+      });
+      expect(r.interactions).toBeGreaterThan(0);
+      expect(canonical(net)).toBe(canonical(tr.net(source).net));
+      steps++;
+    }
+    expect(steps).toBe(16);
+  });
+});
