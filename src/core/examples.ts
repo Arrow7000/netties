@@ -1,5 +1,5 @@
 import { type End, Net, free, port } from "./net";
-import { arithmetic, combinators } from "./presets";
+import { arithmetic, combinators, directedCombinators } from "./presets";
 import type { System } from "./system";
 
 /**
@@ -91,6 +91,26 @@ export const examples: Example[] = [
       const y = new Hole();
       link(net, build(net, sys, t("γ", x, t("ε"))), build(net, sys, t("δ", t("ε"), y)));
       link(net, x, y);
+      return net;
+    },
+  },
+  {
+    name: "Directed commutation",
+    about: "Lafont's directed combinators: γ meets δ*, and each one gets copied.",
+    system: directedCombinators,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("γ", f("a"), f("b"))), build(net, sys, t("δ*", f("c"), f("d"))));
+      return net;
+    },
+  },
+  {
+    name: "Directed erasing",
+    about: "Lafont's directed combinators: ε takes apart a tree of starred agents.",
+    system: directedCombinators,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("ε")), build(net, sys, t("γ*", t("δ*", f("a"), f("b")), t("ε*"))));
       return net;
     },
   },

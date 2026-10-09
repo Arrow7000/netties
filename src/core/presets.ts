@@ -84,3 +84,35 @@ export function arithmetic(): System {
   sys.addRule({ left: "ε", right: "S", agents: ["ε"], wires: [[A(0, 0), R(1)]] });
   return sys;
 }
+
+/**
+ * Lafont's directed combinators (1997, §3.4, Fig. 16): γ, δ and ε each split
+ * into two, with the starred one's principal port of the opposite polarity.
+ * No symbol meets itself, and the annihilations γγ* and δδ* are both drawn
+ * straight, as in the paper ("just a matter of taste").
+ */
+export function directedCombinators(): System {
+  const sys = new System()
+    .addType({ id: "γ", name: "constructor", symbol: "γ", arity: 2, filled: true })
+    .addType({ id: "γ*", name: "co-constructor", symbol: "γ*", arity: 2, filled: true })
+    .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2 })
+    .addType({ id: "δ*", name: "co-duplicator", symbol: "δ*", arity: 2 })
+    .addType({ id: "ε", name: "eraser", symbol: "ε", arity: 0 })
+    .addType({ id: "ε*", name: "co-eraser", symbol: "ε*", arity: 0 });
+
+  for (const t of ["γ", "δ"]) sys.addRule({ left: t, right: `${t}*`, agents: [], wires: [[L(1), R(2)], [L(2), R(1)]] });
+  sys.addRule({ left: "ε", right: "ε*", agents: [], wires: [] });
+  for (const [e, t] of [["ε*", "γ"], ["ε*", "δ"], ["ε", "γ*"], ["ε", "δ*"]] as const) {
+    sys.addRule({ left: e, right: t, agents: [e, e], wires: [[A(0, 0), R(1)], [A(1, 0), R(2)]] });
+  }
+  // Commutation, as in `combinators`: copies of each agent land on the
+  // other's aux wires and keep their own type.
+  for (const [x, y] of [["γ", "δ*"], ["δ", "γ*"]] as const) {
+    const wires: [ReturnType<typeof A>, ReturnType<typeof A>][] = [];
+    for (const k of [1, 2]) wires.push([A(k - 1, 0), L(k)]);
+    for (const j of [1, 2]) wires.push([A(j + 1, 0), R(j)]);
+    for (const k of [1, 2]) for (const j of [1, 2]) wires.push([A(k - 1, j), A(j + 1, k)]);
+    sys.addRule({ left: x, right: y, agents: [y, y, x, x], wires });
+  }
+  return sys;
+}

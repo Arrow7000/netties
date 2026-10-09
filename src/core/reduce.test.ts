@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { canonical } from "./canon";
 import { type End, Net, free, port } from "./net";
-import { arithmetic, combinators } from "./presets";
+import { arithmetic, combinators, directedCombinators } from "./presets";
 import { interact, normalize, parallelStep } from "./reduce";
 import { A, L, R, type System } from "./system";
 
@@ -113,6 +113,29 @@ describe("combinators", () => {
     expect(normalize(net, sys).normal).toBe(true);
     expect(net.agents.size).toBe(0);
     expect(net.wires.size).toBe(0);
+  });
+});
+
+describe("directed combinators", () => {
+  const sys = directedCombinators();
+
+  it("has no symbol that meets itself", () => {
+    for (const t of sys.types.keys()) expect(sys.ruleFor(t, t)).toBeUndefined();
+    expect(sys.rules.size).toBe(9);
+  });
+
+  it("γδ* commutes, each copy keeping its type", () => {
+    const { net, w } = pair(sys, "γ", "δ*");
+    interact(net, sys, w);
+    expect([partnerName(net, "x1"), partnerName(net, "x2")]).toEqual(["δ*0", "δ*0"]);
+    expect([partnerName(net, "y1"), partnerName(net, "y2")]).toEqual(["γ0", "γ0"]);
+    expect(net.unconnected()).toEqual([]);
+  });
+
+  it("γγ* annihilates with straight wires", () => {
+    const { net, w } = pair(sys, "γ", "γ*");
+    interact(net, sys, w);
+    expect([partnerName(net, "x1"), partnerName(net, "x2")]).toEqual(["y2", "y1"]);
   });
 });
 
