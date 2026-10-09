@@ -554,6 +554,7 @@ export function Canvas(props: CanvasProps) {
                 );
               }}
             </For>
+            <StepPreview ed={ed} hidden={!!drag() || !props.onFire} />
             <HoverPill ed={ed} hidden={!!drag()} canFire={!!props.onFire} />
           </g>
           <Show when={wireDrag()}>
@@ -636,6 +637,46 @@ function EndMark(props: { at: Pt; state: EndState }) {
         />
       </Show>
     </>
+  );
+}
+
+/**
+ * For a pair under the pointer whose rule only reconnects wires: dashed
+ * lines between the ends that firing it would join.
+ */
+function StepPreview(props: { ed: NetModel; hidden: boolean }) {
+  const ed = props.ed;
+  const joins = createMemo(() => {
+    const h = ed.hover();
+    if (props.hidden || held.alt() || h?.kind !== "wire" || !ed.activeWires().has(h.id)) return [];
+    const v = ed.view();
+    const [a, b] = v.net.wire(h.id).ends;
+    if (a.kind !== "port" || b.kind !== "port") return [];
+    const found = v.sys.ruleFor(v.net.agent(a.agent).type, v.net.agent(b.agent).type);
+    if (!found || found.rule.agents.length) return [];
+    const sides = found.swapped ? [b.agent, a.agent] : [a.agent, b.agent];
+    const l = ed.layout();
+    const at = (e: End): Pt | undefined => {
+      if (e.kind === "free") return l.routed.free.get(e.name);
+      const p = l.placement.get(e.agent);
+      return p ? portPos(p, v.net.agent(e.agent).wires.length - 1, e.slot) : undefined;
+    };
+    const outside = (side: 0 | 1, slot: number) => v.net.partner(port(sides[side]!, slot));
+    const out: [Pt, Pt][] = [];
+    for (const [x, y] of found.rule.wires) {
+      if (x.kind !== "iface" || y.kind !== "iface") continue;
+      const ex = outside(x.side, x.slot);
+      const ey = outside(y.side, y.slot);
+      const px = ex && at(ex);
+      const py = ey && at(ey);
+      if (px && py) out.push([px, py]);
+    }
+    return out;
+  });
+  return (
+    <g class="step-preview">
+      <For each={joins()}>{([p, q]) => <line x1={p.x} y1={p.y} x2={q.x} y2={q.y} />}</For>
+    </g>
   );
 }
 

@@ -174,16 +174,27 @@ textarea {
   right: 12px;
 }
 
-.transport {
+/* The bottom row: counters, run controls and view controls, kept apart. */
+.bottom-bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
   bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 5px;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
 }
 
-.view-controls {
-  bottom: 14px;
-  right: 12px;
+.bottom-bar .island {
+  position: static;
+  pointer-events: auto;
+}
+
+.transport {
+  padding: 5px;
 }
 
 .brand {
@@ -384,7 +395,7 @@ textarea {
 }
 
 .speed input {
-  width: 110px;
+  width: 96px;
   accent-color: var(--text);
 }
 
@@ -1536,8 +1547,6 @@ kbd {
 }
 
 .counters {
-  bottom: 14px;
-  left: 12px;
   padding: 4px 6px 4px 4px;
 }
 
@@ -1840,4 +1849,11 @@ kbd {
     transition: none !important;
     animation: none !important;
   }
+}
+
+.step-preview line {
+  stroke: var(--active);
+  stroke-width: 1.6;
+  stroke-dasharray: 3 2.4;
+  pointer-events: none;
 }

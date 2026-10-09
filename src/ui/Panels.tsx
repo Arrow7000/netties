@@ -115,10 +115,15 @@ export function HoverPanel(props: { ed: Editor }) {
           );
           if (held.alt()) return { title, lines: [{ text: "Alt-click to select the wire.", tone: "accent" }] };
           if (active) {
+            const found = v.sys.ruleFor(n.typeOf(pair[0])!.id, n.typeOf(pair[1])!.id);
+            const made = found?.rule.agents.length ?? 0;
+            const what = made
+              ? `Firing replaces the pair with ${made === 1 ? "a new agent" : `${made} new agents`}.`
+              : "Firing removes the pair and joins their wires along the dashed lines.";
             return {
               title,
               aside: "active pair",
-              lines: [{ text: "Their principal ports touch, so they can interact." }, { text: "Click to fire. Alt-click selects the wire." }],
+              lines: [{ text: what }, { text: "Click to fire. Alt-click selects the wire." }],
             };
           }
           return {

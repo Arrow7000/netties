@@ -240,73 +240,75 @@ export function App(props: { initial?: Doc }) {
         <HoverPanel ed={ed} />
         <SelectionPanel ed={ed} />
       </div>
-      <Counters ed={ed} />
+      <div class="bottom-bar">
+        <Counters ed={ed} />
 
-      <div class="island transport" aria-label="Run">
-        <button class="btn outline" onClick={ed.stepOne} disabled={!active() || ed.running()} title="Fire one active pair (S)">
-          <I.Step />
-          Step
-        </button>
-        <button class="btn outline" onClick={ed.stepAll} disabled={!active() || ed.running()} title="Fire every active pair at once (A)">
-          <I.StepAll />
-          Step all
-        </button>
-        <button
-          class="btn run"
-          classList={{ stop: ed.running() }}
-          onClick={ed.run}
-          disabled={!active() && !ed.running()}
-          title="Keep stepping until nothing can fire (R)"
-        >
-          <Show when={ed.running()} fallback={<I.Play />}>
-            <I.Stop />
-          </Show>
-          {ed.running() ? "Stop" : "Run"}
-        </button>
-        <span class="sep" />
-        <div class="speed">
-          <button class="btn icon" aria-pressed={slow()} classList={{ on: slow() }} onClick={toggleSlow} title="Slow motion">
-            <I.Slow />
+        <div class="island transport" aria-label="Run">
+          <button class="btn outline" onClick={ed.stepOne} disabled={!active() || ed.running()} title="Fire one active pair (S)">
+            <I.Step />
+            Step
           </button>
-          <input
-            type="range"
-            min={SPEED_MIN}
-            max={SPEED_MAX}
-            step={0.25}
-            value={Math.log2(ed.speed())}
-            onInput={(e) => ed.setSpeed(2 ** e.currentTarget.valueAsNumber)}
-            aria-label="Animation speed"
-          />
-          <output>{speedText()}</output>
+          <button class="btn outline" onClick={ed.stepAll} disabled={!active() || ed.running()} title="Fire every active pair at once (A)">
+            <I.StepAll />
+            Step all
+          </button>
+          <button
+            class="btn run"
+            classList={{ stop: ed.running() }}
+            onClick={ed.run}
+            disabled={!active() && !ed.running()}
+            title="Keep stepping until nothing can fire (R)"
+          >
+            <Show when={ed.running()} fallback={<I.Play />}>
+              <I.Stop />
+            </Show>
+            {ed.running() ? "Stop" : "Run"}
+          </button>
+          <span class="sep" />
+          <div class="speed">
+            <button class="btn icon" aria-pressed={slow()} classList={{ on: slow() }} onClick={toggleSlow} title="Slow motion">
+              <I.Slow />
+            </button>
+            <input
+              type="range"
+              min={SPEED_MIN}
+              max={SPEED_MAX}
+              step={0.25}
+              value={Math.log2(ed.speed())}
+              onInput={(e) => ed.setSpeed(2 ** e.currentTarget.valueAsNumber)}
+              aria-label="Animation speed"
+            />
+            <output>{speedText()}</output>
+          </div>
         </div>
-      </div>
 
-      <div class="island view-controls">
-        <div class="seg" role="group" aria-label="Layout">
-          <button aria-pressed={m.mode() === "auto"} onClick={() => m.setMode("auto")} title="Lay the net out automatically">
-            Auto layout
+        <div class="island view-controls">
+          <div class="seg" role="group" aria-label="Layout">
+            <button aria-pressed={m.mode() === "auto"} onClick={() => m.setMode("auto")} title="Lay the net out automatically">
+              Auto layout
+            </button>
+            <button aria-pressed={m.mode() === "manual"} onClick={() => m.setMode("manual")} title="Place agents yourself; wires still route themselves">
+              Manual
+            </button>
+          </div>
+          <button class="btn" onClick={m.tidy} disabled={m.mode() !== "auto"} title="Lay the net out afresh, ignoring where things were">
+            Tidy
           </button>
-          <button aria-pressed={m.mode() === "manual"} onClick={() => m.setMode("manual")} title="Place agents yourself; wires still route themselves">
-            Manual
+          <span class="sep" />
+          <button class="btn icon" onClick={() => camera.zoomBy(1 / 1.25)} title="Zoom out">
+            <I.Minus />
+          </button>
+          <button class="btn zoom" onClick={() => camera.zoomTo(1)} title="Zoom to 100%">
+            {Math.round(camera.view().k * 100)}%
+          </button>
+          <button class="btn icon" onClick={() => camera.zoomBy(1.25)} title="Zoom in">
+            <I.Plus />
+          </button>
+          <button class="btn" onClick={camera.fit} title="Fit the net in view (F)">
+            <I.Fit />
+            Fit
           </button>
         </div>
-        <button class="btn" onClick={m.tidy} disabled={m.mode() !== "auto"} title="Lay the net out afresh, ignoring where things were">
-          Tidy
-        </button>
-        <span class="sep" />
-        <button class="btn icon" onClick={() => camera.zoomBy(1 / 1.25)} title="Zoom out">
-          <I.Minus />
-        </button>
-        <button class="btn zoom" onClick={() => camera.zoomTo(1)} title="Zoom to 100%">
-          {Math.round(camera.view().k * 100)}%
-        </button>
-        <button class="btn icon" onClick={() => camera.zoomBy(1.25)} title="Zoom in">
-          <I.Plus />
-        </button>
-        <button class="btn" onClick={camera.fit} title="Fit the net in view (F)">
-          <I.Fit />
-          Fit
-        </button>
       </div>
 
       <Show when={held.alt() && active() > 0 && !overlayOpen()}>
