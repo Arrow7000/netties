@@ -1,7 +1,7 @@
 import { batch, createMemo, createSignal } from "solid-js";
 import { type Frame, type Snapshot as AnimSnapshot, buildMorph } from "../anim/morph";
 import { type Defs, type GroupId, Groups, type GroupsJSON, collapse, instantiate } from "../core/groups";
-import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, isRound, port } from "../core/net";
+import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, port } from "../core/net";
 import { type StepRecord, redexes } from "../core/reduce";
 import type { System } from "../core/system";
 import type { Placed, Placement, Pt } from "../layout/geometry";
@@ -168,9 +168,8 @@ export function createNetModel(opts: NetModelOptions) {
   const layout = createMemo<Layout>(() => {
     const v = view();
     const pins = opts.pins?.();
-    const round = (id: AgentId) => isRound(v.sys.types.get(v.net.agent(id).type));
     if (mode() === "auto") {
-      const l = autoLayout(v.net, { pins, prev: lastAuto, round });
+      const l = autoLayout(v.net, { pins, prev: lastAuto });
       lastAuto = l.placement;
       return { placement: l.placement, routed: l.routed };
     }
@@ -183,7 +182,7 @@ export function createNetModel(opts: NetModelOptions) {
     }
     for (const id of v.net.agents.keys()) {
       const g = v.box.get(id);
-      if (g === undefined) placement.set(id, { ...positions.get(id)!, round: round(id) });
+      if (g === undefined) placement.set(id, positions.get(id)!);
       else {
         const ps = groups.members(g).map((a) => positions.get(a)!);
         const n = Math.max(1, ps.length);

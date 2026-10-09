@@ -23,7 +23,7 @@ export function agentOutline(
   arity: number,
   box = false,
 ): { kind: "circle"; r: number } | { kind: "poly"; points: Pt[] } {
-  const s = shape(arity, p.round);
+  const s = shape(arity);
   if (box) {
     // Wide enough for a label even with a single port.
     const w = Math.max(s.w, 26) / 2;
@@ -52,7 +52,7 @@ export function agentOutline(
 
 /** Where to put an agent's label: the triangle's centroid. */
 export function labelPos(p: Placed, arity: number, box = false): Pt {
-  const s = shape(arity, p.round);
+  const s = shape(arity);
   if (s.circle || box) return { x: p.x, y: p.y };
   return { x: p.x, y: p.y + ((p.orient === "down" ? -1 : 1) * s.h) / 6 };
 }

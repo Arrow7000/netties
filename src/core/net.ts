@@ -20,13 +20,7 @@ export interface AgentType {
   filled?: boolean;
   /** Drawn as a box: a collapsed component standing in for its agents. */
   box?: boolean;
-  /** Drawn as a triangle or a circle. By default, agents with no aux ports are circles. */
-  shape?: "triangle" | "circle";
 }
-
-/** Whether agents of a type are drawn as circles. */
-export const isRound = (t: Pick<AgentType, "arity" | "shape"> | undefined): boolean =>
-  t?.shape ? t.shape === "circle" : t?.arity === 0;
 
 /** Where a wire ends: an agent's port, or one of the net's free ports. */
 export type End =
