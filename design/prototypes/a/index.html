@@ -199,34 +199,24 @@ details.miss[open] summary svg{transform:rotate(90deg)}
 .typedflag{position:fixed;top:64px;left:12px;z-index:9;max-width:300px;font-size:12px;color:var(--muted);background:var(--chrome);border:1px solid var(--line);border-radius:10px;padding:8px 10px;box-shadow:var(--shadow);display:none}
 .typedflag.on{display:block}
 .typedflag b{color:var(--text)}
-/* inspector */
-#insp{left:12px;bottom:72px;width:316px;flex-direction:column;align-items:stretch;gap:0;padding:0;display:none;max-height:calc(100vh - 160px);overflow:auto}
-#insp.on{display:flex}
-.in-h{display:flex;align-items:center;gap:10px;padding:10px 12px 8px}
-.in-h .gl{width:34px;height:34px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:8px}
-.in-h .tt{flex:1;min-width:0;line-height:1.25}
-.in-h .tt b{font-weight:600;display:block}
-.in-h .tt span{font-size:12px;color:var(--muted)}
-.in-h .tt .pl{margin-top:4px}
-.in-h .tt .pl .pill{font-size:11.5px;color:inherit}
-.in-h .tt .pl .pill:not(.go):not(.sel):not(.bad){color:var(--muted)}
-.pill{font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:999px;background:var(--chrome-2);color:var(--muted);white-space:nowrap}
-.pill.go{background:color-mix(in srgb,var(--active) 22%,transparent);color:color-mix(in srgb,var(--active) 55%,var(--text))}
-.pill.sel{background:var(--accent-soft);color:var(--accent)}
-.pill.bad{background:color-mix(in srgb,var(--stuck) 15%,transparent);color:var(--stuck)}
-.in-b{padding:0 12px 8px;font-size:12.5px;color:var(--muted)}
-.in-b b{color:var(--text);font-weight:500}
-.in-b.bad{color:var(--stuck)}
-.in-k{padding:0 12px 8px;display:flex;flex-direction:column;gap:3px;font-size:12.5px}
-.in-k div{display:flex;align-items:center;gap:8px;padding:2px 4px;border-radius:6px;color:var(--muted)}
-.in-k div.on{background:var(--accent-soft);color:var(--text)}
-.in-k div.on.fire{background:color-mix(in srgb,var(--active) 18%,transparent)}
-.in-k div.off{opacity:.5}
-kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-width:2px;border-radius:5px;padding:0 5px;min-width:60px;text-align:center;background:var(--chrome);color:var(--text)}
-.in-a{display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px 10px;border-top:1px solid var(--line)}
-.in-a .btn{height:28px;padding:0 9px;font-size:12.5px;border:1px solid var(--line-2)}
-.in-why{padding:0 12px 10px;font-size:11.5px;color:var(--faint);display:flex;flex-direction:column;gap:2px}
-.in-why b{color:var(--muted);font-weight:500}
+/* hover + selection panels */
+.panel{left:12px;width:max-content;min-width:300px;max-width:min(470px,calc(100vw - 24px));flex-direction:column;align-items:stretch;gap:0;padding:9px 12px 10px;display:none;font-size:12.5px;line-height:1.4}
+.panel.on{display:flex}
+#selp{bottom:72px}
+#hovp{bottom:72px;pointer-events:none;box-shadow:0 1px 2px rgba(16,20,28,.06);background:color-mix(in srgb,var(--chrome) 94%,transparent);backdrop-filter:blur(6px)}
+.panel .t{font-weight:600;font-size:13px;display:flex;align-items:baseline;gap:8px}
+.panel .t .n{font-weight:400;color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
+.panel .l{color:var(--muted);margin-top:2px}
+.panel .l.k{color:var(--text)}
+.panel .l.bad{color:var(--stuck)}
+.panel .l.sel{color:var(--accent)}
+.panel .row{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.panel .row{flex-wrap:nowrap}
+.panel .row .btn{height:28px;padding:0 9px;font-size:12px;border:1px solid var(--line-2);gap:4px;flex:none}
+.panel .row .btn.icon{width:28px;padding:0;margin-left:auto}
+.panel .row .btn svg{width:14px;height:14px}
+.panel .why{margin-top:6px;font-size:11.5px;color:var(--faint);min-height:16px}
+.panel .why.on{color:var(--muted)}
 .btn[aria-disabled=true]{opacity:.4;cursor:not-allowed}
 .btn[aria-disabled=true]:hover{background:transparent}
 #altBadge{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:11;background:var(--accent);color:#fff;border-radius:999px;padding:5px 14px 5px 6px;font-size:12.5px;font-weight:500;display:none;align-items:center;gap:8px;box-shadow:var(--shadow)}
@@ -322,7 +312,8 @@ kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-wi
   </section>
 </aside>
 
-<div class="island" id="insp" data-chrome aria-live="polite"></div>
+<div class="island panel" id="hovp" aria-live="polite"></div>
+<div class="island panel" id="selp" data-chrome></div>
 <div id="altBadge" data-chrome><kbd>Alt</kbd> held: clicking an active pair selects its wire instead of firing it</div>
 <div class="pop" id="gridPop" data-chrome role="dialog" aria-label="Rule grid"></div>
 <div class="menu" id="typeMenu" data-chrome></div>
@@ -359,7 +350,7 @@ kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-wi
   <button class="btn" id="fit" title="Fit net to view (F)"><svg viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Fit</button>
 </div>
 
-<div class="island" id="ctx" data-chrome></div>
+
 
 <div class="menu" id="exMenu" role="menu" data-chrome></div>
 <div class="menu" id="fileMenu" role="menu" data-chrome>
@@ -437,7 +428,7 @@ kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-wi
   function closeMenus() { $$(".menu").forEach((m) => m.classList.remove("on")); }
   $("#exBtn").onclick = (e) => { e.stopPropagation(); buildExMenu(); openMenu($("#exMenu"), $("#exBtn")); };
   $("#fileBtn").onclick = (e) => { e.stopPropagation(); openMenu($("#fileMenu"), $("#fileBtn")); };
-  document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".menu") && !e.target.closest("#exBtn,#fileBtn,[data-menu]")) closeMenus(); if ($("#gridPop").classList.contains("on") && !e.target.closest("#gridPop,#gridExpand,#thumb,#openGrid,#insp,.scrim")) closeGridPop(); if (!e.target.closest("#typeEd") && !e.target.closest(".tile") && $("#typeEd").classList.contains("on") && !e.target.closest("#newType")) closeEditor(); });
+  document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".menu") && !e.target.closest("#exBtn,#fileBtn,[data-menu]")) closeMenus(); if ($("#gridPop").classList.contains("on") && !e.target.closest("#gridPop,#gridExpand,#thumb,#openGrid,#selp,.scrim")) closeGridPop(); if (!e.target.closest("#typeEd") && !e.target.closest(".tile") && $("#typeEd").classList.contains("on") && !e.target.closest("#newType")) closeEditor(); });
   $("#fileMenu").onclick = (e) => {
     const b = e.target.closest(".mi"); if (!b) return; closeMenus();
     const a = b.dataset.act;
@@ -604,18 +595,8 @@ kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-wi
   }
 
   /* ---------- context bar */
-  function placeCtx() {
-    const sel = view.selection(); const el = $("#ctx");
-    if (!sel.agents.length && !sel.wires.length) { el.classList.remove("on"); return; }
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity;
-    for (const id of sel.agents) { const a = view.agent(id); if (!a) continue; const b = NetKit.agentBox(a); x0 = Math.min(x0, b.x0); x1 = Math.max(x1, b.x1); y0 = Math.min(y0, b.y0); }
-    for (const id of sel.wires) { const w = view.state.wires.find((w) => w.id === id); if (!w) continue; for (const p of w.path) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); } }
-    if (!isFinite(x0)) { el.classList.remove("on"); return; }
-    const [sx, sy] = view.toScreen((x0 + x1) / 2, y0);
-    el.style.left = clampN(sx, 160, innerWidth - 420) + "px"; el.style.top = Math.max(110, sy - 18) + "px";
-  }
-  const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
-  /* ---------- batch actions (shared by the context bar and the inspector) */
+  function placeCtx() {}
+  /* ---------- batch actions (live in the selection panel) */
   function batch(sel) {
     const ags = sel.agents.map((id) => view.agent(id)).filter(Boolean);
     const tOf = (a) => S.typeById(a.type) || {};
@@ -624,18 +605,19 @@ kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-wi
     const out = [];
     if (ags.length === 1 && plain.length === 1) out.push({ label: "Edit type", run: () => openEditor(plain[0].type, $(`.tile[data-id="${plain[0].type}"]`)) });
     let ctWhy = null, targets = [];
-    if (!ags.length) ctWhy = "Wires don't have a type.";
-    else if (comps.length) ctWhy = "Components can't change type.";
-    else if (ar.length > 1) ctWhy = `They have different numbers of aux ports (${ar.join(" and ")}), so no one type fits them all.`;
-    else { targets = S.types.filter((t) => t.arity === ar[0]); if (targets.length < 2) ctWhy = `No other type has ${ar[0]} aux port${ar[0] === 1 ? "" : "s"}.`; }
+    if (!ags.length) ctWhy = "wires have no type.";
+    else if (comps.length) ctWhy = "components can't change type.";
+    else if (ar.length > 1) ctWhy = `their aux port counts differ (${ar.join(" and ")}).`;
+    else { targets = S.types.filter((t) => t.arity === ar[0]); if (targets.length < 2) ctWhy = `no other type has ${ar[0]} aux port${ar[0] === 1 ? "" : "s"}.`; }
     out.push({ label: "Change type", menu: true, why: ctWhy, run: (btn) => openTypeMenu(btn, plain.map((a) => a.id), targets) });
-    out.push({ label: "Flip", why: ags.length ? null : "Only agents can be flipped.", run: () => view.flip(ags.map((a) => a.id)) });
-    out.push({ label: "Make component", why: plain.length >= 2 ? null : plain.length === 1 ? "A component needs at least two agents." : "Select at least two agents.", run: () => toast(`Would bundle ${plain.length} agents into a component. Not part of this prototype.`) });
-    out.push({ label: "Expand", why: comps.length ? null : "No components in the selection.", run: () => toast(`Expanding replaces ${comps.length === 1 ? "the box" : "each box"} with its contents. Not part of this prototype.`) });
-    out.push({ label: "Collapse", why: "Nothing selected is an expanded component.", run: () => {} });
-    out.push({ label: "Delete", cls: "danger", run: () => view.deleteSelection() });
+    out.push({ label: "Flip", why: ags.length ? null : "only agents can flip.", run: () => view.flip(ags.map((a) => a.id)) });
+    out.push({ label: "Make component", why: plain.length >= 2 ? null : "needs at least two agents.", run: () => toast(`Would bundle ${plain.length} agents into a component. Not part of this prototype.`) });
+    // one toggle for a two-state thing: expand collapsed components, collapse expanded ones
+    out.push({ label: "Expand", why: comps.length ? null : "no components selected.", run: () => toast(`Expanding replaces ${comps.length === 1 ? "the box" : "each box"} with its contents. Not part of this prototype.`) });
+    out.push(DEL);
     return out;
   }
+  const DEL = { label: "Delete", icon: `<svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`, tip: "Delete (Backspace)", cls: "danger icon", run: () => view.deleteSelection() };
   function selSummary(sel) {
     const ags = sel.agents.map((id) => view.agent(id)).filter(Boolean);
     const comps = ags.filter((a) => (S.typeById(a.type) || {}).component).length;
@@ -655,21 +637,17 @@ kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-wi
   const acts = new Map(); let actN = 0;
   function actBtn(a, extraCls = "") {
     const i = ++actN; acts.set(i, a); if (acts.size > 400) acts.delete(acts.keys().next().value);
-    return `<button class="btn ${a.cls || ""} ${extraCls}" data-act="${i}"${a.why ? ` aria-disabled="true" title="${esc(a.why)}"` : ""}>${esc(a.label)}${a.menu ? ` <svg viewBox="0 0 16 16" style="width:12px"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>` : ""}</button>`;
+    if (a.icon) return `<button class="btn ${a.cls || ""}" data-act="${i}" title="${esc(a.tip || a.label)}" aria-label="${esc(a.label)}">${a.icon}</button>`;
+    return `<button class="btn ${a.cls || ""} ${extraCls}" data-act="${i}"${a.why ? ` aria-disabled="true"` : ""}>${esc(a.label)}${a.menu ? ` <svg viewBox="0 0 16 16" style="width:12px"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>` : ""}</button>`;
   }
   function bindActs(root) {
-    root.querySelectorAll("[data-act]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const a = acts.get(+b.dataset.act); if (!a) return; if (a.why) { toast(a.label + ": " + a.why); return; } a.run(b); if (!a.menu && root.id === "insp") { focus = null; setTimeout(renderInsp, 0); } }));
+    root.querySelectorAll("[data-act]").forEach((b) => {
+      const a = acts.get(+b.dataset.act); if (!a) return;
+      b.onclick = (e) => { e.stopPropagation(); if (a.why) return; a.run(b); };
+      if (a.why) { b.onpointerenter = () => setWhy(a.label + ": " + a.why, true); b.onpointerleave = () => setWhy(); b.onfocus = b.onpointerenter; b.onblur = b.onpointerleave; }
+    });
   }
-  view.on("select", (sel) => {
-    const el = $("#ctx");
-    if (!sel.agents.length && !sel.wires.length) { el.classList.remove("on"); renderInsp(); return; }
-    const n = sel.agents.length + sel.wires.length;
-    el.innerHTML = `<span class="what">${n > 1 ? `<b>${n}</b>&nbsp;selected` : esc(selSummary(sel))}</span><div class="sep"></div>` + batch(sel).map((a) => actBtn(a)).join("");
-    bindActs(el);
-    el.classList.add("on"); placeCtx(); renderInsp();
-  });
 
-  view.on("dragstate", (k) => { if (k) $("#ctx").classList.remove("on"); else view.emit("select", view.selection()); });
   /* ---------- canvas events */
   view.on("fire", () => S.step());
   view.on("stuck", (w, info) => openRule(info.a.type + "|" + info.b.type, true));
@@ -681,136 +659,109 @@ kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-wi
     view.setPreview({ wires: [w.id], fromHover: true });
   });
 
-  /* ---------- inspector: what's under the pointer, and what you can do with it */
-  let focus = null, inInsp = false, clearT = null;
-  function setFocus(f) { clearTimeout(clearT); focus = f; renderInsp(); }
-  function scheduleClear(ms = 450) { clearTimeout(clearT); clearT = setTimeout(() => { if (inInsp) return; focus = null; view.setHighlight(null); renderInsp(); }, ms); }
-  const hlFor = (t) => t.kind === "wire" ? { wires: [t.id] } : t.kind === "agent" ? { agents: [t.id] } : t.kind === "port" ? { agents: [t.agent] } : t.kind === "free" ? { wires: [(view.wireOfFree(t.name) || {}).id] } : null;
-  view.on("hover", (h) => {
-    if (inInsp) return;
-    if (h && (h.target || h.drag || h.marquee)) setFocus({ h }); else scheduleClear();
-  });
-  $("#insp").addEventListener("pointerenter", () => {
-    inInsp = true; clearTimeout(clearT);
-    const t = focus && focus.h && focus.h.target;
-    if (t) { view.setHighlight(hlFor(t)); const w = t.kind === "wire" && view.state.wires.find((x) => x.id === t.id); if (w && view.status(w) === "active") view.setPreview({ wires: [w.id] }); }
-  });
-  $("#insp").addEventListener("pointerleave", () => { inInsp = false; view.setPreview(null); scheduleClear(250); });
-  view.on("altchange", (on) => { $("#altBadge").classList.toggle("on", on && !!view.activePairs().length); renderInsp(); });
-
+  /* ---------- two panels: hover (info only, instant) and selection (actions) */
+  let hov = null;
   const symOf = (a) => esc((S.typeById(a.type) || { symbol: a.type }).symbol);
   const portName = (agentId, slot) => { const a = view.agent(agentId); return a ? (slot === 0 ? `principal port of <span class="sym">${symOf(a)}</span>` : `aux port ${slot} of <span class="sym">${symOf(a)}</span>`) : "?"; };
   const endName = (e) => (e.free != null ? `free port <span class="sym">${esc(e.free)}</span>` : portName(e.agent, e.slot));
-  const gl = (t) => `<span class="gl">${NetKit.glyph(t, { size: 28, w: t.component ? 32 : null })}</span>`;
-  const key = (k, text, cls = "") => `<div class="${cls}"><kbd>${k}</kbd>${text}</div>`;
-  function card({ glyph = "", title, sub = "", pill = "", body = "", bodyCls = "", keys = [], actions = [] }) {
-    const why = actions.filter((a) => a.why);
-    return `<div class="in-h">${glyph}<div class="tt"><b>${title}</b>${sub ? `<span>${sub}</span>` : ""}${pill ? `<div class="pl">${pill}</div>` : ""}</div></div>` +
-      (body ? `<div class="in-b ${bodyCls}">${body}</div>` : "") +
-      (keys.length ? `<div class="in-k">${keys.join("")}</div>` : "") +
-      (actions.length ? `<div class="in-a">${actions.map((a) => actBtn(a)).join("")}</div>` : "") +
-      (why.length ? `<div class="in-why">${why.map((a) => `<span><b>${esc(a.label)}:</b> ${esc(a.why)}</span>`).join("")}</div>` : "");
-  }
-  const P = (cls, t) => `<span class="pill ${cls}">${t}</span>`;
-  const selectOnly = (k) => () => view.select([k]);
-  function inspTarget(t) {
+  const cap = (h) => h.replace(/^([a-z])/, (c) => c.toUpperCase());
+  const L = (text, cls = "") => `<div class="l ${cls}">${text}</div>`;
+  const T = (title, n = "") => `<div class="t"><span>${title}</span>${n ? `<span class="n">${n}</span>` : ""}</div>`;
+  const pairTitle = (i) => `<span class="sym">${esc(i.ta.symbol)}</span> meets <span class="sym">${esc(i.tb.symbol)}</span>`;
+  const typeTitle = (t) => t.component ? `${esc(t.name)} <span style="font-weight:400;color:var(--muted)">component</span>` : `<span class="sym">${esc(t.symbol)}</span> ${esc(t.name || "")}`;
+
+  // Hover panel: what it is, its state, and what a click or drag would do. No buttons.
+  function hoverHTML(h) {
+    if (!h) return "";
+    if (h.drag) {
+      const t = h.target;
+      return T(h.drag === "new" ? "Drawing a wire" : "Carrying a wire end") +
+        (t && !t.ok ? L(esc(t.why || t.note), "bad") : t ? L("Let go to " + esc(t.note.toLowerCase()) + ".", "sel") : L("Let go on an empty port to connect, or on the canvas to leave a loose end."));
+    }
+    if (h.marquee) return T("Selecting") + L(esc(h.hint || ""));
+    if (h.grid) {
+      const { a, b } = h.grid, ta = S.typeById(a), tb = S.typeById(b); if (!ta || !tb) return "";
+      const c = cellState(a, b);
+      const state = c.s === "has" ? esc(NetKit.effectFor(a, b).say) : c.s === "stuck" ? `No rule, and ${c.n === 1 ? "one pair is" : c.n + " pairs are"} stuck here.` : c.s === "never" ? "With typed ports these two can never meet." : "No rule yet. If they meet, they're stuck.";
+      return T(`<span class="sym">${esc(ta.symbol)}</span> with <span class="sym">${esc(tb.symbol)}</span>`, c.n ? `${c.n} on canvas` : "") + L(state, c.s === "stuck" ? "bad" : "") + L(c.s === "has" ? "Click to see or edit the rule." : "Click to write a rule.", "k");
+    }
+    if (h.tile) {
+      const t = S.typeById(h.tile); if (!t) return "";
+      return T(typeTitle(t), t.component ? "" : `${t.arity} aux port${t.arity === 1 ? "" : "s"}`) + L(t.component ? "Drag to add a copy. Click to open its definition." : "Drag to add one. Click to edit the type.", "k");
+    }
+    const t = h.target; if (!t) return "";
     const alt = view.alt;
     if (t.kind === "wire") {
       const w = view.state.wires.find((x) => x.id === t.id); if (!w) return "";
       const st = view.status(w);
-      if (st === "active") {
-        const i = view.pairInfo(w);
-        return card({ glyph: `<span class="gl">${NetKit.pairGlyph(i.ta, i.tb, { w: 20, h: 30, active: true })}</span>`, title: `<span class="sym">${esc(i.ta.symbol)}</span> meets <span class="sym">${esc(i.tb.symbol)}</span>`, sub: "Active pair: their principal ports touch",
-          pill: alt ? P("sel", "Alt: select") : P("go", "Ready to fire"),
-          body: esc(i.effect.say) + (i.effect.create ? " This rule makes new agents." : " Dashed lines on the canvas show which wires will join."),
-          keys: [key("Click", "fire this pair", alt ? "off" : "on fire"), key("Alt-click", "select the wire instead", alt ? "on" : "")],
-          actions: [{ label: "Fire", run: () => S.step() }, { label: "Select wire", run: selectOnly("w:" + w.id) }, { label: "Open rule", run: () => openRule(pairKey(i.a.type, i.b.type)) }] });
-      }
-      if (st === "stuck") {
-        const i = view.pairInfo(w);
-        return card({ glyph: `<span class="gl">${NetKit.pairGlyph(i.ta, i.tb, { w: 20, h: 30 })}</span>`, title: `<span class="sym">${esc(i.ta.symbol)}</span> meets <span class="sym">${esc(i.tb.symbol)}</span>`, sub: "Their principal ports touch", pill: P("bad", "Stuck"),
-          body: `There's no rule for this pair, so nothing can happen here.${canMeet(i.a.type, i.b.type) ? "" : " With typed ports they could never have met."}`,
-          keys: [key("Click", "write a rule for this pair", "on"), key("Alt-click", "select the wire")],
-          actions: [{ label: "Write rule", run: () => openRule(i.a.type + "|" + i.b.type, true) }, { label: "Select wire", run: selectOnly("w:" + w.id) }, { label: "Delete wire", cls: "danger", run: () => { view.select(["w:" + w.id]); view.deleteSelection(); } }] });
-      }
-      return card({ title: "Wire", sub: `${endName(w.ends[0])} to ${endName(w.ends[1])}`, keys: [key("Click", "select it"), key("Drag an end", "unplug and rewire it")],
-        actions: [{ label: "Select", run: selectOnly("w:" + w.id) }, { label: "Delete", cls: "danger", run: () => { view.select(["w:" + w.id]); view.deleteSelection(); } }] });
+      if (st === "active") { const i = view.pairInfo(w); return T(pairTitle(i), "active pair") + L(esc(i.effect.say)) + (alt ? L("Click selects the wire.", "sel") : L("Click fires it. Alt-click selects the wire.", "k")); }
+      if (st === "stuck") { const i = view.pairInfo(w); return T(pairTitle(i), "stuck") + L("There's no rule for this pair, so nothing happens.", "bad") + L(alt ? "Click selects the wire." : "Click to write a rule. Alt-click selects the wire.", alt ? "sel" : "k"); }
+      return T("Wire") + L(`${cap(endName(w.ends[0]))} to ${endName(w.ends[1])}.`) + L("Click selects it. Drag an end to rewire.", "k");
     }
     if (t.kind === "agent") {
       const a = view.agent(t.id); if (!a) return "";
       const ty = S.typeById(a.type) || { symbol: a.type, arity: a.ports.length - 1 };
-      if (ty.component) return card({ glyph: gl(ty), title: esc(ty.name), sub: `Component, ${ty.arity} aux port${ty.arity === 1 ? "" : "s"}`, pill: P("", "Collapsed"),
-        body: "One box standing for a piece of net. Editing its definition updates every copy. It dissolves as soon as anything inside it interacts.",
-        keys: [key("Click", "select"), key("Drag", "move")],
-        actions: [{ label: "Expand", run: () => toast("Expanding replaces the box with its contents. Not part of this prototype.") }, { label: "Edit definition", run: () => openComponent(ty) }, { label: "Select", run: selectOnly("a:" + a.id) }, { label: "Delete", cls: "danger", run: () => { view.select(["a:" + a.id]); view.deleteSelection(); } }] });
+      if (ty.component) return T(typeTitle(ty)) + L("Dissolves as soon as anything inside it interacts.") + L("Click selects. Drag moves.", "k");
       const pw = view.wireAt(a.id, 0), pst = pw && view.status(pw);
       const empty = a.ports.filter((_, i) => !view.wireAt(a.id, i)).length;
-      const pill = pst === "active" ? P("go", "In an active pair") : pst === "stuck" ? P("bad", "Stuck") : empty ? P("", `${empty} empty port${empty === 1 ? "" : "s"}`) : "";
-      return card({ glyph: gl(ty), title: `<span class="sym">${esc(ty.symbol)}</span> ${esc(ty.name || "")}`, sub: `${ty.arity} aux port${ty.arity === 1 ? "" : "s"}. The principal port is the ${ty.circle ? "one on the edge" : "tip"}.`, pill,
-        keys: [key("Click", "select"), key("Shift-click", "add to selection"), key("Drag", S.layout === "manual" ? "move" : "move (auto layout puts it back)")],
-        actions: [{ label: "Select", run: selectOnly("a:" + a.id) }, { label: "Edit type", run: () => openEditor(a.type, $(`.tile[data-id="${a.type}"]`)) }, { label: "Flip", run: () => view.flip([a.id]) }, { label: "Delete", cls: "danger", run: () => { view.select(["a:" + a.id]); view.deleteSelection(); } }] });
+      const state = pst === "active" ? "In an active pair." : pst === "stuck" ? "In a stuck pair." : empty ? `${empty} empty port${empty === 1 ? "" : "s"}.` : "All ports wired.";
+      return T(typeTitle(ty), `${ty.arity} aux port${ty.arity === 1 ? "" : "s"}`) + L(state, pst === "stuck" ? "bad" : "") + L(S.layout === "manual" ? "Click selects. Drag moves." : "Click selects. Auto layout puts dragged agents back.", "k");
     }
     if (t.kind === "port") {
-      const a = view.agent(t.agent); if (!a) return "";
       const w = view.wireAt(t.agent, t.slot), other = w && w.ends.find((e) => !(e.agent === t.agent && e.slot === t.slot));
       const pol = view.polarity(t);
-      return card({ glyph: gl(S.typeById(a.type) || { symbol: a.type, arity: 0 }), title: portName(t.agent, t.slot).replace(/^./, (c) => c.toUpperCase()), sub: (pol ? `Nat ${pol === "in" ? "input" : "output"}. ` : "") + (w ? `Wired to ${endName(other)}` : "Empty"),
-        pill: w ? "" : P("", "Empty"), body: t.slot === 0 ? "Agents interact only through their principal port. Wire two principal ports together and you get an active pair." : "",
-        keys: [w ? key("Drag", "unplug this end and carry the wire") : key("Drag", "draw a new wire from here")],
-        actions: w ? [{ label: "Delete wire", cls: "danger", run: () => { view.select(["w:" + w.id]); view.deleteSelection(); } }] : [] });
+      return T(cap(portName(t.agent, t.slot)), pol ? `Nat ${pol === "in" ? "input" : "output"}` : "") +
+        L(w ? `Wired to ${endName(other)}.` : t.slot === 0 ? "Empty. Agents interact through this port." : "Empty.") +
+        L(w ? "Drag to unplug this end and carry the wire." : "Drag to draw a wire from here.", "k");
     }
     if (t.kind === "free") {
-      const w = view.wireOfFree(t.name), other = w && w.ends.find((e) => e.free !== t.name);
-      return card({ title: `Free port <span class="sym">${esc(t.name)}</span>`, sub: other ? `Loose end of the wire from ${endName(other)}` : "", pill: P("", "Loose end"),
-        body: "A loose end is the net's connection to the outside world. The net's result comes out here.",
-        keys: [key("Drag", "plug it into an empty port, or onto another loose end to join the wires")],
-        actions: w ? [{ label: "Delete wire", cls: "danger", run: () => { view.select(["w:" + w.id]); view.deleteSelection(); } }] : [] });
+      return T(`Free port <span class="sym">${esc(t.name)}</span>`, "loose end") + L("The net's connection to the outside.") + L("Drag to plug it into an empty port.", "k");
     }
     return "";
   }
-  function inspDrag(h) {
-    const t = h.target, ok = t && t.ok, bad = t && !t.ok;
-    const k = !t ? "canvas" : t.kind === "free" ? "free" : "port";
-    return card({ title: h.drag === "new" ? "Drawing a wire" : "Carrying a wire end", pill: ok ? P("sel", "Let go: " + esc(t.note.toLowerCase())) : bad ? P("bad", esc(t.note)) : "",
-      body: esc(bad ? t.why || "" : h.hint || ""), bodyCls: bad ? "bad" : "",
-      keys: [key("Empty port", "connect", k === "port" && ok ? "on" : ""), key("Loose end", "join the two wires", k === "free" && ok ? "on" : ""), key("Canvas", "leave a loose end: a free port", k === "canvas" ? "on" : "")] });
-  }
-  function inspGrid(a, b) {
-    const ta = S.typeById(a), tb = S.typeById(b); if (!ta || !tb) return "";
-    const c = cellState(a, b);
-    const n = c.n, eff = NetKit.effectFor(a, b);
-    const pill = c.s === "has" ? P(c.live ? "go" : "", c.live ? "Has a rule, pair on canvas" : "Has a rule") : c.s === "stuck" ? P("bad", `Stuck here (${n})`) : c.s === "never" ? P("", "Can never meet") : P("", "No rule yet");
-    const body = c.s === "has" ? esc(eff.say) : c.s === "stuck" ? `No rule, and ${n === 1 ? "one such pair is" : n + " such pairs are"} stuck in this net now.` : c.s === "never" ? "Both principal ports are outputs, or both are inputs, so a typed wire can never join them. No rule needed." : "No rule yet. If these two meet, they'll be stuck.";
-    return card({ glyph: `<span class="gl">${NetKit.pairGlyph(ta, tb, { w: 20, h: 30, active: c.s === "has" })}</span>`, title: `<span class="sym">${esc(ta.symbol)}</span> with <span class="sym">${esc(tb.symbol)}</span>`, sub: n ? `${n} on the canvas, highlighted` : "None on the canvas", pill, body,
-      actions: c.s === "has" ? [{ label: "Edit rule", run: () => openRule(c.k) }, { label: "Delete rule", cls: "danger", run: () => { S.removeRule(c.k); buildRules(); toast("Deleted the rule. Pairs that used it are stuck now.", true); } }] : [{ label: "Create rule", run: () => openRule(c.k, true, false, c.s === "never") }] });
-  }
-  function inspTile(id) {
-    const t = S.typeById(id); if (!t) return "";
-    const on = view.state.agents.filter((a) => a.type === id);
-    return card({ glyph: gl(t), title: t.component ? esc(t.name) : `<span class="sym">${esc(t.symbol)}</span> ${esc(t.name || "")}`, sub: t.component ? "Component" : `${t.arity} aux port${t.arity === 1 ? "" : "s"}, ${S.rulesFor(id).length} rule${S.rulesFor(id).length === 1 ? "" : "s"}`, pill: P("", `${on.length} on canvas`),
-      keys: [key("Drag", "add one to the canvas"), key("Click", t.component ? "open its definition" : "edit the type")],
-      actions: [{ label: t.component ? "Edit definition" : "Edit type", run: () => (t.component ? openComponent(t) : openEditor(id, $(`.tile[data-id="${id}"]`))) }, { label: `Select all ${on.length}`, why: on.length ? null : "There are none on the canvas.", run: () => view.select(on.map((a) => "a:" + a.id)) }] });
-  }
-  function inspSelection() {
-    const sel = view.selection(), n = sel.agents.length + sel.wires.length;
-    if (!n) return "";
-    if (n === 1 && sel.agents.length) return inspTarget({ kind: "agent", id: sel.agents[0] }).replace("</b>", " <span style='color:var(--accent);font-weight:500'>(selected)</span></b>");
-    return card({ title: `${n} selected`, sub: esc(selSummary(sel)), pill: P("sel", "Selection"), keys: [key("Shift-click", "add or remove"), key("Backspace", "delete"), key("Esc", "clear")], actions: batch(sel) });
-  }
-  function renderInsp() {
-    const el = $("#insp"), f = focus;
-    let html = "";
-    if (f && f.h && f.h.drag) html = inspDrag(f.h);
-    else if (f && f.h && f.h.marquee) html = card({ title: "Selecting", pill: P("sel", "Marquee"), body: esc(f.h.hint || ""), keys: [key("Shift-drag", "add to what's already selected")] });
-    else if (f && f.h && f.h.target) html = inspTarget(f.h.target);
-    else if (f && f.grid) html = inspGrid(f.grid.a, f.grid.b);
-    else if (f && f.tile) html = inspTile(f.tile);
-    if (!html) html = inspSelection();
+  function setHover(h) { hov = h; drawHover(); }
+  function clearHover() { hov = null; view.setHighlight(null); drawHover(); }
+  function drawHover() {
+    const el = $("#hovp"), html = hoverHTML(hov);
     el.innerHTML = html; el.classList.toggle("on", !!html);
-    bindActs(el);
+    placeHover();
   }
+  // The hover panel stacks above the selection panel. The selection panel is
+  // anchored to the counters and never moves when the hover panel comes and goes.
+  function placeHover() { const sp = $("#selp"); $("#hovp").style.bottom = (sp.classList.contains("on") ? 72 + sp.offsetHeight + 8 : 72) + "px"; }
+  new ResizeObserver(placeHover).observe($("#selp"));
+  const setFocus = (f) => setHover(f);
+  const scheduleClear = () => clearHover();
+  view.on("hover", (h) => { if (h && (h.target || h.drag || h.marquee)) setHover(h); else clearHover(); });
+  view.on("altchange", (on) => { $("#altBadge").classList.toggle("on", on && !!view.activePairs().length); drawHover(); });
 
-  /* ---------- run controls */
+  // Selection panel: title, count, one row of actions, one line for reasons.
+  const DEFAULT_WHY = "Shift-click adds to the selection. Esc clears it.";
+  function setWhy(text, on) { const w = $("#selp .why"); if (w) { w.textContent = text || DEFAULT_WHY; w.classList.toggle("on", !!on); } }
+  function selActions(sel) {
+    if (sel.wires.length === 1 && !sel.agents.length) {
+      const w = view.state.wires.find((x) => x.id === sel.wires[0]); const st = w && view.status(w);
+      const del = DEL;
+      if (st === "active") { const i = view.pairInfo(w); return { title: pairTitle(i), n: "active pair", acts: [{ label: "Fire", run: () => S.step() }, { label: "Open rule", run: () => openRule(pairKey(i.a.type, i.b.type)) }, del] }; }
+      if (st === "stuck") { const i = view.pairInfo(w); return { title: pairTitle(i), n: "stuck pair", acts: [{ label: "Write rule", run: () => openRule(i.a.type + "|" + i.b.type, true) }, del] }; }
+      return { title: "Wire", n: "1 selected", acts: [del] };
+    }
+    const n = sel.agents.length + sel.wires.length;
+    if (n === 1) { const a = view.agent(sel.agents[0]); const t = S.typeById(a.type) || {}; return { title: typeTitle(t), n: "1 selected", acts: batch(sel) }; }
+    return { title: `${n} selected`, n: esc(selSummary(sel)), acts: batch(sel) };
+  }
+  function renderSel() {
+    const el = $("#selp"), sel = view.selection();
+    if (!sel.agents.length && !sel.wires.length) { el.classList.remove("on"); el.innerHTML = ""; placeHover(); return; }
+    const m = selActions(sel);
+    el.innerHTML = T(m.title, m.n) + `<div class="row">${m.acts.map((a) => actBtn(a)).join("")}</div><div class="why">${DEFAULT_WHY}</div>`;
+    bindActs(el); el.classList.add("on"); placeHover();
+  }
+  view.on("select", renderSel);
+  view.on("change", () => setTimeout(renderSel));
+  const renderInsp = () => { renderSel(); drawHover(); };
+
+  /* ---------- run controls */  /* ---------- run controls */
   const SPEEDS = (v) => Math.pow(10, (v - 50) / 50 * 0.75); // 0.18× .. 5.6×
   function setSpeedFromSlider() { const v = SPEEDS(+$("#speed").value); S.setSpeed(v); $("#speedOut").textContent = (v < 1 ? v.toFixed(2).replace(/0$/, "") : v.toFixed(1).replace(/\.0$/, "")) + "×"; $("#slowmo").setAttribute("aria-pressed", v < 0.3); $("#slowmo").style.background = v < 0.3 ? "var(--accent-soft)" : ""; $("#slowmo").style.color = v < 0.3 ? "var(--accent)" : ""; }
   $("#speed").oninput = setSpeedFromSlider;
@@ -848,11 +799,11 @@ kbd{font:500 11px var(--ui-font);border:1px solid var(--line-2);border-bottom-wi
     $("#stats").title = Object.entries(S.stats.perRule).map(([k, n]) => k.replace("|", " with ") + ": " + n).join("\n") || "Stats for this run";
     $("#typedflag").classList.toggle("on", !!S.ex.typed);
     if (!$("#gridHost").querySelector(".c:hover")) buildRules();
-    if (!focus) renderInsp();
+    renderSel();
     $("#newComp").disabled = view.selection().agents.length < 1;
   }
   S.on("update", syncUI); view.on("select", syncUI);
-  S.on("load", () => { focus = null; view.setHighlight(null); closeGridPop(); buildPalette(); closeEditor(); renderInsp(); });
+  S.on("load", () => { clearHover(); closeGridPop(); buildPalette(); closeEditor(); renderSel(); });
   S.on("types", () => { buildRules(); });
   S.on("undo", buildPalette); S.on("redo", buildPalette);
   S.on("stepped", syncUI);
