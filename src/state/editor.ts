@@ -1,7 +1,7 @@
 import { batch, createMemo, createSignal } from "solid-js";
 import { type Example, examples } from "../core/examples";
 import { type AgentId, type AgentType, Net, type WireId } from "../core/net";
-import { type Stats, emptyStats, interact, isActive, parallelStep } from "../core/reduce";
+import { type Stats, type StepRecord, emptyStats, interact, isActive, parallelStep } from "../core/reduce";
 import { type Rule, System, type SystemJSON, pairKey } from "../core/system";
 import type { Placed, Placement } from "../layout/geometry";
 import { createNetModel } from "./model";
@@ -76,11 +76,14 @@ export function createEditor(initial: Doc | undefined) {
   const fire = (w: WireId) => {
     const net = model.net;
     if (!net.wires.has(w) || !isActive(net, w)) return;
+    const recs: StepRecord[] = [];
     model.checkpoint();
     const before = model.layout().placement;
+    const snap = model.animSnapshot();
     try {
       const rec = interact(net, system, w);
       placeCreated(rec.removed, rec.created, before);
+      recs.push(rec);
       setStats((s) => {
         const byRule = new Map(s.byRule);
         const k = pairKey(rec.rule.left, rec.rule.right);
@@ -92,6 +95,7 @@ export function createEditor(initial: Doc | undefined) {
     }
     model.setSelection(undefined);
     model.bump();
+    model.animate(snap, recs);
   };
 
   const stepOne = () => {
@@ -103,12 +107,14 @@ export function createEditor(initial: Doc | undefined) {
     if (model.activeWires().size === 0) return false;
     if (record) model.checkpoint();
     const before = model.layout().placement;
+    const snap = model.animSnapshot();
     const s: Stats = { ...stats(), byRule: new Map(stats().byRule) };
     const recs = parallelStep(model.net, system, s);
     for (const r of recs) placeCreated(r.removed, r.created, before);
     setStats(s);
     model.setSelection(undefined);
     model.bump();
+    model.animate(snap, recs);
     return recs.length > 0;
   };
 
@@ -126,7 +132,7 @@ export function createEditor(initial: Doc | undefined) {
     let rounds = 0;
     timer = setInterval(() => {
       if (!stepAll(false) || ++rounds >= 2000) stop();
-    }, 380);
+    }, 560);
   };
 
   /** Remove agents of a type from the net, and every rule that mentions it. */

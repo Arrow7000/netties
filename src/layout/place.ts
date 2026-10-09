@@ -89,7 +89,17 @@ export function structure(net: Net) {
   return { parent, children, roots };
 }
 
-export function autoLayout(net: Net, opts: { pins?: Pins } = {}): AutoLayout {
+export interface AutoLayoutOptions {
+  pins?: Pins;
+  /**
+   * The previous layout of this net, if any. Parts that are still there keep
+   * their orientation and roughly their place, so a reduction step doesn't
+   * reshuffle everything around it.
+   */
+  prev?: Placement;
+}
+
+export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
   const { children, roots } = structure(net);
   const arity = (id: AgentId) => net.agent(id).wires.length - 1;
 
@@ -155,6 +165,11 @@ export function autoLayout(net: Net, opts: { pins?: Pins } = {}): AutoLayout {
       return net.partner(port(a!, s!))?.kind === "free";
     }).length;
   for (const u of units) if (u.trees.length === 2) u.flip = freeStubs(u.trees[0]!) > freeStubs(u.trees[1]!);
+  // Keep whatever way surviving units faced before.
+  for (const u of units) {
+    const was = opts.prev?.get(u.roots[0]);
+    if (was) u.flip = was.orient === "up";
+  }
   // A lone tree whose root is pinned to the top edge should point up at it.
   for (const u of units) {
     if (u.trees.length !== 1) continue;
@@ -162,16 +177,27 @@ export function autoLayout(net: Net, opts: { pins?: Pins } = {}): AutoLayout {
     if (p?.kind === "free" && opts.pins?.top.includes(p.name)) u.flip = true;
   }
 
-  let best = arrange(net, units, opts.pins);
+  const cost = (l: AutoLayout) => {
+    const r = l.routed;
+    let c = crossings(r.wires) * 300 + r.arounds * 400 + [...r.wires.values()].reduce((s, p) => s + length(p), 0);
+    if (opts.prev)
+      for (const [id, p] of l.placement) {
+        const q = opts.prev.get(id);
+        if (q) c += 0.04 * (Math.abs(p.x - q.x) + Math.abs(p.y - q.y)) + (p.orient !== q.orient ? 12 : 0);
+      }
+    return c;
+  };
+
+  let best = arrange(net, units, opts.pins, opts.prev);
   if (units.length <= 24 && net.wires.size <= 300) {
-    let bestCost = cost(best.routed);
+    let bestCost = cost(best);
     for (let pass = 0; pass < 3; pass++) {
       let improved = false;
       for (const u of units) {
         // A lone tree rooted at a free port, or nothing, can point either way.
         u.flip = !u.flip;
-        const l = arrange(net, units, opts.pins);
-        const c = cost(l.routed);
+        const l = arrange(net, units, opts.pins, opts.prev);
+        const c = cost(l);
         if (c < bestCost - 0.5) [best, bestCost, improved] = [l, c, true];
         else u.flip = !u.flip;
       }
@@ -180,9 +206,6 @@ export function autoLayout(net: Net, opts: { pins?: Pins } = {}): AutoLayout {
   }
   return best;
 }
-
-const cost = (r: Routed) =>
-  crossings(r.wires) * 300 + r.arounds * 400 + [...r.wires.values()].reduce((s, p) => s + length(p), 0);
 
 function geom(net: Net, u: Unit): UnitGeom {
   const g: UnitGeom = { nodes: [], cols: [], l: Infinity, r: -Infinity, top: 0, bottom: 0 };
@@ -208,8 +231,16 @@ function geom(net: Net, u: Unit): UnitGeom {
   return g;
 }
 
-function arrange(net: Net, units: Unit[], pins?: Pins): AutoLayout {
+function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement): AutoLayout {
   const geoms = units.map((u) => geom(net, u));
+  // Where each unit sat last time, judged by its agents that were there.
+  const prevX = geoms.map((g) => {
+    const xs = g.nodes.flatMap(([id, dx]) => {
+      const q = prev?.get(id);
+      return q ? [q.x - dx] : [];
+    });
+    return xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : undefined;
+  });
 
   // Which unit each loose wire end belongs to, and which way it leaves.
   const stub = new Map<string, { unit: number; dx: number; dir: Orient }>();
@@ -288,9 +319,10 @@ function arrange(net: Net, units: Unit[], pins?: Pins): AutoLayout {
     for (const lv of levels) {
       cursor = 0;
       for (const u of lv) {
-        x[u] = cursor - geoms[u]!.l;
-        cursor = x[u]! + geoms[u]!.r + G.unitGap;
+        x[u] = prevX[u] ?? cursor - geoms[u]!.l;
+        cursor = Math.max(cursor, x[u]! + geoms[u]!.r + G.unitGap);
       }
+      pack(lv, [...x]);
     }
   }
   for (let it = 0; it < 8; it++) {
@@ -305,6 +337,11 @@ function arrange(net: Net, units: Unit[], pins?: Pins): AutoLayout {
       weight[b]! += w;
     }
     units.forEach((_, u) => {
+      const px = prevX[u];
+      if (px !== undefined) {
+        sum[u]! += 0.25 * px;
+        weight[u]! += 0.25;
+      }
       if (weight[u]) want[u] = sum[u]! / weight[u]!;
     });
     for (const lv of levels) pack(lv, want);
@@ -325,11 +362,28 @@ function arrange(net: Net, units: Unit[], pins?: Pins): AutoLayout {
     for (const u of lv) y[u] = base;
   });
 
+  // Line the whole thing up with where its surviving agents were.
+  let sx = 0;
+  let sy = 0;
+  if (prev) {
+    let n = 0;
+    geoms.forEach((g, u) =>
+      g.nodes.forEach(([id, dx, dy]) => {
+        const q = prev.get(id);
+        if (!q) return;
+        sx += q.x - (x[u]! + dx);
+        sy += q.y - (y[u]! + dy);
+        n++;
+      }),
+    );
+    if (n) [sx, sy] = [sx / n, sy / n];
+  }
+
   const placement: Placement = new Map();
   const columns = new Map<string, number>();
   geoms.forEach((g, u) => {
-    for (const [id, dx, dy, orient] of g.nodes) placement.set(id, { x: x[u]! + dx, y: y[u]! + dy, orient });
-    for (const [k, dx] of g.cols) columns.set(k, x[u]! + dx);
+    for (const [id, dx, dy, orient] of g.nodes) placement.set(id, { x: x[u]! + dx + sx, y: y[u]! + dy + sy, orient });
+    for (const [k, dx] of g.cols) columns.set(k, x[u]! + dx + sx);
   });
   return { placement, columns, routed: route(net, placement, { columns, pins }) };
 }

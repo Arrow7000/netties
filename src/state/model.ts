@@ -1,6 +1,7 @@
 import { batch, createMemo, createSignal } from "solid-js";
 import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, port } from "../core/net";
-import { redexes } from "../core/reduce";
+import { type StepRecord, redexes } from "../core/reduce";
+import { type Frame, type Snapshot as AnimSnapshot, buildMorph } from "../anim/morph";
 import type { System } from "../core/system";
 import type { Placed, Placement, Pt } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
@@ -52,6 +53,9 @@ export function createNetModel(opts: NetModelOptions) {
   const redoStack: string[] = [];
   const [historySize, setHistorySize] = createSignal({ undo: 0, redo: 0 });
 
+  const [frame, setFrame] = createSignal<Frame>();
+  let raf = 0;
+
   const bump = () => setRev((r) => r + 1);
   const requestFit = () => setFitTick((t) => t + 1);
 
@@ -65,6 +69,7 @@ export function createNetModel(opts: NetModelOptions) {
 
   const restoreSnapshot = (s: string) => {
     const snap = JSON.parse(s) as Snapshot;
+    lastAuto = undefined;
     batch(() => {
       if (opts.extra) opts.extra.load(snap.extra);
       net = Net.fromJSON(snap.net);
@@ -105,11 +110,15 @@ export function createNetModel(opts: NetModelOptions) {
     setHistorySize({ undo: 0, redo: 0 });
   };
 
+  /** The last automatic layout, so the next one can stay close to it. */
+  let lastAuto: Placement | undefined;
+
   const layout = createMemo<Layout>(() => {
     rev();
     const pins = opts.pins?.();
     if (mode() === "auto") {
-      const l = autoLayout(net, { pins });
+      const l = autoLayout(net, { pins, prev: lastAuto });
+      lastAuto = l.placement;
       return { placement: l.placement, routed: l.routed };
     }
     // Agents without a position yet (new ones) get one next to the others.
@@ -164,6 +173,36 @@ export function createNetModel(opts: NetModelOptions) {
   return {
     rev,
     bump,
+    /** The current animation frame, while a step is being animated. */
+    frame,
+    /** Capture the net as drawn now, to animate from after a change. */
+    animSnapshot(): AnimSnapshot {
+      const l = layout();
+      return { net: net.clone(), placement: l.placement, routed: l.routed };
+    },
+    /** Animate from a snapshot to the net as it is now, given what the step did. */
+    animate(before: AnimSnapshot, records: StepRecord[], duration = 420) {
+      cancelAnimationFrame(raf);
+      setFrame(undefined);
+      if (!records.length || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const l = layout();
+      let morph;
+      try {
+        morph = buildMorph(before, { net, placement: l.placement, routed: l.routed }, records);
+      } catch (e) {
+        console.error("animation failed", e);
+        return;
+      }
+      const t0 = performance.now();
+      const tick = (now: number) => {
+        const t = (now - t0) / duration;
+        if (t >= 1) return setFrame(undefined);
+        setFrame(morph.at(t));
+        raf = requestAnimationFrame(tick);
+      };
+      setFrame(morph.at(0));
+      raf = requestAnimationFrame(tick);
+    },
     get net() {
       return net;
     },
@@ -172,6 +211,7 @@ export function createNetModel(opts: NetModelOptions) {
     },
     /** Replace the whole net (not undoable by itself; call `checkpoint` first if it should be). */
     setNet(n: Net, pos = new Map<AgentId, Placed>()) {
+      lastAuto = undefined;
       batch(() => {
         net = n;
         positions = pos;
@@ -267,6 +307,12 @@ export function createNetModel(opts: NetModelOptions) {
       if (!p || mode() !== "manual") return;
       checkpoint();
       positions.set(id, { ...p, orient: p.orient === "down" ? "up" : "down" });
+      bump();
+    },
+
+    /** Lay the net out afresh, forgetting where things were. */
+    tidy() {
+      lastAuto = undefined;
       bump();
     },
 

@@ -94,6 +94,11 @@ export function App(props: { initial?: Doc }) {
               Manual
             </button>
           </div>
+          <Show when={ed.model.mode() === "auto"}>
+            <button class="btn" onClick={ed.model.tidy} title="Lay the net out afresh, ignoring where things were">
+              Tidy
+            </button>
+          </Show>
           <button class="btn" onClick={ed.model.requestFit} title="Fit the net in view (F)">
             Fit
           </button>

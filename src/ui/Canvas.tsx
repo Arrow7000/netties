@@ -1,7 +1,8 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
+import { For, Index, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
+import type { Frame } from "../anim/morph";
 import { type AgentId, type End, NONE, type WireId, free, port } from "../core/net";
-import { G, type Pt, portPos } from "../layout/geometry";
-import { roundedPath } from "../render/path";
+import { G, type Pt, portPos, shape } from "../layout/geometry";
+import { polylinePath, roundedPath } from "../render/path";
 import { agentOutline, labelPos } from "../render/svg";
 import type { System } from "../core/system";
 import type { NetModel } from "../state/model";
@@ -222,6 +223,8 @@ export function Canvas(props: CanvasProps) {
         aria-label="Net canvas"
       >
         <g transform={`translate(${view().x} ${view().y}) scale(${view().k})`}>
+          <Show when={ed.frame()}>{(f) => <Animated frame={f()} system={props.system} freeLabel={props.freeLabel} />}</Show>
+          <g style={{ display: ed.frame() ? "none" : undefined }}>
           <For each={wireIds()}>{(id) => <Wire ed={ed} id={id} plain={props.readonly} />}</For>
           <For each={agentIds()}>{(id) => <Agent ed={ed} system={props.system} id={id} />}</For>
           <For each={freeNames()}>
@@ -253,6 +256,7 @@ export function Canvas(props: CanvasProps) {
               );
             }}
           </For>
+          </g>
           <Show when={drag()?.kind === "wire" ? (drag() as Extract<Drag, { kind: "wire" }>) : undefined}>
             {(d) => <path class="drag-line" d={`M${d().fromPt.x} ${d().fromPt.y} L${d().cur.x} ${d().cur.y}`} />}
           </Show>
@@ -388,4 +392,67 @@ function grow(points: Pt[], by: number): string {
       return `${cx + (p.x - cx) * k},${cy + (p.y - cy) * k}`;
     })
     .join(" ");
+}
+
+/** One frame of a step being animated. */
+function Animated(props: { frame: Frame; system: () => System; freeLabel?: (name: string) => string }) {
+  return (
+    <g class="animated" style={{ "pointer-events": "none" }}>
+      <Index each={props.frame.wires}>
+        {(w) => {
+          const d = () => polylinePath(w().pts);
+          return (
+            <g class="wire" style={{ opacity: w().opacity }}>
+              <path class="halo" d={d()} />
+              <path class="line" d={d()} />
+            </g>
+          );
+        }}
+      </Index>
+      <Index each={props.frame.agents}>
+        {(a) => {
+          const type = () => props.system().types.get(a().type);
+          const o = () => agentOutline({ x: 0, y: 0, orient: "down" }, a().arity);
+          const deg = () => (a().angle * 180) / Math.PI;
+          const label = () => {
+            // The label sits at the centroid of the turned triangle, kept upright.
+            const sh = shape(a().arity);
+            const ly = sh.circle ? 0 : -sh.h / 6;
+            return { x: -Math.sin(a().angle) * ly, y: Math.cos(a().angle) * ly };
+          };
+          return (
+            <g
+              class="agent"
+              classList={{ filled: !!type()?.filled }}
+              transform={`translate(${a().x} ${a().y}) scale(${a().scale})`}
+              style={{ opacity: a().opacity }}
+            >
+              <g transform={`rotate(${deg()})`}>
+                {(() => {
+                  const s = o();
+                  return s.kind === "circle" ? (
+                    <circle class="body" r={s.r} />
+                  ) : (
+                    <polygon class="body" points={s.points.map((q) => `${q.x},${q.y}`).join(" ")} />
+                  );
+                })()}
+              </g>
+              <Show when={type()?.symbol}>
+                <text class="symbol" x={label().x} y={label().y} text-anchor="middle" dominant-baseline="central">
+                  {type()!.symbol}
+                </text>
+              </Show>
+            </g>
+          );
+        }}
+      </Index>
+      <Index each={props.frame.free}>
+        {(f) => (
+          <text class="free-label" x={f().x} y={f().dir === "up" ? f().y - 5 : f().y + 12} text-anchor="middle">
+            {props.freeLabel?.(f().name) ?? f().name}
+          </text>
+        )}
+      </Index>
+    </g>
+  );
 }
