@@ -18,6 +18,8 @@ export interface AgentType {
   arity: number;
   /** Drawn as a solid shape rather than an outline. */
   filled?: boolean;
+  /** Drawn as a box: a collapsed component standing in for its agents. */
+  box?: boolean;
 }
 
 /** Where a wire ends: an agent's port, or one of the net's free ports. */
@@ -61,8 +63,11 @@ export class Net {
   private nextAgent: AgentId = 1;
   private nextWire: WireId = 1;
 
-  addAgent(type: AgentType): AgentId {
-    const id = this.nextAgent++;
+  /** Add an agent, with a fresh id unless one is given. */
+  addAgent(type: AgentType, given?: AgentId): AgentId {
+    if (given !== undefined && this.agents.has(given)) throw new Error(`agent ${given} already exists`);
+    const id = given ?? this.nextAgent++;
+    if (id >= this.nextAgent) this.nextAgent = id + 1;
     this.agents.set(id, { id, type: type.id, wires: new Array(type.arity + 1).fill(NONE) });
     return id;
   }

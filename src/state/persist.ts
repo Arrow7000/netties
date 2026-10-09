@@ -1,3 +1,4 @@
+import { type ComponentDef, Groups, type GroupsJSON } from "../core/groups";
 import { Net, type NetJSON } from "../core/net";
 import { System, type SystemJSON } from "../core/system";
 import type { Placed } from "../layout/geometry";
@@ -13,15 +14,19 @@ export interface Doc {
   mode: LayoutMode;
   /** Agent positions, kept in manual mode only. */
   positions?: [number, Placed][];
+  components?: ComponentDef[];
+  groups?: GroupsJSON;
 }
 
-export function decode(doc: Doc): { system: System; net: Net; mode: LayoutMode; positions: Map<number, Placed> } {
+export function decode(doc: Doc) {
   if (doc.v !== 1) throw new Error(`unknown save format ${doc.v}`);
   return {
     system: System.fromJSON(doc.system),
     net: Net.fromJSON(doc.net),
     mode: doc.mode,
     positions: new Map(doc.positions ?? []),
+    components: doc.components ?? [],
+    groups: Groups.fromJSON(doc.groups),
   };
 }
 

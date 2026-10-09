@@ -725,3 +725,77 @@ details.missing .pair {
     transition: none !important;
   }
 }
+
+/* Components */
+
+.agent.box .body {
+  fill: var(--paper);
+}
+
+.hull rect {
+  fill: none;
+  stroke: var(--graphite);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.hull text {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 10px;
+  fill: var(--graphite);
+  cursor: pointer;
+}
+
+.hull rect {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.hull.selected rect {
+  stroke: var(--pencil);
+  stroke-dasharray: none;
+  stroke-width: 1.5;
+}
+
+.hull.selected text {
+  fill: var(--pencil-text);
+}
+
+.marquee {
+  fill: color-mix(in srgb, var(--pencil-soft) 35%, transparent);
+  stroke: var(--pencil);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.inline-form {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.inline-form input,
+.component-meta input {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  padding: 2px 6px;
+  border-radius: 3px;
+  width: 120px;
+}
+
+.inline-form input.short,
+.component-meta input.short {
+  width: 64px;
+}
+
+.component-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.rule-body.single {
+  grid-template-columns: 1fr;
+}

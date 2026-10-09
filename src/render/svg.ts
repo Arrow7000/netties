@@ -13,9 +13,31 @@ export const STROKE = 1.4;
 /** Width of the paper-coloured band under each wire that makes crossings read as bridges. */
 export const HALO = 6;
 
-/** Outline of an agent: a triangle with its tip on the principal port, or a circle. */
-export function agentOutline(p: Placed, arity: number): { kind: "circle"; r: number } | { kind: "poly"; points: Pt[] } {
+/**
+ * Outline of an agent: a triangle with its tip on the principal port, or a
+ * circle when it has no aux ports. Collapsed components are boxes with the
+ * same port positions.
+ */
+export function agentOutline(
+  p: Placed,
+  arity: number,
+  box = false,
+): { kind: "circle"; r: number } | { kind: "poly"; points: Pt[] } {
   const s = shape(arity);
+  if (box) {
+    // Wide enough for a label even with a single port.
+    const w = Math.max(s.w, 26) / 2;
+    const h = s.h / 2;
+    return {
+      kind: "poly",
+      points: [
+        { x: p.x - w, y: p.y - h },
+        { x: p.x + w, y: p.y - h },
+        { x: p.x + w, y: p.y + h },
+        { x: p.x - w, y: p.y + h },
+      ],
+    };
+  }
   if (s.circle) return { kind: "circle", r: s.w / 2 };
   const sign = p.orient === "down" ? 1 : -1;
   return {
@@ -29,15 +51,15 @@ export function agentOutline(p: Placed, arity: number): { kind: "circle"; r: num
 }
 
 /** Where to put an agent's label: the triangle's centroid. */
-export function labelPos(p: Placed, arity: number): Pt {
+export function labelPos(p: Placed, arity: number, box = false): Pt {
   const s = shape(arity);
-  if (s.circle) return { x: p.x, y: p.y };
+  if (s.circle || box) return { x: p.x, y: p.y };
   return { x: p.x, y: p.y + ((p.orient === "down" ? -1 : 1) * s.h) / 6 };
 }
 
 /** A standalone SVG of a net, for export and for eyeballing layouts. */
 export function toSVG(net: Net, sys: System, placement: Placement, routed: Routed, ink: Ink, pad = 24): string {
-  const b = routed.bounds;
+  const b = { ...routed.bounds };
   for (const f of routed.free.values()) [b.y0, b.y1] = [Math.min(b.y0, f.y - 14), Math.max(b.y1, f.y + 14)];
   const vb = [b.x0 - pad, b.y0 - pad, b.x1 - b.x0 + 2 * pad, b.y1 - b.y0 + 2 * pad];
   const out: string[] = [
@@ -56,13 +78,13 @@ export function toSVG(net: Net, sys: System, placement: Placement, routed: Route
     if (!a) continue;
     const t = sys.types.get(a.type);
     const arity = a.wires.length - 1;
-    const o = agentOutline(p, arity);
+    const o = agentOutline(p, arity, t?.box);
     const fill = t?.filled ? ink.ink : ink.paper;
     const attrs = `fill="${fill}" stroke="${ink.ink}" stroke-width="${STROKE}" stroke-linejoin="round"`;
     if (o.kind === "circle") out.push(`<circle cx="${p.x}" cy="${p.y}" r="${o.r}" ${attrs}/>`);
     else out.push(`<polygon points="${o.points.map((q) => `${q.x},${q.y}`).join(" ")}" ${attrs}/>`);
     if (t?.symbol) {
-      const l = labelPos(p, arity);
+      const l = labelPos(p, arity, t?.box);
       out.push(
         `<text x="${l.x}" y="${l.y}" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="${t.filled ? ink.paper : ink.ink}">${t.symbol}</text>`,
       );

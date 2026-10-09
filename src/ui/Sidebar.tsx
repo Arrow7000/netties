@@ -1,4 +1,5 @@
 import { For, Show, createSignal } from "solid-js";
+import type { ComponentDef } from "../core/groups";
 import type { AgentType } from "../core/net";
 import { agentOutline, labelPos } from "../render/svg";
 import type { Editor } from "../state/editor";
@@ -22,6 +23,18 @@ export function Glyph(props: { type: AgentType }) {
           {props.type.symbol}
         </text>
       </g>
+    </svg>
+  );
+}
+
+export function ComponentGlyph(props: { def: ComponentDef }) {
+  const w = () => Math.min(30, 12 + props.def.iface.length * 4);
+  return (
+    <svg class="glyph" viewBox="-17 -13 34 26" aria-hidden="true">
+      <rect class="body" x={-w() / 2} y={-8} width={w()} height={16} />
+      <text x={0} y={0} text-anchor="middle" dominant-baseline="central">
+        {props.def.symbol}
+      </text>
     </svg>
   );
 }
@@ -100,6 +113,8 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
     return [...ed.system.types.values()];
   };
 
+  const components = () => [...ed.defs().values()];
+
   const pairs = () => {
     ed.rev();
     const ts = types();
@@ -131,7 +146,8 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
     const { toSVG } = await import("../render/svg");
     const css = getComputedStyle(document.documentElement);
     const l = ed.model.layout();
-    const svg = toSVG(ed.net, ed.system, l.placement, l.routed, {
+    const v = ed.model.view();
+    const svg = toSVG(v.net, v.sys, l.placement, l.routed, {
       paper: css.getPropertyValue("--paper").trim(),
       ink: css.getPropertyValue("--ink").trim(),
     });
@@ -210,6 +226,37 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
             onCancel={() => setEditing(undefined)}
           />
         </Show>
+      </section>
+
+      <section>
+        <h2>Components</h2>
+        <p class="caption">
+          {components().length
+            ? "Click to add one. Edit a component and every copy of it changes."
+            : "Select some agents (shift-click or shift-drag), then make them a component."}
+        </p>
+        <ul class="list">
+          <For each={components()}>
+            {(d) => (
+              <li>
+                <div class="type-row">
+                  <button class="place" onClick={() => ed.addComponent(d.id)} title={`Add ${d.name}`}>
+                    <ComponentGlyph def={d} />
+                    <span class="name">
+                      {d.name} <span class="meta">{d.iface.length === 1 ? "1 port" : `${d.iface.length} ports`}</span>
+                    </span>
+                  </button>
+                  <button class="edit" onClick={() => ed.openComponent(d.id)}>
+                    Edit
+                  </button>
+                </div>
+              </li>
+            )}
+          </For>
+        </ul>
+        <button class="link-btn" onClick={() => ed.openComponent(ed.newComponent())} style={{ "margin-top": "6px" }}>
+          New component
+        </button>
       </section>
 
       <section>

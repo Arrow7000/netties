@@ -2,6 +2,7 @@ import { Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-
 import { type Doc, fromShareHash, loadLocal } from "./state/persist";
 import { createEditor } from "./state/editor";
 import { Canvas } from "./ui/Canvas";
+import { ComponentEditor } from "./ui/ComponentEditor";
 import { RuleEditor } from "./ui/RuleEditor";
 import { Sidebar } from "./ui/Sidebar";
 
@@ -48,7 +49,7 @@ export function App(props: { initial?: Doc }) {
       else if (e.key === "f") ed.model.requestFit();
       else if (e.key === "x") {
         const s = ed.model.selection();
-        if (s?.kind === "agent") ed.model.flipAgent(s.id);
+        if (s?.kind === "items") s.agents.forEach((a) => ed.model.flipAgent(a));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -61,13 +62,24 @@ export function App(props: { initial?: Doc }) {
     if (a.kind === "port" && b.kind === "port") ed.openRule(ed.net.agent(a.agent).type, ed.net.agent(b.agent).type);
   };
 
+  const [making, setMaking] = createSignal(false);
+  const selectedItems = () => {
+    const s = ed.model.selection();
+    return s?.kind === "items" ? s.agents.size + s.groups.size : 0;
+  };
+  const selectedGroups = () => {
+    const s = ed.model.selection();
+    return s?.kind === "items" ? [...s.groups].filter((g) => ed.model.groups.groups.has(g)) : [];
+  };
+  const allCollapsed = () => (ed.rev(), selectedGroups().every((g) => ed.model.groups.groups.get(g)?.collapsed));
+
   const active = () => ed.model.activeWires().size;
   const stuck = () => ed.model.stuckWires().size;
 
   return (
     <div class="app">
       <main class="stage-wrap" style={{ position: "relative", "min-height": "0" }}>
-        <Canvas m={ed.model} system={() => (ed.rev(), ed.system)} onFire={ed.fire} onStuck={openStuck} />
+        <Canvas m={ed.model} onFire={ed.fire} onStuck={openStuck} />
         <div class="toolbar">
           <button class="btn" onClick={ed.stepOne} disabled={!active() || ed.running()} title="Fire one active pair (S)">
             Step
@@ -105,6 +117,48 @@ export function App(props: { initial?: Doc }) {
           <button class="btn" onClick={ed.clearNet} title="Remove every agent and wire">
             Clear
           </button>
+          <Show when={selectedItems() > 0}>
+            <span class="sep" />
+            <Show
+              when={making()}
+              fallback={
+                <button class="btn" onClick={() => setMaking(true)} title="Make the selection a reusable component">
+                  Make component
+                </button>
+              }
+            >
+              <form
+                class="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const f = new FormData(e.currentTarget);
+                  ed.makeComponent(String(f.get("name") ?? ""), String(f.get("symbol") ?? "").trim() || "C");
+                  setMaking(false);
+                }}
+              >
+                <input name="name" placeholder="Name" required ref={(el) => setTimeout(() => el.focus())} />
+                <input name="symbol" placeholder="Symbol" class="short" maxLength={4} />
+                <button class="btn on" type="submit">
+                  Make
+                </button>
+                <button class="btn" type="button" onClick={() => setMaking(false)}>
+                  Cancel
+                </button>
+              </form>
+            </Show>
+            <Show when={selectedGroups().length}>
+              <button
+                class="btn"
+                onClick={() => selectedGroups().forEach((g) => ed.model.setCollapsed(g, !allCollapsed()))}
+                title="Show or hide what's inside (double-click works too)"
+              >
+                {allCollapsed() ? "Expand" : "Collapse"}
+              </button>
+              <button class="btn" onClick={ed.breakApart} title="Turn the instance back into loose agents">
+                Break apart
+              </button>
+            </Show>
+          </Show>
         </div>
         <div class="status" aria-live="polite">
           <span>{active() === 1 ? "1 active pair" : `${active()} active pairs`}</span>
@@ -116,12 +170,15 @@ export function App(props: { initial?: Doc }) {
           <Show when={ed.stats().interactions}>
             <span>{ed.stats().interactions} interactions</span>
           </Show>
-          <Show when={ed.model.mode() === "manual" && ed.model.selection()?.kind === "agent"}>
+          <Show when={ed.model.mode() === "manual" && ed.model.selection()?.kind === "items"}>
             <span>Press X to turn the agent round</span>
           </Show>
         </div>
         <Show when={ed.rev() >= 0 && ed.net.agents.size === 0 && ed.net.free.size === 0}>
           <div class="hint">Add an agent from the list on the right, then drag between ports to wire them up.</div>
+        </Show>
+        <Show when={ed.componentOpen()} keyed>
+          {(id) => <ComponentEditor ed={ed} id={id} />}
         </Show>
         <Show when={ed.ruleOpen()} keyed>
           {([a, b]) => <RuleEditor ed={ed} left={a} right={b} />}

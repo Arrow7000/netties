@@ -1,23 +1,24 @@
 import { For, Index, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
 import type { Frame } from "../anim/morph";
+import type { GroupId } from "../core/groups";
 import { type AgentId, type End, NONE, type WireId, free, port } from "../core/net";
-import { G, type Pt, portPos, shape } from "../layout/geometry";
+import type { System } from "../core/system";
+import { type Box, G, type Pt, boxOf, portPos, shape } from "../layout/geometry";
 import { polylinePath, roundedPath } from "../render/path";
 import { agentOutline, labelPos } from "../render/svg";
-import type { System } from "../core/system";
 import type { NetModel } from "../state/model";
 
 type Drag =
   | { kind: "pan"; start: Pt; origin: Pt; moved: boolean }
+  | { kind: "marquee"; start: Pt; cur: Pt }
   | { kind: "wire"; from: End; fromPt: Pt; cur: Pt; dock?: "top" | "bottom" }
-  | { kind: "move"; id: AgentId; offset: Pt; moved: boolean }
+  | { kind: "move"; ids: AgentId[]; groups: GroupId[]; last: Pt; moved: boolean }
   | { kind: "click-wire"; id: WireId; shift: boolean; start: Pt };
 
 const DOCK = 44;
 
 export interface CanvasProps {
   m: NetModel;
-  system: () => System;
   /** Called when an active pair's wire is clicked. Without it, active pairs just select. */
   onFire?: (w: WireId) => void;
   /** Called when an active pair with no rule is clicked. */
@@ -31,6 +32,7 @@ export interface CanvasProps {
 
 export function Canvas(props: CanvasProps) {
   const ed = props.m;
+  const sys = () => ed.view().sys;
   let svg!: SVGSVGElement;
   const [view, setView] = createSignal({ x: 0, y: 0, k: 1.5 });
   const [drag, setDrag] = createSignal<Drag>();
@@ -95,8 +97,48 @@ export function Canvas(props: CanvasProps) {
   );
 
   const wireIds = createMemo(() => [...ed.layout().routed.wires.keys()]);
-  const agentIds = createMemo(() => [...ed.layout().placement.keys()].filter((id) => ed.net.agents.has(id)));
+  const agentIds = createMemo(() => [...ed.layout().placement.keys()].filter((id) => ed.view().net.agents.has(id)));
   const freeNames = createMemo(() => [...ed.layout().routed.free.keys()]);
+
+  /** Outlines around expanded instances whose agents are on show. */
+  const hulls = createMemo(() => {
+    const l = ed.layout();
+    const v = ed.view();
+    const gs = ed.groups;
+    const out: { id: GroupId; box: Box; label: string; depth: number }[] = [];
+    for (const g of gs.groups.values()) {
+      if (g.collapsed || gs.chain(g.parent).some((h) => gs.groups.get(h)?.collapsed)) continue;
+      const boxes = gs
+        .members(g.id)
+        .map((a) => {
+          const p = l.placement.get(a);
+          return p && v.net.agents.has(a) ? boxOf(p, v.net.agent(a).wires.length - 1) : undefined;
+        })
+        .filter((b): b is Box => !!b);
+      // Nested boxes inside count too.
+      for (const [id, h] of v.box) {
+        if (h !== g.id && gs.chain(h).includes(g.id)) {
+          const p = l.placement.get(id);
+          if (p) boxes.push(boxOf(p, v.net.agent(id).wires.length - 1));
+        }
+      }
+      if (!boxes.length) continue;
+      const depth = gs.chain(g.id).length;
+      const pad = 8 + 6 * (4 - Math.min(4, depth));
+      out.push({
+        id: g.id,
+        depth,
+        label: ed.defs().get(g.def)?.name ?? "component",
+        box: {
+          x0: Math.min(...boxes.map((b) => b.x0)) - pad,
+          y0: Math.min(...boxes.map((b) => b.y0)) - pad,
+          x1: Math.max(...boxes.map((b) => b.x1)) + pad,
+          y1: Math.max(...boxes.map((b) => b.y1)) + pad,
+        },
+      });
+    }
+    return out.sort((a, b) => a.depth - b.depth);
+  });
 
   const endAt = (el: Element | null): End | undefined => {
     const p = el?.closest("[data-port]");
@@ -114,7 +156,7 @@ export function Canvas(props: CanvasProps) {
     if (e.kind === "free") return l.routed.free.get(e.name);
     const p = l.placement.get(e.agent);
     if (!p) return undefined;
-    return portPos(p, ed.net.agent(e.agent).wires.length - 1, e.slot);
+    return portPos(p, ed.view().net.agent(e.agent).wires.length - 1, e.slot);
   };
 
   const dockAt = (e: PointerEvent): "top" | "bottom" | undefined => {
@@ -122,6 +164,15 @@ export function Canvas(props: CanvasProps) {
     if (e.clientY - r.top < DOCK) return "top";
     if (r.bottom - e.clientY < DOCK) return "bottom";
     return undefined;
+  };
+
+  /** Start dragging the selection in manual mode. */
+  const startMove = (w: Pt) => {
+    if (ed.mode() !== "manual") return;
+    const s = ed.selection();
+    if (s?.kind !== "items") return;
+    ed.checkpoint();
+    setDrag({ kind: "move", ids: [...s.agents], groups: [...s.groups], last: w, moved: false });
   };
 
   const onPointerDown = (e: PointerEvent) => {
@@ -138,13 +189,14 @@ export function Canvas(props: CanvasProps) {
     const agentEl = target.closest("[data-agent]");
     if (agentEl) {
       const id = Number(agentEl.getAttribute("data-agent"));
-      ed.setSelection({ kind: "agent", id });
-      if (ed.mode() === "manual") {
-        const p = ed.layout().placement.get(id)!;
-        ed.checkpoint();
-        setDrag({ kind: "move", id, offset: { x: w.x - p.x, y: w.y - p.y }, moved: false });
-      }
-      return;
+      if (!ed.isSelected(id) || e.shiftKey) ed.pick(id, e.shiftKey);
+      return startMove(w);
+    }
+    const hullEl = target.closest("[data-group]");
+    if (hullEl) {
+      const g = Number(hullEl.getAttribute("data-group"));
+      ed.pickGroup(g, e.shiftKey);
+      return startMove(w);
     }
     const wireEl = target.closest("[data-wire]");
     if (wireEl) {
@@ -157,6 +209,7 @@ export function Canvas(props: CanvasProps) {
       if (!e.shiftKey) ed.setArmed(undefined);
       return;
     }
+    if (e.shiftKey) return setDrag({ kind: "marquee", start: w, cur: w });
     const v = view();
     setDrag({ kind: "pan", start: { x: e.clientX, y: e.clientY }, origin: { x: v.x, y: v.y }, moved: false });
   };
@@ -169,12 +222,21 @@ export function Canvas(props: CanvasProps) {
       const dy = e.clientY - d.start.y;
       setView((v) => ({ ...v, x: d.origin.x + dx, y: d.origin.y + dy }));
       if (!d.moved && Math.hypot(dx, dy) > 3) setDrag({ ...d, moved: true });
+    } else if (d.kind === "marquee") {
+      setDrag({ ...d, cur: toWorld(e) });
     } else if (d.kind === "wire") {
       setDrag({ ...d, cur: toWorld(e), dock: dockAt(e) });
     } else if (d.kind === "move") {
       const w = toWorld(e);
-      ed.moveAgent(d.id, { x: w.x - d.offset.x, y: w.y - d.offset.y });
-      if (!d.moved) setDrag({ ...d, moved: true });
+      const dx = w.x - d.last.x;
+      const dy = w.y - d.last.y;
+      for (const id of d.ids) {
+        const p = ed.positions.get(id);
+        if (p) ed.positions.set(id, { ...p, x: p.x + dx, y: p.y + dy });
+      }
+      for (const g of d.groups) ed.moveGroup(g, dx, dy);
+      ed.bump();
+      setDrag({ ...d, last: w, moved: true });
     }
   };
 
@@ -183,6 +245,16 @@ export function Canvas(props: CanvasProps) {
     setDrag(undefined);
     if (!d) return;
     if (d.kind === "pan" && !d.moved) ed.setSelection(undefined);
+    if (d.kind === "marquee") {
+      const x0 = Math.min(d.start.x, d.cur.x);
+      const x1 = Math.max(d.start.x, d.cur.x);
+      const y0 = Math.min(d.start.y, d.cur.y);
+      const y1 = Math.max(d.start.y, d.cur.y);
+      const inside = [...ed.layout().placement]
+        .filter(([, p]) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)
+        .map(([id]) => id);
+      ed.pickMany(inside, true);
+    }
     if (d.kind === "wire") {
       const target = endAt(document.elementFromPoint(e.clientX, e.clientY));
       if (target) ed.connect(d.from, target);
@@ -194,6 +266,22 @@ export function Canvas(props: CanvasProps) {
       else if (ed.stuckWires().has(d.id) && !d.shift && props.onStuck) props.onStuck(d.id);
       else ed.setSelection({ kind: "wire", id: d.id });
     }
+  };
+
+  /** Double-click a box to open it up, or an instance's outline to close it. */
+  const onDblClick = (e: MouseEvent) => {
+    if (props.readonly) return;
+    // Pointer capture retargets the event to the canvas, so look at what's under the pointer.
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    if (!target) return;
+    const agentEl = target.closest("[data-agent]");
+    if (agentEl) {
+      const g = ed.view().box.get(Number(agentEl.getAttribute("data-agent")));
+      if (g !== undefined) ed.setCollapsed(g, false);
+      return;
+    }
+    const hullEl = target.closest("[data-group]");
+    if (hullEl) ed.setCollapsed(Number(hullEl.getAttribute("data-group")), true);
   };
 
   const onWheel = (e: WheelEvent) => {
@@ -209,6 +297,11 @@ export function Canvas(props: CanvasProps) {
     } else setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
   };
 
+  const groupSelected = (g: GroupId) => {
+    const s = ed.selection();
+    return s?.kind === "items" && s.groups.has(g);
+  };
+
   return (
     <div class={`stage ${props.class ?? ""}`} style={{ height: "100%" }}>
       <svg
@@ -218,47 +311,75 @@ export function Canvas(props: CanvasProps) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onDblClick={onDblClick}
         onWheel={onWheel}
         role="application"
         aria-label="Net canvas"
       >
         <g transform={`translate(${view().x} ${view().y}) scale(${view().k})`}>
-          <Show when={ed.frame()}>{(f) => <Animated frame={f()} system={props.system} freeLabel={props.freeLabel} />}</Show>
+          <Show when={ed.frame()}>{(f) => <Animated frame={f()} system={sys} freeLabel={props.freeLabel} />}</Show>
           <g style={{ display: ed.frame() ? "none" : undefined }}>
-          <For each={wireIds()}>{(id) => <Wire ed={ed} id={id} plain={props.readonly} />}</For>
-          <For each={agentIds()}>{(id) => <Agent ed={ed} system={props.system} id={id} />}</For>
-          <For each={freeNames()}>
-            {(name) => {
-              const pt = () => ed.layout().routed.free.get(name);
-              return (
-                <Show when={pt()}>
-                  {(p) => (
-                    <g>
-                      <circle
-                        class="free-end"
-                        classList={{ open: (ed.rev(), ed.net.free.get(name) === NONE) }}
-                        data-free={name}
-                        cx={p().x}
-                        cy={p().y}
-                        r={6}
-                      />
-                      <text
-                        class="free-label"
-                        x={p().x}
-                        y={p().dir === "up" ? p().y - 5 : p().y + 12}
-                        text-anchor="middle"
-                      >
-                        {props.freeLabel?.(name) ?? name}
-                      </text>
-                    </g>
-                  )}
-                </Show>
-              );
-            }}
-          </For>
+            <For each={hulls()}>
+              {(h) => (
+                <g class="hull" classList={{ selected: groupSelected(h.id) }} data-group={h.id}>
+                  <rect
+                    x={h.box.x0}
+                    y={h.box.y0}
+                    width={h.box.x1 - h.box.x0}
+                    height={h.box.y1 - h.box.y0}
+                    rx={6}
+                  />
+                  <text x={h.box.x0 + 6} y={h.box.y0 - 4}>
+                    {h.label}
+                  </text>
+                </g>
+              )}
+            </For>
+            <For each={wireIds()}>{(id) => <Wire ed={ed} id={id} plain={props.readonly} />}</For>
+            <For each={agentIds()}>{(id) => <Agent ed={ed} system={sys} id={id} />}</For>
+            <For each={freeNames()}>
+              {(name) => {
+                const pt = () => ed.layout().routed.free.get(name);
+                return (
+                  <Show when={pt()}>
+                    {(p) => (
+                      <g>
+                        <circle
+                          class="free-end"
+                          classList={{ open: (ed.rev(), ed.net.free.get(name) === NONE) }}
+                          data-free={name}
+                          cx={p().x}
+                          cy={p().y}
+                          r={6}
+                        />
+                        <text
+                          class="free-label"
+                          x={p().x}
+                          y={p().dir === "up" ? p().y - 5 : p().y + 12}
+                          text-anchor="middle"
+                        >
+                          {props.freeLabel?.(name) ?? name}
+                        </text>
+                      </g>
+                    )}
+                  </Show>
+                );
+              }}
+            </For>
           </g>
           <Show when={drag()?.kind === "wire" ? (drag() as Extract<Drag, { kind: "wire" }>) : undefined}>
             {(d) => <path class="drag-line" d={`M${d().fromPt.x} ${d().fromPt.y} L${d().cur.x} ${d().cur.y}`} />}
+          </Show>
+          <Show when={drag()?.kind === "marquee" ? (drag() as Extract<Drag, { kind: "marquee" }>) : undefined}>
+            {(d) => (
+              <rect
+                class="marquee"
+                x={Math.min(d().start.x, d().cur.x)}
+                y={Math.min(d().start.y, d().cur.y)}
+                width={Math.abs(d().cur.x - d().start.x)}
+                height={Math.abs(d().cur.y - d().start.y)}
+              />
+            )}
           </Show>
         </g>
       </svg>
@@ -306,22 +427,16 @@ function Wire(props: { ed: NetModel; id: WireId; plain?: boolean }) {
 function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
   const ed = props.ed;
   const p = () => ed.layout().placement.get(props.id);
-  const agent = () => {
-    ed.rev();
-    return ed.net.agents.get(props.id);
-  };
+  const agent = () => ed.view().net.agents.get(props.id);
   const type = () => {
     const a = agent();
     return a ? props.system().types.get(a.type) : undefined;
   };
   const arity = () => (agent()?.wires.length ?? 1) - 1;
+  const box = () => !!type()?.box;
   const outline = () => {
     const pos = p();
-    return pos ? agentOutline(pos, arity()) : undefined;
-  };
-  const selected = () => {
-    const s = ed.selection();
-    return s?.kind === "agent" && s.id === props.id;
+    return pos ? agentOutline(pos, arity(), box()) : undefined;
   };
   const slots = () => Array.from({ length: arity() + 1 }, (_, i) => i);
 
@@ -329,7 +444,7 @@ function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
     <Show when={p() && outline()}>
       <g
         class="agent"
-        classList={{ filled: !!type()?.filled, selected: selected(), movable: ed.mode() === "manual" }}
+        classList={{ filled: !!type()?.filled, box: box(), selected: ed.isSelected(props.id), movable: ed.mode() === "manual" }}
         data-agent={props.id}
       >
         {(() => {
@@ -349,8 +464,8 @@ function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
         <Show when={type()?.symbol}>
           <text
             class="symbol"
-            x={labelPos(p()!, arity()).x}
-            y={labelPos(p()!, arity()).y}
+            x={labelPos(p()!, arity(), box()).x}
+            y={labelPos(p()!, arity(), box()).y}
             text-anchor="middle"
             dominant-baseline="central"
           >
@@ -360,10 +475,7 @@ function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
         <For each={slots()}>
           {(slot) => {
             const pos = () => portPos(p()!, arity(), slot);
-            const open = () => {
-              ed.rev();
-              return ed.net.agents.get(props.id)?.wires[slot] === NONE;
-            };
+            const open = () => agent()?.wires[slot] === NONE;
             return (
               <circle
                 class="port"

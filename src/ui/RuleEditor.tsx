@@ -127,11 +127,11 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
         </span>
       </div>
       <div class="rule-body">
-        <Canvas m={lhs} system={sys} readonly freeLabel={ifaceLabel} class="rule-lhs" />
+        <Canvas m={lhs} readonly freeLabel={ifaceLabel} class="rule-lhs" />
         <div class="rule-arrow" aria-hidden="true">
           ↦
         </div>
-        <Canvas m={rhs} system={sys} freeLabel={ifaceLabel} class="rule-rhs" />
+        <Canvas m={rhs} freeLabel={ifaceLabel} class="rule-rhs" />
       </div>
       <p class="rule-help">
         Drag from a port to another port, or to one of the interface ends labelled x and y. Two interface ends can be
