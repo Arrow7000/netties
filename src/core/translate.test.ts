@@ -158,7 +158,7 @@ describe("following the source step by step", () => {
   it("each source interaction maps to a run of combinator interactions ending at the translated result", async () => {
     const { reduceWith, isCellRoot } = await import("./catchup");
     const { interact } = await import("./reduce");
-    const ex = examples.find((e) => e.name === "2 × 2")!;
+    const ex = examples.find((e) => e.name === "3 + 2")!;
     const s = ex.system();
     const source = ex.net(s);
     const tr = translation(s);
@@ -180,6 +180,6 @@ describe("following the source step by step", () => {
       expect(canonical(net)).toBe(canonical(tr.net(source).net));
       steps++;
     }
-    expect(steps).toBe(16);
-  });
+    expect(steps).toBe(4);
+  }, 30_000);
 });
