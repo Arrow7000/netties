@@ -536,11 +536,11 @@ function Animated(props: { frame: Frame; freeLabel?: (name: string) => string })
       </Index>
       <Index each={props.frame.agents}>
         {(a) => {
-          const o = () => agentOutline({ x: 0, y: 0, orient: "down" }, a().arity, a().box);
+          const o = () => agentOutline({ x: 0, y: 0, orient: "down", round: a().round }, a().arity, a().box);
           const deg = () => (a().angle * 180) / Math.PI;
           const label = () => {
             // The label sits at the centroid of the turned triangle, kept upright.
-            const sh = shape(a().arity);
+            const sh = shape(a().arity, a().round);
             const ly = sh.circle || a().box ? 0 : -sh.h / 6;
             return { x: -Math.sin(a().angle) * ly, y: Math.cos(a().angle) * ly };
           };

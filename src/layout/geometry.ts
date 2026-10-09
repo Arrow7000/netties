@@ -14,6 +14,8 @@ export interface Placed {
   x: number;
   y: number;
   orient: Orient;
+  /** Drawn as a circle rather than a triangle. Unset means circles only for agents with no aux ports. */
+  round?: boolean;
 }
 
 export type Placement = Map<AgentId, Placed>;
@@ -46,8 +48,12 @@ export interface Shape {
   circle: boolean;
 }
 
-export function shape(arity: number): Shape {
-  if (arity === 0) return { w: G.circleR * 2, h: G.circleR * 2, circle: true };
+export function shape(arity: number, round = arity === 0): Shape {
+  if (round) {
+    // Aux ports sit where they would on a triangle, on the circle's far side.
+    const r = arity === 0 ? G.circleR : Math.max(G.agentH / 2, ((arity - 1) * G.portGap) / 2 + 7);
+    return { w: r * 2, h: r * 2, circle: true };
+  }
   const w = (arity + 1) * G.portGap;
   // Every triangle is the same height; more aux ports only make it wider.
   return { w, h: G.agentH, circle: false };
@@ -64,11 +70,12 @@ export interface Terminal extends Pt {
  * to left.
  */
 export function portPos(p: Placed, arity: number, slot: number): Terminal {
-  const s = shape(arity);
+  const s = shape(arity, p.round);
   const sign = p.orient === "down" ? 1 : -1;
   if (slot === 0) return { x: p.x, y: p.y + (sign * s.h) / 2, dir: p.orient };
   const off = (slot - (arity + 1) / 2) * G.portGap;
-  return { x: p.x + sign * off, y: p.y - (sign * s.h) / 2, dir: p.orient === "down" ? "up" : "down" };
+  const back = s.circle ? Math.sqrt(Math.max(0, (s.h / 2) ** 2 - off * off)) : s.h / 2;
+  return { x: p.x + sign * off, y: p.y - sign * back, dir: p.orient === "down" ? "up" : "down" };
 }
 
 export interface Box {
@@ -79,6 +86,6 @@ export interface Box {
 }
 
 export function boxOf(p: Placed, arity: number): Box {
-  const s = shape(arity);
+  const s = shape(arity, p.round);
   return { x0: p.x - s.w / 2, y0: p.y - s.h / 2, x1: p.x + s.w / 2, y1: p.y + s.h / 2 };
 }

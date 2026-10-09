@@ -1,5 +1,5 @@
 import { type AgentId, type Net, endKey, port } from "../core/net";
-import { G, type Orient, type Placement, shape } from "./geometry";
+import { G, type Orient, type Placed, type Placement, shape } from "./geometry";
 import { type Pins, type Routed, crossings, length, route } from "./route";
 
 /**
@@ -97,6 +97,8 @@ export interface AutoLayoutOptions {
    * reshuffle everything around it.
    */
   prev?: Placement;
+  /** Which agents are drawn as circles, when that isn't just the ones with no aux ports. */
+  round?: (id: AgentId) => boolean;
 }
 
 export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
@@ -105,7 +107,7 @@ export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
 
   const lay = (a: AgentId): Tree => {
     const n = arity(a);
-    const sh = shape(n);
+    const sh = shape(n, opts.round?.(a));
     if (n === 0) return { nodes: [[a, 0, 0]], cols: [], l: -sh.w / 2, r: sh.w / 2 };
     const kids = children.get(a) ?? [];
     type Part = { l: number; r: number; anchor: number; sub?: Tree };
@@ -188,7 +190,7 @@ export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
     return c;
   };
 
-  let best = arrange(net, units, opts.pins, opts.prev);
+  let best = arrange(net, units, opts.pins, opts.prev, opts.round);
   if (units.length <= 24 && net.wires.size <= 300) {
     let bestCost = cost(best);
     for (let pass = 0; pass < 3; pass++) {
@@ -196,7 +198,7 @@ export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
       for (const u of units) {
         // A lone tree rooted at a free port, or nothing, can point either way.
         u.flip = !u.flip;
-        const l = arrange(net, units, opts.pins, opts.prev);
+        const l = arrange(net, units, opts.pins, opts.prev, opts.round);
         const c = cost(l);
         if (c < bestCost - 0.5) [best, bestCost, improved] = [l, c, true];
         else u.flip = !u.flip;
@@ -207,12 +209,12 @@ export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
   return best;
 }
 
-function geom(net: Net, u: Unit): UnitGeom {
+function geom(net: Net, u: Unit, round?: (id: AgentId) => boolean): UnitGeom {
   const g: UnitGeom = { nodes: [], cols: [], l: Infinity, r: -Infinity, top: 0, bottom: 0 };
   const add = (t: Tree, tipY: number, pointing: Orient) => {
     const s = pointing === "down" ? 1 : -1;
     for (const [id, dx, d] of t.nodes) {
-      const h = shape(net.agent(id).wires.length - 1).h;
+      const h = shape(net.agent(id).wires.length - 1, round?.(id)).h;
       const y = tipY - s * (d * G.layerH + h / 2);
       g.nodes.push([id, s * dx, y, pointing]);
       g.top = Math.min(g.top, y - h / 2);
@@ -231,8 +233,8 @@ function geom(net: Net, u: Unit): UnitGeom {
   return g;
 }
 
-function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement): AutoLayout {
-  const geoms = units.map((u) => geom(net, u));
+function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement, round?: (id: AgentId) => boolean): AutoLayout {
+  const geoms = units.map((u) => geom(net, u, round));
   // Where each unit sat last time, judged by its agents that were there.
   const prevX = geoms.map((g) => {
     const xs = g.nodes.flatMap(([id, dx]) => {
@@ -382,7 +384,11 @@ function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement): AutoLa
   const placement: Placement = new Map();
   const columns = new Map<string, number>();
   geoms.forEach((g, u) => {
-    for (const [id, dx, dy, orient] of g.nodes) placement.set(id, { x: x[u]! + dx + sx, y: y[u]! + dy + sy, orient });
+    for (const [id, dx, dy, orient] of g.nodes) {
+      const p: Placed = { x: x[u]! + dx + sx, y: y[u]! + dy + sy, orient };
+      if (round) p.round = round(id);
+      placement.set(id, p);
+    }
     for (const [k, dx] of g.cols) columns.set(k, x[u]! + dx + sx);
   });
   return { placement, columns, routed: route(net, placement, { columns, pins }) };

@@ -1,4 +1,4 @@
-import type { AgentId, End, Net, WireId } from "../core/net";
+import { type AgentId, type End, type Net, type WireId, isRound } from "../core/net";
 import type { StepRecord } from "../core/reduce";
 import type { System } from "../core/system";
 import { G, type Orient, type Placed, type Placement, type Pt, portPos } from "../layout/geometry";
@@ -33,6 +33,7 @@ export interface AgentFrame {
   symbol: string;
   filled: boolean;
   box: boolean;
+  round: boolean;
   x: number;
   y: number;
   /** 0 points down, π points up. */
@@ -72,7 +73,7 @@ interface AgentTrack {
   id: AgentId;
   type: string;
   arity: number;
-  look: { symbol: string; filled: boolean; box: boolean };
+  look: { symbol: string; filled: boolean; box: boolean; round: boolean };
   from: Pose;
   to: Pose;
 }
@@ -102,7 +103,7 @@ export interface Hints {
 export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecord[], hints: Hints = {}) {
   const look = (type: string) => {
     const t = after.sys.types.get(type) ?? before.sys.types.get(type);
-    return { symbol: t?.symbol ?? "", filled: !!t?.filled, box: !!t?.box };
+    return { symbol: t?.symbol ?? "", filled: !!t?.filled, box: !!t?.box, round: isRound(t) };
   };
   // Agent tracks.
   const tracks = new Map<AgentId, AgentTrack>();
@@ -240,8 +241,8 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
 export type Morph = ReturnType<typeof buildMorph>;
 
 /** Where a port is on an agent at some pose. */
-function portAt(tr: { arity: number }, p: Pose, slot: number): Pt {
-  const off = portPos({ x: 0, y: 0, orient: "down" }, tr.arity, slot);
+function portAt(tr: { arity: number; look: { round: boolean } }, p: Pose, slot: number): Pt {
+  const off = portPos({ x: 0, y: 0, orient: "down", round: tr.look.round }, tr.arity, slot);
   const c = Math.cos(p.angle);
   const s = Math.sin(p.angle);
   return { x: p.x + (off.x * c - off.y * s) * p.scale, y: p.y + (off.x * s + off.y * c) * p.scale };
