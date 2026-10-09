@@ -97,6 +97,8 @@ const pose = (p: Placed, scale = 1, opacity = 1): Pose => ({ x: p.x, y: p.y, ang
 export interface Hints {
   from?: (id: AgentId) => AgentId | undefined;
   to?: (id: AgentId) => AgentId | undefined;
+  /** Where a new agent was dropped, so it slides from there to its place. */
+  origin?: (id: AgentId) => Pt | undefined;
 }
 
 export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecord[], hints: Hints = {}) {
@@ -113,7 +115,14 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     const old = before.placement.get(id);
     const src = old ? undefined : hints.from?.(id);
     const was = src === undefined ? undefined : before.placement.get(src);
-    const from = old ? pose(old) : was ? { ...pose(p, 0.1, 0), x: was.x, y: was.y } : pose(p, 0.1, 0);
+    const dropped = old ? undefined : hints.origin?.(id);
+    const from = old
+      ? pose(old)
+      : was
+        ? { ...pose(p, 0.1, 0), x: was.x, y: was.y }
+        : dropped
+          ? { ...pose(p), x: dropped.x, y: dropped.y }
+          : pose(p, 0.1, 0);
     tracks.set(id, { id, type: a.type, arity: a.wires.length - 1, look: look(a.type), from, to: pose(p) });
   }
   for (const rec of records) {

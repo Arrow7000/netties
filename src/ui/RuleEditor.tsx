@@ -3,7 +3,7 @@ import { interfaceNet, interfacePins, isSymmetric, netToRule, pairNet, parseIfac
 import { createNetModel } from "../state/model";
 import type { Editor } from "../state/editor";
 import { Canvas } from "./Canvas";
-import { Glyph } from "./Sidebar";
+import { Glyph } from "./Glyph";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
 const sub = (n: number) => String(n).replace(/\d/g, (d) => SUB[Number(d)]!);

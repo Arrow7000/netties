@@ -1,10 +1,10 @@
 import { batch, createMemo, createSignal } from "solid-js";
 import { type Frame, type Snapshot as AnimSnapshot, buildMorph } from "../anim/morph";
 import { type Defs, type GroupId, Groups, type GroupsJSON, collapse, instantiate } from "../core/groups";
-import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, port } from "../core/net";
+import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, port, sameEnd } from "../core/net";
 import { type StepRecord, redexes } from "../core/reduce";
 import type { System } from "../core/system";
-import type { Placed, Placement, Pt } from "../layout/geometry";
+import { G, type Placed, type Placement, type Pt, portPos } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
 import { type Pins, type Routed, route } from "../layout/route";
 
@@ -41,6 +41,33 @@ interface Snapshot {
   extra?: unknown;
 }
 
+/**
+ * Dragging a wire end. From an empty end it draws a new wire; from an end
+ * that has a wire, it unplugs that end and carries it, leaving the end it
+ * came from empty. The other end of the wire, the anchor, stays put.
+ */
+export type WireGesture =
+  | { kind: "new"; from: End }
+  | { kind: "carry"; wire: WireId; moving: End; anchor: End };
+
+/** What letting go of a wire end over some end would do. */
+export type DropCheck =
+  | { kind: "ok"; join: boolean }
+  | { kind: "back" }
+  | { kind: "refuse"; why: string };
+
+/** What the pointer is over, for the hover panel and for highlighting. */
+export type Hover =
+  | { kind: "agent"; id: AgentId }
+  | { kind: "port"; end: End }
+  | { kind: "free"; name: string }
+  | { kind: "wire"; id: WireId }
+  | { kind: "group"; id: GroupId }
+  | { kind: "drag"; gesture: WireGesture; target?: End; check?: DropCheck }
+  | { kind: "type"; id: string }
+  | { kind: "component"; id: string }
+  | { kind: "pair"; a: string; b: string };
+
 const HISTORY_LIMIT = 200;
 const noDefs: Defs = new Map();
 
@@ -63,6 +90,9 @@ export function createNetModel(opts: NetModelOptions) {
   const [selection, setSelection] = createSignal<Selection>();
   const [armed, setArmed] = createSignal<string>();
   const [fitTick, setFitTick] = createSignal(0);
+  const [hover, setHover] = createSignal<Hover>();
+  /** Where agents just dropped from the palette were let go, to animate them from there. */
+  const spawnAt = new Map<AgentId, Pt>();
   const undoStack: string[] = [];
   const redoStack: string[] = [];
   const [historySize, setHistorySize] = createSignal({ undo: 0, redo: 0 });
@@ -255,20 +285,25 @@ export function createNetModel(opts: NetModelOptions) {
     pending = undefined;
     cancelAnimationFrame(raf);
     setFrame(undefined);
-    if ((!records.length && !edit) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const spawned = spawnAt.size > 0;
+    if ((!records.length && !edit && !spawned) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const l = layout();
     let morph;
     try {
       // An agent coming out of a collapsed instance, or going into one, moves via its box.
       const boxOf = (shown: Placement) => (id: AgentId) =>
         id < 0 ? undefined : groups.chain(groups.of.get(id)).map((g) => -g).find((b) => shown.has(b));
+      const dropped = new Map(spawnAt);
       morph = buildMorph(before, { net: view().net, sys: view().sys, placement: l.placement, routed: l.routed }, records, {
         from: boxOf(before.placement),
         to: boxOf(l.placement),
+        origin: (id) => dropped.get(id),
       });
     } catch (e) {
       console.error("animation failed", e);
       return;
+    } finally {
+      spawnAt.clear();
     }
     const t0 = performance.now();
     const tick = (now: number) => {
@@ -281,9 +316,126 @@ export function createNetModel(opts: NetModelOptions) {
     raf = requestAnimationFrame(tick);
   }
 
+  /** What dropping the end held in `g` onto `to` would do. Ends are view ends. */
+  function checkDrop(g: WireGesture, to: End): DropCheck {
+    const v = view().net;
+    const anchor = g.kind === "new" ? g.from : g.anchor;
+    if (g.kind === "carry" && sameEnd(to, g.moving)) return { kind: "back" };
+    if (sameEnd(to, anchor)) {
+      return { kind: "refuse", why: g.kind === "new" ? "That's where this wire starts." : "That's the other end of this wire." };
+    }
+    const w = v.wireAt(to);
+    if (w === NONE) return { kind: "ok", join: false };
+    if (to.kind === "port") return { kind: "refuse", why: "This port already has a wire. Each port takes exactly one." };
+    if (opts.fixedInterface) return { kind: "refuse", why: "This interface port already has a wire." };
+    return { kind: "ok", join: true };
+  }
+
+  /** Where the wire would run if the held end were let go over `to`, or at `pt` over empty canvas. */
+  function previewWire(g: WireGesture, to: End | undefined, pt: Pt): Pt[] | undefined {
+    const v = view();
+    const l = layout();
+    const tmp = v.net.clone();
+    const placement = new Map(l.placement);
+    const anchor = g.kind === "new" ? g.from : g.anchor;
+    // A loose end has no place of its own until the router puts it on an edge.
+    if (anchor.kind === "free") return undefined;
+    if (g.kind === "carry") {
+      tmp.disconnect(g.wire);
+      if (g.moving.kind === "free") tmp.free.delete(g.moving.name);
+    }
+    let other: End | undefined;
+    if (to && checkDrop(g, to).kind === "ok") {
+      const w = tmp.wireAt(to);
+      if (w === NONE) other = to;
+      else if (to.kind === "free") {
+        other = tmp.partner(to);
+        tmp.disconnect(w);
+        tmp.free.delete(to.name);
+      }
+    }
+    if (!other) {
+      // Over empty canvas: aim at a stand-in port under the pointer, facing the wire.
+      const a = portPos(placement.get(anchor.agent)!, tmp.agent(anchor.agent).wires.length - 1, anchor.slot);
+      const facing = a.dir === "down" ? (pt.y > a.y ? "up" : "down") : pt.y < a.y ? "down" : "up";
+      const probe = tmp.addAgent({ id: "·", name: "", symbol: "", arity: 0 });
+      placement.set(probe, { x: pt.x, y: facing === "up" ? pt.y + G.circleR : pt.y - G.circleR, orient: facing });
+      other = port(probe, 0);
+    }
+    try {
+      const id = tmp.connect(anchor, other);
+      return route(tmp, placement, { pins: opts.pins?.() }).wires.get(id);
+    } catch {
+      return undefined;
+    }
+  }
+
   return {
     rev,
     bump,
+    hover,
+    setHover,
+    checkDrop,
+    previewWire,
+
+    /** What dragging from a view end would do. */
+    gestureAt(e: End): WireGesture {
+      const v = view().net;
+      const w = v.wireAt(e);
+      if (w === NONE) return { kind: "new", from: e };
+      return { kind: "carry", wire: w, moving: e, anchor: v.partner(e)! };
+    },
+
+    /**
+     * Let go of a wire end: over an end, or over empty canvas (`to` unset),
+     * where it becomes a loose end, a free port of the net.
+     */
+    finishGesture(g: WireGesture, to?: End) {
+      if (to && checkDrop(g, to).kind !== "ok") return;
+      if (!to && g.kind === "carry" && g.moving.kind === "free") return;
+      if (!to && g.kind === "new" && opts.fixedInterface) return;
+      const v = view();
+      checkpoint();
+      const anchor = v.toReal(g.kind === "new" ? g.from : g.anchor);
+      // Carrying keeps the wire's identity, so it's animated as the same wire moving.
+      let reuse: WireId | undefined;
+      if (g.kind === "carry") {
+        const moving = v.toReal(g.moving);
+        net.disconnect(g.wire);
+        reuse = g.wire;
+        if (moving.kind === "free" && !opts.fixedInterface) net.free.delete(moving.name);
+      }
+      if (!to) {
+        if (!opts.fixedInterface) {
+          const name = nextFreeName();
+          net.free.set(name, NONE);
+          net.connect(anchor, free(name), reuse);
+        }
+      } else {
+        const t = v.toReal(to);
+        const w = net.wireAt(t);
+        if (w === NONE) net.connect(anchor, t, reuse);
+        else {
+          // Joining a loose end: the two wires become one.
+          const other = net.partner(t)!;
+          net.disconnect(w);
+          if (t.kind === "free") net.free.delete(t.name);
+          net.connect(anchor, other, reuse ?? w);
+        }
+      }
+      setSelection(undefined);
+      bump();
+    },
+
+    /** Change the type of some agents to another type with the same number of aux ports. */
+    changeType(ids: AgentId[], type: string) {
+      const t = opts.system().types.get(type);
+      const ok = ids.filter((id) => net.agents.has(id) && net.agent(id).wires.length - 1 === t?.arity);
+      if (!ok.length) return;
+      checkpoint();
+      for (const id of ok) net.agent(id).type = type;
+      bump();
+    },
     view,
     get net() {
       return net;
@@ -403,6 +555,7 @@ export function createNetModel(opts: NetModelOptions) {
       checkpoint();
       const id = net.addAgent(opts.system().type(type));
       if (at && mode() === "manual") positions.set(id, { x: at.x, y: at.y, orient: "down" });
+      else if (at) spawnAt.set(id, at);
       setSelection({ kind: "items", agents: new Set([id]), groups: new Set<GroupId>() });
       bump();
       return id;

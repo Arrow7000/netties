@@ -37,6 +37,8 @@ export function link(net: Net, a: Hole | End, b: Hole | End) {
 
 export interface Example {
   name: string;
+  /** One line on what it shows. */
+  about: string;
   system: () => System;
   net: (sys: System) => Net;
 }
@@ -46,6 +48,7 @@ const num = (n: number): Spec => (n === 0 ? t("0") : t("S", num(n - 1)));
 export const examples: Example[] = [
   {
     name: "Commutation",
+    about: "A constructor meets a duplicator, and each one gets copied.",
     system: combinators,
     net: (sys) => {
       const net = new Net();
@@ -55,6 +58,7 @@ export const examples: Example[] = [
   },
   {
     name: "Erasing a tree",
+    about: "An eraser takes apart a tree of constructors.",
     system: combinators,
     net: (sys) => {
       const net = new Net();
@@ -64,6 +68,7 @@ export const examples: Example[] = [
   },
   {
     name: "Duplicating a loop",
+    about: "A duplicator copies a net that loops back on itself.",
     system: combinators,
     net: (sys) => {
       // A γ whose aux ports are joined, copied by a δ.
@@ -77,6 +82,7 @@ export const examples: Example[] = [
   },
   {
     name: "Runs forever",
+    about: "Lafont's figure 3: the net comes back to itself after four steps.",
     system: combinators,
     net: (sys) => {
       // Lafont's Fig. 3: reduces to itself in four steps.
@@ -90,6 +96,7 @@ export const examples: Example[] = [
   },
   {
     name: "2 × 2",
+    about: "Unary arithmetic: multiplication, done by repeated addition.",
     system: arithmetic,
     net: (sys) => {
       const net = new Net();
@@ -99,6 +106,7 @@ export const examples: Example[] = [
   },
   {
     name: "3 + 2",
+    about: "Unary arithmetic: adding two numbers.",
     system: arithmetic,
     net: (sys) => {
       const net = new Net();

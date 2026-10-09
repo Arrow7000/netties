@@ -34,8 +34,31 @@ export function createEditor(initial: Doc | undefined) {
   });
 
   const [stats, setStats] = createSignal<Stats>(emptyStats());
+  /** Steps taken this run: single firings and parallel steps alike. */
+  const [steps, setSteps] = createSignal(0);
   const [running, setRunning] = createSignal(false);
   const [message, setMessage] = createSignal<string>();
+  /** A message with an Undo button, after something that replaced the net. */
+  const [undoable, setUndoable] = createSignal(false);
+  const notify = (text: string, canUndo = false) => {
+    setUndoable(canUndo);
+    setMessage(text);
+  };
+  /** How fast steps animate: 1 is normal, below 1 is slow motion. */
+  const [speed, setSpeedSignal] = createSignal(readSpeed());
+  const setSpeed = (s: number) => {
+    setSpeedSignal(s);
+    try {
+      localStorage.setItem(SPEED_KEY, String(s));
+    } catch {
+      // ignore
+    }
+  };
+  const stepDuration = () => 420 / speed();
+  const resetRun = () => {
+    setStats(emptyStats());
+    setSteps(0);
+  };
   /** The pair whose rule is open in the rule editor. */
   const [ruleOpen, setRuleOpen] = createSignal<[string, string]>();
   /** The component open in the component editor. */
@@ -108,9 +131,10 @@ export function createEditor(initial: Doc | undefined) {
     } catch (e) {
       setMessage((e as Error).message);
     }
+    if (recs.length) setSteps((n) => n + 1);
     model.setSelection(undefined);
     model.bump();
-    model.animate(snap, recs);
+    model.animate(snap, recs, false, stepDuration());
   };
 
   const stepOne = () => {
@@ -130,15 +154,16 @@ export function createEditor(initial: Doc | undefined) {
       model.dissolveAround(r.removed);
     }
     setStats(s);
+    if (recs.length) setSteps((n) => n + 1);
     model.setSelection(undefined);
     model.bump();
-    model.animate(snap, recs);
+    model.animate(snap, recs, false, stepDuration());
     return recs.length > 0;
   };
 
-  let timer: ReturnType<typeof setInterval> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = () => {
-    if (timer) clearInterval(timer);
+    if (timer) clearTimeout(timer);
     timer = undefined;
     setRunning(false);
   };
@@ -148,9 +173,12 @@ export function createEditor(initial: Doc | undefined) {
     model.checkpoint();
     setRunning(true);
     let rounds = 0;
-    timer = setInterval(() => {
-      if (!stepAll(false) || ++rounds >= 2000) stop();
-    }, 560);
+    const tick = () => {
+      if (!stepAll(false) || ++rounds >= 2000) return stop();
+      // Leave each step a moment on screen once it has finished moving.
+      timer = setTimeout(tick, stepDuration() + 140);
+    };
+    timer = setTimeout(tick, 0);
   };
 
   /** Manual mode: lay a fresh instance's agents out around a point, as its definition would be drawn. */
@@ -227,9 +255,17 @@ export function createEditor(initial: Doc | undefined) {
       return system;
     },
     stats,
+    steps,
     running,
     message,
-    setMessage,
+    setMessage: (m: string | undefined) => {
+      setUndoable(false);
+      setMessage(m);
+    },
+    undoable,
+    notify,
+    speed,
+    setSpeed,
     missingRules,
     fire,
     stepOne,
@@ -246,11 +282,11 @@ export function createEditor(initial: Doc | undefined) {
       stop();
       model.checkpoint();
       restore(doc);
-      setStats(emptyStats());
+      resetRun();
       model.requestFit();
     },
 
-    loadExample(ex: Example) {
+    loadExample(ex: Example, quiet = false) {
       stop();
       model.checkpoint();
       batch(() => {
@@ -259,16 +295,18 @@ export function createEditor(initial: Doc | undefined) {
         library = new Map();
         model.setNet(ex.net(system));
         model.restoreView("auto", new Map());
-        setStats(emptyStats());
+        resetRun();
       });
       model.requestFit();
+      if (!quiet) notify(`Loaded ${ex.name}.`, true);
     },
 
     clearNet() {
       stop();
       model.checkpoint();
       model.setNet(new Net());
-      setStats(emptyStats());
+      resetRun();
+      notify("Cleared the net.", true);
     },
 
     addType(t: AgentType) {
@@ -416,7 +454,7 @@ export function createEditor(initial: Doc | undefined) {
         touchSystem();
         model.setNet(net);
         model.restoreView("auto", new Map());
-        setStats(emptyStats());
+        resetRun();
       });
       model.requestFit();
     },
@@ -438,12 +476,23 @@ export function createEditor(initial: Doc | undefined) {
         try {
           restore(initial);
         } catch {
-          this.loadExample(examples[0]!);
+          this.loadExample(examples[0]!, true);
         }
-      } else this.loadExample(examples[0]!);
+      } else this.loadExample(examples[0]!, true);
       model.clearHistory();
     },
   };
 }
 
 export type Editor = ReturnType<typeof createEditor>;
+
+const SPEED_KEY = "netties:speed";
+
+function readSpeed(): number {
+  try {
+    const s = Number(localStorage.getItem(SPEED_KEY));
+    return s > 0 ? s : 1;
+  } catch {
+    return 1;
+  }
+}

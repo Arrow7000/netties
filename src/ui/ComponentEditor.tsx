@@ -4,7 +4,7 @@ import { Net } from "../core/net";
 import type { Editor } from "../state/editor";
 import { createNetModel } from "../state/model";
 import { Canvas } from "./Canvas";
-import { ComponentGlyph, Glyph } from "./Sidebar";
+import { ComponentGlyph, Glyph } from "./Glyph";
 
 /**
  * Edit a component's definition. Its free ports are its interface: drop a
@@ -116,7 +116,7 @@ export function ComponentEditor(props: { ed: Editor; id: string }) {
         <Canvas m={m} class="rule-rhs" />
       </div>
       <p class="rule-help">
-        Free ports are the component's interface: drop a wire on the top or bottom edge to add one. Saving updates every
+        Free ports are the component's interface: drag a wire end onto empty canvas to leave a loose end. Saving updates every
         instance.
       </p>
     </div>

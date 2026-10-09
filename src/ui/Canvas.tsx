@@ -1,24 +1,81 @@
-import { For, Index, Show, createEffect, createMemo, createSignal, on, onMount } from "solid-js";
+import { For, Index, type JSX, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import type { Frame } from "../anim/morph";
 import type { GroupId } from "../core/groups";
-import { type AgentId, type End, NONE, type WireId, free, port } from "../core/net";
-import type { System } from "../core/system";
+import { type AgentId, type End, NONE, type WireId, free, port, sameEnd } from "../core/net";
+import { type System, pairKey } from "../core/system";
 import { type Box, G, type Pt, boxOf, portPos, shape } from "../layout/geometry";
-import { polylinePath, roundedPath } from "../render/path";
+import { flattenPath, polylinePath, resample, roundedPath } from "../render/path";
 import { agentOutline, labelPos } from "../render/svg";
-import type { NetModel } from "../state/model";
+import type { DropCheck, NetModel, WireGesture } from "../state/model";
+import { held } from "./keys";
 
 type Drag =
   | { kind: "pan"; start: Pt; origin: Pt; moved: boolean }
-  | { kind: "marquee"; start: Pt; cur: Pt }
-  | { kind: "wire"; from: End; fromPt: Pt; cur: Pt; dock?: "top" | "bottom" }
+  | { kind: "marquee"; start: Pt; cur: Pt; additive: boolean; moved: boolean }
+  | { kind: "wire"; g: WireGesture; cur: Pt; target?: End; check?: DropCheck; path?: Pt[] }
   | { kind: "move"; ids: AgentId[]; groups: GroupId[]; last: Pt; moved: boolean }
-  | { kind: "click-wire"; id: WireId; shift: boolean; start: Pt };
+  | { kind: "click-wire"; id: WireId; alt: boolean };
 
-const DOCK = 44;
+export interface View {
+  x: number;
+  y: number;
+  k: number;
+}
+
+/** Room to leave around the net when fitting it in view, for panels floating over the canvas. */
+export interface Pad {
+  t: number;
+  r: number;
+  b: number;
+  l: number;
+}
+
+/** Pan and zoom, shared between a canvas and the controls that drive it. */
+export function createCamera() {
+  const [view, setView] = createSignal<View>({ x: 0, y: 0, k: 1.5 });
+  let host: { fit(): void; el(): SVGSVGElement } | undefined;
+  const zoomAround = (k: number, cx: number, cy: number) =>
+    setView((v) => {
+      const nk = Math.min(8, Math.max(0.15, k));
+      return { k: nk, x: cx - ((cx - v.x) * nk) / v.k, y: cy - ((cy - v.y) * nk) / v.k };
+    });
+  const center = () => {
+    const r = host?.el().getBoundingClientRect();
+    return r ? { x: r.width / 2, y: r.height / 2 } : { x: 0, y: 0 };
+  };
+  return {
+    view,
+    setView,
+    zoomAround,
+    zoomBy(f: number) {
+      const c = center();
+      zoomAround(view().k * f, c.x, c.y);
+    },
+    zoomTo(k: number) {
+      const c = center();
+      zoomAround(k, c.x, c.y);
+    },
+    fit: () => host?.fit(),
+    /** The world point under a client position, if it's over the canvas. */
+    toWorld(clientX: number, clientY: number): Pt | undefined {
+      const el = host?.el();
+      if (!el) return undefined;
+      const r = el.getBoundingClientRect();
+      if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return undefined;
+      const v = view();
+      return { x: (clientX - r.left - v.x) / v.k, y: (clientY - r.top - v.y) / v.k };
+    },
+    attach(h: { fit(): void; el(): SVGSVGElement }) {
+      host = h;
+    },
+  };
+}
+
+export type Camera = ReturnType<typeof createCamera>;
 
 export interface CanvasProps {
   m: NetModel;
+  camera?: Camera;
   /** Called when an active pair's wire is clicked. Without it, active pairs just select. */
   onFire?: (w: WireId) => void;
   /** Called when an active pair with no rule is clicked. */
@@ -29,16 +86,27 @@ export interface CanvasProps {
   readonly?: boolean;
   /** Don't try to draw nets with more agents than this. */
   limit?: number;
+  /** Room to leave for floating panels when fitting the net in view. */
+  pad?: Pad;
+  /** Shown over the canvas while the net is empty. */
+  empty?: JSX.Element;
   class?: string;
 }
 
+const NO_PAD: Pad = { t: 40, r: 40, b: 40, l: 40 };
+
+type EndState = "none" | "empty" | "hover" | "origin" | "candidate" | "target" | "refuse";
+
 export function Canvas(props: CanvasProps) {
   const ed = props.m;
+  const cam = props.camera ?? createCamera();
+  const view = cam.view;
+  const setView = cam.setView;
   const sys = () => ed.view().sys;
   let svg!: SVGSVGElement;
-  const [view, setView] = createSignal({ x: 0, y: 0, k: 1.5 });
   const [drag, setDrag] = createSignal<Drag>();
   const [size, setSize] = createSignal({ w: 800, h: 600 });
+  const [space, setSpace] = createSignal(false);
 
   const toWorld = (e: { clientX: number; clientY: number }): Pt => {
     const r = svg.getBoundingClientRect();
@@ -47,6 +115,7 @@ export function Canvas(props: CanvasProps) {
   };
 
   const tooBig = () => ed.view().net.agents.size > (props.limit ?? Infinity);
+  const pad = () => props.pad ?? NO_PAD;
 
   const contentBounds = () => {
     const { routed } = ed.layout();
@@ -62,14 +131,19 @@ export function Canvas(props: CanvasProps) {
     if (tooBig()) return;
     const b = contentBounds();
     const { w, h } = size();
+    const p = pad();
     const bw = Math.max(b.x1 - b.x0, 60);
     const bh = Math.max(b.y1 - b.y0, 60);
-    const topBar = 56;
-    const k = Math.min((w - 80) / bw, (h - topBar - 60) / bh, 2.4);
-    setView({ k, x: w / 2 - ((b.x0 + b.x1) / 2) * k, y: topBar + (h - topBar) / 2 - ((b.y0 + b.y1) / 2) * k });
+    const k = Math.min((w - p.l - p.r) / bw, (h - p.t - p.b) / bh, 2.4);
+    setView({
+      k,
+      x: p.l + (w - p.l - p.r) / 2 - ((b.x0 + b.x1) / 2) * k,
+      y: p.t + (h - p.t - p.b) / 2 - ((b.y0 + b.y1) / 2) * k,
+    });
   };
 
   onMount(() => {
+    cam.attach({ fit, el: () => svg });
     const ro = new ResizeObserver(() => {
       const r = svg.getBoundingClientRect();
       setSize({ w: r.width, h: r.height });
@@ -78,6 +152,21 @@ export function Canvas(props: CanvasProps) {
     const r = svg.getBoundingClientRect();
     setSize({ w: r.width, h: r.height });
     fit();
+    // Space held turns a left-drag into a pan, as in drawing tools.
+    const key = (down: boolean) => (e: KeyboardEvent) => {
+      if (e.key !== " " || (e.target as Element).closest?.("input, textarea, select, button")) return;
+      if (down) e.preventDefault();
+      setSpace(down);
+    };
+    const kd = key(true);
+    const ku = key(false);
+    window.addEventListener("keydown", kd);
+    window.addEventListener("keyup", ku);
+    onCleanup(() => {
+      ro.disconnect();
+      window.removeEventListener("keydown", kd);
+      window.removeEventListener("keyup", ku);
+    });
   });
 
   createEffect(on(ed.fitTick, () => queueMicrotask(fit), { defer: true }));
@@ -91,11 +180,12 @@ export function Canvas(props: CanvasProps) {
         const b = contentBounds();
         const v = view();
         const { w, h } = size();
+        const p = pad();
         const sx0 = b.x0 * v.k + v.x;
         const sx1 = b.x1 * v.k + v.x;
         const sy0 = b.y0 * v.k + v.y;
         const sy1 = b.y1 * v.k + v.y;
-        if (sx0 < 0 || sy0 < 48 || sx1 > w || sy1 > h - 30) fit();
+        if (sx0 < p.l / 2 || sy0 < p.t / 2 || sx1 > w - p.r / 2 || sy1 > h - p.b / 2) fit();
       },
       { defer: true },
     ),
@@ -159,18 +249,17 @@ export function Canvas(props: CanvasProps) {
     return undefined;
   };
 
-  const endPoint = (e: End): Pt | undefined => {
-    const l = ed.layout();
-    if (e.kind === "free") return l.routed.free.get(e.name);
-    const p = l.placement.get(e.agent);
-    if (!p) return undefined;
-    return portPos(p, ed.view().net.agent(e.agent).wires.length - 1, e.slot);
-  };
-
-  const dockAt = (e: PointerEvent): "top" | "bottom" | undefined => {
-    const r = svg.getBoundingClientRect();
-    if (e.clientY - r.top < DOCK) return "top";
-    if (r.bottom - e.clientY < DOCK) return "bottom";
+  /** What's under the pointer, for the hover panel. */
+  const hoverAt = (el: Element | null) => {
+    if (!el || !svg.contains(el)) return undefined;
+    const end = endAt(el);
+    if (end) return end.kind === "port" ? { kind: "port" as const, end } : { kind: "free" as const, name: end.name };
+    const a = el.closest("[data-agent]");
+    if (a) return { kind: "agent" as const, id: Number(a.getAttribute("data-agent")) };
+    const w = el.closest("[data-wire]");
+    if (w) return { kind: "wire" as const, id: Number(w.getAttribute("data-wire")) };
+    const g = el.closest("[data-group]");
+    if (g) return { kind: "group" as const, id: Number(g.getAttribute("data-group")) };
     return undefined;
   };
 
@@ -183,15 +272,27 @@ export function Canvas(props: CanvasProps) {
     setDrag({ kind: "move", ids: [...s.agents], groups: [...s.groups], last: w, moved: false });
   };
 
+  const startPan = (e: PointerEvent) => {
+    const v = view();
+    setDrag({ kind: "pan", start: { x: e.clientX, y: e.clientY }, origin: { x: v.x, y: v.y }, moved: false });
+  };
+
   const onPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0 || props.readonly) return;
     const target = e.target as Element;
+    svg.setPointerCapture(e.pointerId);
+    ed.setHover(undefined);
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && space())) {
+      e.preventDefault();
+      return startPan(e);
+    }
+    if (e.button !== 0) return;
+    if (props.readonly) return startPan(e);
     const w = toWorld(e);
     const end = endAt(target);
-    svg.setPointerCapture(e.pointerId);
     if (end) {
-      const from = endPoint(end) ?? w;
-      setDrag({ kind: "wire", from: end, fromPt: from, cur: w });
+      const g = ed.gestureAt(end);
+      setDrag({ kind: "wire", g, cur: w });
+      ed.setHover({ kind: "drag", gesture: g });
       return;
     }
     const agentEl = target.closest("[data-agent]");
@@ -208,32 +309,43 @@ export function Canvas(props: CanvasProps) {
     }
     const wireEl = target.closest("[data-wire]");
     if (wireEl) {
-      setDrag({ kind: "click-wire", id: Number(wireEl.getAttribute("data-wire")), shift: e.shiftKey, start: w });
+      setDrag({ kind: "click-wire", id: Number(wireEl.getAttribute("data-wire")), alt: e.altKey });
       return;
     }
-    const armed = ed.armed();
-    if (armed) {
-      ed.addAgent(armed, w);
-      if (!e.shiftKey) ed.setArmed(undefined);
-      return;
-    }
-    if (e.shiftKey) return setDrag({ kind: "marquee", start: w, cur: w });
-    const v = view();
-    setDrag({ kind: "pan", start: { x: e.clientX, y: e.clientY }, origin: { x: v.x, y: v.y }, moved: false });
+    setDrag({ kind: "marquee", start: w, cur: w, additive: e.shiftKey, moved: false });
   };
 
+  let previewFrame = 0;
   const onPointerMove = (e: PointerEvent) => {
     const d = drag();
-    if (!d) return;
+    if (!d) {
+      if (!e.buttons) ed.setHover(hoverAt(e.target as Element));
+      return;
+    }
     if (d.kind === "pan") {
       const dx = e.clientX - d.start.x;
       const dy = e.clientY - d.start.y;
       setView((v) => ({ ...v, x: d.origin.x + dx, y: d.origin.y + dy }));
       if (!d.moved && Math.hypot(dx, dy) > 3) setDrag({ ...d, moved: true });
     } else if (d.kind === "marquee") {
-      setDrag({ ...d, cur: toWorld(e) });
+      const cur = toWorld(e);
+      const moved = d.moved || Math.hypot(cur.x - d.start.x, cur.y - d.start.y) * view().k > 3;
+      setDrag({ ...d, cur, moved });
     } else if (d.kind === "wire") {
-      setDrag({ ...d, cur: toWorld(e), dock: dockAt(e) });
+      const cur = toWorld(e);
+      // Pointer capture sends events to the canvas; look at what's really under the pointer.
+      const over = endAt(document.elementFromPoint(e.clientX, e.clientY));
+      const target = over && !(d.g.kind === "new" && sameEnd(over, d.g.from)) ? over : undefined;
+      const check = target ? ed.checkDrop(d.g, target) : undefined;
+      setDrag({ ...d, cur, target, check });
+      ed.setHover({ kind: "drag", gesture: d.g, target, check });
+      cancelAnimationFrame(previewFrame);
+      previewFrame = requestAnimationFrame(() => {
+        const now = drag();
+        if (now?.kind !== "wire") return;
+        const to = now.check?.kind === "ok" ? now.target : undefined;
+        setDrag({ ...now, path: ed.previewWire(now.g, to, now.cur) });
+      });
     } else if (d.kind === "move") {
       const w = toWorld(e);
       const dx = w.x - d.last.x;
@@ -248,32 +360,41 @@ export function Canvas(props: CanvasProps) {
     }
   };
 
+  /** View agents inside a marquee. */
+  const marqueed = (d: Extract<Drag, { kind: "marquee" }>) => {
+    const x0 = Math.min(d.start.x, d.cur.x);
+    const x1 = Math.max(d.start.x, d.cur.x);
+    const y0 = Math.min(d.start.y, d.cur.y);
+    const y1 = Math.max(d.start.y, d.cur.y);
+    return [...ed.layout().placement]
+      .filter(([id, p]) => ed.view().net.agents.has(id) && p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)
+      .map(([id]) => id);
+  };
+  const preselected = createMemo(() => {
+    const d = drag();
+    return d?.kind === "marquee" && d.moved ? new Set(marqueed(d)) : new Set<AgentId>();
+  });
+
   const onPointerUp = (e: PointerEvent) => {
     const d = drag();
     setDrag(undefined);
+    cancelAnimationFrame(previewFrame);
     if (!d) return;
-    if (d.kind === "pan" && !d.moved) ed.setSelection(undefined);
     if (d.kind === "marquee") {
-      const x0 = Math.min(d.start.x, d.cur.x);
-      const x1 = Math.max(d.start.x, d.cur.x);
-      const y0 = Math.min(d.start.y, d.cur.y);
-      const y1 = Math.max(d.start.y, d.cur.y);
-      const inside = [...ed.layout().placement]
-        .filter(([, p]) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)
-        .map(([id]) => id);
-      ed.pickMany(inside, true);
+      if (d.moved) ed.pickMany(marqueed(d), d.additive);
+      else if (!d.additive) ed.setSelection(undefined);
     }
     if (d.kind === "wire") {
-      const target = endAt(document.elementFromPoint(e.clientX, e.clientY));
-      if (target) ed.connect(d.from, target);
-      else if (d.dock && d.from.kind === "port" && !ed.fixedInterface) ed.makeFree(d.from);
+      if (!d.target) ed.finishGesture(d.g);
+      else if (d.check?.kind === "ok") ed.finishGesture(d.g, d.target);
     }
     if (d.kind === "click-wire") {
-      const active = ed.activeWires().has(d.id);
-      if (active && !d.shift && props.onFire) props.onFire(d.id);
-      else if (ed.stuckWires().has(d.id) && !d.shift && props.onStuck) props.onStuck(d.id);
+      const alt = d.alt || e.altKey;
+      if (ed.activeWires().has(d.id) && !alt && props.onFire) props.onFire(d.id);
+      else if (ed.stuckWires().has(d.id) && !alt && props.onStuck) props.onStuck(d.id);
       else ed.setSelection({ kind: "wire", id: d.id });
     }
+    ed.setHover(hoverAt(document.elementFromPoint(e.clientX, e.clientY)));
   };
 
   /** Double-click a box to open it up, or an instance's outline to close it. */
@@ -294,14 +415,13 @@ export function Canvas(props: CanvasProps) {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) {
-      const r = svg.getBoundingClientRect();
-      const mx = e.clientX - r.left;
-      const my = e.clientY - r.top;
-      setView((v) => {
-        const k = Math.min(8, Math.max(0.15, v.k * Math.exp(-e.deltaY * 0.01)));
-        return { k, x: mx - ((mx - v.x) * k) / v.k, y: my - ((my - v.y) * k) / v.k };
-      });
+    const r = svg.getBoundingClientRect();
+    // Pinches arrive with ctrlKey set. A mouse wheel moves in whole notches;
+    // a trackpad scrolls in small, uneven steps, and pans.
+    const notch = e.deltaMode !== 0 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
+    if (e.ctrlKey || e.metaKey || notch) {
+      const f = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0025));
+      cam.zoomAround(view().k * f, e.clientX - r.left, e.clientY - r.top);
     } else setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
   };
 
@@ -310,17 +430,75 @@ export function Canvas(props: CanvasProps) {
     return s?.kind === "items" && s.groups.has(g);
   };
 
+  const wireDrag = () => {
+    const d = drag();
+    return d?.kind === "wire" ? d : undefined;
+  };
+  const carried = () => {
+    const d = wireDrag();
+    return d?.g.kind === "carry" ? d.g.wire : undefined;
+  };
+
+  /** How a port or free end should look right now. */
+  const endState = (e: End): EndState => {
+    const d = wireDrag();
+    if (d) {
+      if (sameEnd(e, d.g.kind === "new" ? d.g.from : d.g.anchor)) return "origin";
+      if (d.target && sameEnd(e, d.target)) {
+        const k = d.check?.kind;
+        return k === "ok" ? "target" : k === "back" ? "empty" : "refuse";
+      }
+      if (d.g.kind === "carry" && sameEnd(e, d.g.moving)) return "empty";
+      if (ed.view().net.wireAt(e) === NONE) return "candidate";
+      if (e.kind === "free" && !ed.fixedInterface) return "candidate";
+      return "none";
+    }
+    const h = ed.hover();
+    if (h?.kind === "port" && sameEnd(h.end, e)) return "hover";
+    if (h?.kind === "free" && e.kind === "free" && h.name === e.name) return "hover";
+    return ed.view().net.wireAt(e) === NONE ? "empty" : "none";
+  };
+
+  /** Wires to highlight because the rule grid is pointing at their pair of types. */
+  const highlighted = createMemo(() => {
+    const h = ed.hover();
+    if (h?.kind !== "pair") return new Set<WireId>();
+    const k = pairKey(h.a, h.b);
+    const v = ed.view().net;
+    return new Set(
+      v.activePairs().filter((w) => {
+        const [a, b] = v.wire(w).ends;
+        return a.kind === "port" && b.kind === "port" && pairKey(v.agent(a.agent).type, v.agent(b.agent).type) === k;
+      }),
+    );
+  });
+
+  const grid = () => {
+    const v = view();
+    const g = 20 * v.k;
+    return { "background-size": `${g}px ${g}px`, "background-position": `${v.x}px ${v.y}px` };
+  };
+
+  const isEmpty = () => (ed.rev(), ed.net.agents.size === 0 && ed.net.free.size === 0);
+
   return (
-    <div class={`stage ${props.class ?? ""}`} style={{ height: "100%" }}>
+    <div class={`stage ${props.class ?? ""}`} style={grid()}>
       <svg
         ref={svg}
         class="canvas"
-        classList={{ panning: drag()?.kind === "pan" && (drag() as { moved: boolean }).moved, armed: !!ed.armed() }}
+        classList={{
+          panning: drag()?.kind === "pan" && (drag() as { moved: boolean }).moved,
+          "space-pan": space() && !drag(),
+          wiring: !!wireDrag(),
+          alt: held.alt(),
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerLeave={() => !drag() && ed.setHover(undefined)}
         onDblClick={onDblClick}
         onWheel={onWheel}
+        onContextMenu={(e) => e.preventDefault()}
         role="application"
         aria-label="Net canvas"
       >
@@ -343,40 +521,65 @@ export function Canvas(props: CanvasProps) {
                 </g>
               )}
             </For>
-            <For each={wireIds()}>{(id) => <Wire ed={ed} id={id} plain={props.readonly} />}</For>
-            <For each={agentIds()}>{(id) => <Agent ed={ed} system={sys} id={id} />}</For>
+            <For each={wireIds()}>
+              {(id) => (
+                <Wire
+                  ed={ed}
+                  id={id}
+                  plain={props.readonly}
+                  hidden={carried() === id}
+                  highlighted={highlighted().has(id)}
+                />
+              )}
+            </For>
+            <For each={agentIds()}>
+              {(id) => <Agent ed={ed} system={sys} id={id} pre={preselected().has(id)} endState={endState} />}
+            </For>
             <For each={freeNames()}>
               {(name) => {
                 const pt = () => ed.layout().routed.free.get(name);
                 return (
                   <Show when={pt()}>
                     {(p) => (
-                      <g>
-                        <circle
-                          class="free-end"
-                          classList={{ open: (ed.rev(), ed.net.free.get(name) === NONE) }}
-                          data-free={name}
-                          cx={p().x}
-                          cy={p().y}
-                          r={6}
-                        />
-                        <text
-                          class="free-label"
-                          x={p().x}
-                          y={p().dir === "up" ? p().y - 5 : p().y + 12}
-                          text-anchor="middle"
-                        >
+                      <g class="free-end">
+                        <EndMark at={p()} state={endState(free(name))} />
+                        <circle class="end-dot" cx={p().x} cy={p().y} r={2.4} />
+                        <text class="free-label" x={p().x} y={p().dir === "up" ? p().y - 7 : p().y + 13} text-anchor="middle">
                           {props.freeLabel?.(name) ?? name}
                         </text>
+                        <circle class="hit" data-free={name} cx={p().x} cy={p().y} r={7} />
                       </g>
                     )}
                   </Show>
                 );
               }}
             </For>
+            <HoverPill ed={ed} hidden={!!drag()} canFire={!!props.onFire} />
           </g>
-          <Show when={drag()?.kind === "wire" ? (drag() as Extract<Drag, { kind: "wire" }>) : undefined}>
-            {(d) => <path class="drag-line" d={`M${d().fromPt.x} ${d().fromPt.y} L${d().cur.x} ${d().cur.y}`} />}
+          <Show when={wireDrag()}>
+            {(d) => {
+              const start = () => dragStart(ed, d().g) ?? d().cur;
+              return (
+                <g class="drag-wire" classList={{ carried: d().g.kind === "carry" }}>
+                  <Show
+                    when={d().path}
+                    fallback={
+                      <path
+                        class="line"
+                        d={`M${start().x} ${start().y} C${start().x} ${(start().y + d().cur.y) / 2} ${d().cur.x} ${(start().y + d().cur.y) / 2} ${d().cur.x} ${d().cur.y}`}
+                      />
+                    }
+                  >
+                    {(p) => (
+                      <>
+                        <path class="halo" d={roundedPath(p(), G.radius)} />
+                        <path class="line" d={roundedPath(p(), G.radius)} />
+                      </>
+                    )}
+                  </Show>
+                </g>
+              );
+            }}
           </Show>
           <Show when={drag()?.kind === "marquee" ? (drag() as Extract<Drag, { kind: "marquee" }>) : undefined}>
             {(d) => (
@@ -392,32 +595,96 @@ export function Canvas(props: CanvasProps) {
         </g>
       </svg>
       <Show when={tooBig()}>
-        <div class="hint">
+        <div class="canvas-note">
           {ed.view().net.agents.size.toLocaleString()} agents: too many to draw. The counts still update as it runs.
         </div>
       </Show>
-      <Show
-        when={
-          !ed.fixedInterface && drag()?.kind === "wire" && (drag() as Extract<Drag, { kind: "wire" }>).from.kind === "port"
-        }
-      >
-        <div class="dock top" classList={{ hot: (drag() as Extract<Drag, { kind: "wire" }>).dock === "top" }}>
-          Drop here to leave it as a free port
-        </div>
-        <div class="dock bottom" classList={{ hot: (drag() as Extract<Drag, { kind: "wire" }>).dock === "bottom" }}>
-          Drop here to leave it as a free port
-        </div>
+      <Show when={props.empty && isEmpty()}>
+        <div class="canvas-empty">{props.empty}</div>
       </Show>
     </div>
   );
 }
 
-function Wire(props: { ed: NetModel; id: WireId; plain?: boolean }) {
+/** Where a wire drag starts from: the anchor end. */
+function dragStart(ed: NetModel, g: WireGesture): Pt | undefined {
+  const e = g.kind === "new" ? g.from : g.anchor;
+  const l = ed.layout();
+  if (e.kind === "free") return l.routed.free.get(e.name);
+  const p = l.placement.get(e.agent);
+  return p ? portPos(p, ed.view().net.agent(e.agent).wires.length - 1, e.slot) : undefined;
+}
+
+/** The mark on a port or free end, showing what it is and what a drop there would do. */
+function EndMark(props: { at: Pt; state: EndState }) {
+  const c = (cls: string, r: number) => <circle class={cls} cx={props.at.x} cy={props.at.y} r={r} />;
+  return (
+    <>
+      <Show when={props.state === "empty"}>{c("port-empty", 2.6)}</Show>
+      <Show when={props.state === "hover"}>{c("port-hover", 5.2)}</Show>
+      <Show when={props.state === "origin"}>{c("port-origin", 4.2)}</Show>
+      <Show when={props.state === "candidate"}>{c("port-candidate", 5)}</Show>
+      <Show when={props.state === "target"}>{c("port-target", 6.5)}</Show>
+      <Show when={props.state === "refuse"}>
+        {c("port-refuse", 6)}
+        <line
+          class="port-refuse"
+          x1={props.at.x - 3.4}
+          y1={props.at.y + 3.4}
+          x2={props.at.x + 3.4}
+          y2={props.at.y - 3.4}
+        />
+      </Show>
+    </>
+  );
+}
+
+/** "Click to fire" next to the active pair under the pointer. */
+function HoverPill(props: { ed: NetModel; hidden: boolean; canFire: boolean }) {
+  const ed = props.ed;
+  const info = () => {
+    const h = ed.hover();
+    if (props.hidden || h?.kind !== "wire") return undefined;
+    const active = ed.activeWires().has(h.id);
+    const stuck = ed.stuckWires().has(h.id);
+    if (!active && !stuck) return undefined;
+    const pts = ed.layout().routed.wires.get(h.id);
+    if (!pts) return undefined;
+    const mid = resample(flattenPath(pts, G.radius), 3)[1]!;
+    const alt = held.alt();
+    const text = alt
+      ? "Click to select the wire"
+      : active
+        ? props.canFire
+          ? "Click to fire"
+          : "Click to select"
+        : "No rule: click to write one";
+    return { mid, text, kind: alt ? "alt" : active ? "fire" : "stuck" };
+  };
+  return (
+    <Show when={info()}>
+      {(i) => (
+        <g class={`pill ${i().kind}`} transform={`translate(${i().mid.x + 12} ${i().mid.y})`}>
+          <rect x={0} y={-6.5} width={i().text.length * 4.3 + 12} height={13} rx={6.5} />
+          <text x={6} y={0.4} dominant-baseline="central">
+            {i().text}
+          </text>
+        </g>
+      )}
+    </Show>
+  );
+}
+
+function Wire(props: { ed: NetModel; id: WireId; plain?: boolean; hidden?: boolean; highlighted?: boolean }) {
   const ed = props.ed;
   const d = () => roundedPath(ed.layout().routed.wires.get(props.id) ?? [], G.radius);
   const sel = () => {
     const s = ed.selection();
     return s?.kind === "wire" && s.id === props.id;
+  };
+  const hot = () => {
+    const h = ed.hover();
+    return h?.kind === "wire" && h.id === props.id;
   };
   return (
     <g
@@ -426,7 +693,10 @@ function Wire(props: { ed: NetModel; id: WireId; plain?: boolean }) {
         active: !props.plain && ed.activeWires().has(props.id),
         stuck: !props.plain && ed.stuckWires().has(props.id),
         selected: sel(),
+        hot: hot(),
+        highlighted: !!props.highlighted,
       }}
+      style={{ display: props.hidden ? "none" : undefined }}
       data-wire={props.id}
     >
       <path class="halo" d={d()} />
@@ -437,7 +707,13 @@ function Wire(props: { ed: NetModel; id: WireId; plain?: boolean }) {
   );
 }
 
-function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
+function Agent(props: {
+  ed: NetModel;
+  system: () => System;
+  id: AgentId;
+  pre: boolean;
+  endState: (e: End) => EndState;
+}) {
   const ed = props.ed;
   const p = () => ed.layout().placement.get(props.id);
   const agent = () => ed.view().net.agents.get(props.id);
@@ -452,28 +728,41 @@ function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
     return pos ? agentOutline(pos, arity(), box()) : undefined;
   };
   const slots = () => Array.from({ length: arity() + 1 }, (_, i) => i);
+  const selected = () => ed.isSelected(props.id);
+  const hot = () => {
+    const h = ed.hover();
+    return h?.kind === "agent" && h.id === props.id;
+  };
+
+  /** The agent's outline with some class: its body, or the selection ring drawn under it. */
+  const shapeEl = (cls: string) => {
+    const o = outline()!;
+    return o.kind === "circle" ? (
+      <circle class={cls} cx={p()!.x} cy={p()!.y} r={o.r} />
+    ) : (
+      <polygon class={cls} points={o.points.map((q) => `${q.x},${q.y}`).join(" ")} />
+    );
+  };
 
   return (
     <Show when={p() && outline()}>
       <g
         class="agent"
-        classList={{ filled: !!type()?.filled, box: box(), selected: ed.isSelected(props.id), movable: ed.mode() === "manual" }}
+        classList={{
+          filled: !!type()?.filled,
+          box: box(),
+          selected: selected(),
+          pre: props.pre && !selected(),
+          hot: hot(),
+          movable: ed.mode() === "manual",
+        }}
         data-agent={props.id}
       >
-        {(() => {
-          const o = outline()!;
-          return o.kind === "circle" ? (
-            <>
-              <circle class="ring" cx={p()!.x} cy={p()!.y} r={o.r + 4} />
-              <circle class="body" cx={p()!.x} cy={p()!.y} r={o.r} />
-            </>
-          ) : (
-            <>
-              <polygon class="ring" points={grow(o.points, 4)} />
-              <polygon class="body" points={o.points.map((q) => `${q.x},${q.y}`).join(" ")} />
-            </>
-          );
-        })()}
+        <Show when={selected() || props.pre}>
+          {shapeEl("sel-outer")}
+          {shapeEl("sel-inner")}
+        </Show>
+        {shapeEl("body")}
         <Show when={type()?.symbol}>
           <text
             class="symbol"
@@ -488,16 +777,11 @@ function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
         <For each={slots()}>
           {(slot) => {
             const pos = () => portPos(p()!, arity(), slot);
-            const open = () => agent()?.wires[slot] === NONE;
             return (
-              <circle
-                class="port"
-                classList={{ open: open() }}
-                data-port={`${props.id}:${slot}`}
-                cx={pos().x}
-                cy={pos().y}
-                r={5}
-              />
+              <g class="port">
+                <EndMark at={pos()} state={props.endState(port(props.id, slot))} />
+                <circle class="hit" data-port={`${props.id}:${slot}`} cx={pos().x} cy={pos().y} r={6.5} />
+              </g>
             );
           }}
         </For>
@@ -506,20 +790,7 @@ function Agent(props: { ed: NetModel; system: () => System; id: AgentId }) {
   );
 }
 
-/** Push a polygon's points outward from its centroid, for selection rings. */
-function grow(points: Pt[], by: number): string {
-  const cx = points.reduce((s, p) => s + p.x, 0) / points.length;
-  const cy = points.reduce((s, p) => s + p.y, 0) / points.length;
-  return points
-    .map((p) => {
-      const d = Math.hypot(p.x - cx, p.y - cy) || 1;
-      const k = (d + by * 1.8) / d;
-      return `${cx + (p.x - cx) * k},${cy + (p.y - cy) * k}`;
-    })
-    .join(" ");
-}
-
-/** One frame of a step being animated. */
+/** One frame of a change being animated. */
 function Animated(props: { frame: Frame; freeLabel?: (name: string) => string }) {
   return (
     <g class="animated" style={{ "pointer-events": "none" }}>
@@ -572,7 +843,7 @@ function Animated(props: { frame: Frame; freeLabel?: (name: string) => string })
       </Index>
       <Index each={props.frame.free}>
         {(f) => (
-          <text class="free-label" x={f().x} y={f().dir === "up" ? f().y - 5 : f().y + 12} text-anchor="middle">
+          <text class="free-label" x={f().x} y={f().dir === "up" ? f().y - 7 : f().y + 13} text-anchor="middle">
             {props.freeLabel?.(f().name) ?? f().name}
           </text>
         )}
