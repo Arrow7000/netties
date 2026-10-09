@@ -79,11 +79,11 @@ export const examples: Example[] = [
     name: "Runs forever",
     system: combinators,
     net: (sys) => {
-      // δ and γ facing each other, each holding an eraser, their other aux ports joined.
+      // Lafont's Fig. 3: reduces to itself in four steps.
       const net = new Net();
       const x = new Hole();
       const y = new Hole();
-      link(net, build(net, sys, t("δ", x, t("ε"))), build(net, sys, t("γ", y, t("ε"))));
+      link(net, build(net, sys, t("γ", x, t("ε"))), build(net, sys, t("δ", t("ε"), y)));
       link(net, x, y);
       return net;
     },
@@ -93,7 +93,7 @@ export const examples: Example[] = [
     system: arithmetic,
     net: (sys) => {
       const net = new Net();
-      link(net, build(net, sys, num(2)), build(net, sys, t("×", num(2), f("out"))));
+      link(net, build(net, sys, num(2)), build(net, sys, t("×", f("out"), num(2))));
       return net;
     },
   },
@@ -102,7 +102,7 @@ export const examples: Example[] = [
     system: arithmetic,
     net: (sys) => {
       const net = new Net();
-      link(net, build(net, sys, num(3)), build(net, sys, t("+", num(2), f("out"))));
+      link(net, build(net, sys, num(3)), build(net, sys, t("+", f("out"), num(2))));
       return net;
     },
   },

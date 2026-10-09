@@ -12,7 +12,7 @@ const sys = arithmetic();
 function setup() {
   const net = new Net();
   const two = build(net, sys, t("S", t("S", t("0"))));
-  const times = build(net, sys, t("×", t("S", t("S", t("0"))), f("out")));
+  const times = build(net, sys, t("×", f("out"), t("S", t("S", t("0")))));
   link(net, two, times);
   const groups = new Groups();
   const twoAgents = [...net.agents.keys()].slice(0, 3);

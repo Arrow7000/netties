@@ -25,19 +25,42 @@ const partnerName = (net: Net, name: string) => {
 describe("combinators", () => {
   const sys = combinators();
 
-  it("γγ annihilates with crossed wires", () => {
+  it("γγ annihilates with straight wires, exchanging the ports", () => {
     const { net, w } = pair(sys, "γ", "γ");
     interact(net, sys, w);
     expect(net.agents.size).toBe(0);
+    expect(partnerName(net, "x1")).toBe("y2");
+    expect(partnerName(net, "x2")).toBe("y1");
+  });
+
+  it("δδ annihilates with crossed wires", () => {
+    const { net, w } = pair(sys, "δ", "δ");
+    interact(net, sys, w);
     expect(partnerName(net, "x1")).toBe("y1");
     expect(partnerName(net, "x2")).toBe("y2");
   });
 
-  it("δδ annihilates with straight wires", () => {
-    const { net, w } = pair(sys, "δ", "δ");
+  it("reproduces Lafont's nonterminating net (Fig. 3) in four steps", () => {
+    const net = new Net();
+    const g = net.addAgent(sys.type("γ"));
+    const d = net.addAgent(sys.type("δ"));
+    const e1 = net.addAgent(sys.type("ε"));
+    const e2 = net.addAgent(sys.type("ε"));
+    const w = net.connect(port(g, 0), port(d, 0));
+    net.connect(port(g, 2), port(e1, 0));
+    net.connect(port(d, 1), port(e2, 0));
+    net.connect(port(g, 1), port(d, 2));
+    const start = canonical(net);
     interact(net, sys, w);
-    expect(partnerName(net, "x1")).toBe("y2");
-    expect(partnerName(net, "x2")).toBe("y1");
+    // As in the figure: the erasers go first.
+    const isEps = (e: End) => e.kind === "port" && net.agent(e.agent).type === "ε";
+    for (let i = 0; i < 3; i++) {
+      const rs = net.activePairs();
+      const both = rs.find((r) => net.wire(r).ends.every(isEps));
+      const one = rs.find((r) => net.wire(r).ends.some(isEps));
+      interact(net, sys, (both ?? one ?? rs[0])!);
+    }
+    expect(canonical(net)).toBe(start);
   });
 
   it("ε erases γ by propagating", () => {
@@ -69,10 +92,11 @@ describe("combinators", () => {
   it("keeps wire identity through annihilation", () => {
     const { net, w } = pair(sys, "γ", "γ");
     const before = net.wireAt(free("x1"));
+    const y2 = net.wireAt(free("y2"));
     const rec = interact(net, sys, w);
     const after = net.wireAt(free("x1"));
     expect(after).toBe(before);
-    expect(rec.createdWires.find((c) => c.id === after)?.from).toContain(net.wireAt(free("y1")));
+    expect(rec.createdWires.find((c) => c.id === after)?.from).toContain(y2);
     expect(rec.removedWires).not.toContain(after);
   });
 
@@ -120,8 +144,8 @@ describe("arithmetic", () => {
     const net = new Net();
     const o = net.addAgent(sys.type(op));
     net.connect(port(o, 0), num(net, x));
-    net.connect(port(o, 1), num(net, y));
-    net.connect(port(o, 2), free("out"));
+    net.connect(port(o, 1), free("out"));
+    net.connect(port(o, 2), num(net, y));
     expect(normalize(net, sys).normal).toBe(true);
     return readNum(net, "out");
   };

@@ -1,10 +1,11 @@
 import { A, L, R, System } from "./system";
 
 /**
- * Lafont's interaction combinators (1997). With the clockwise port
+ * Lafont's interaction combinators (1997, Fig. 2). With the clockwise port
  * convention, two agents facing each other have their aux ports in opposite
- * orders, so wires drawn straight across join L(i) to R(n+1-i). That makes
- * δδ (drawn straight) L1–R2, L2–R1, and γγ (drawn crossed) L1–R1, L2–R2.
+ * orders, so wires drawn straight across join L(i) to R(n+1-i). γγ is drawn
+ * straight (L1–R2, L2–R1: "it is γγ, not δδ, which exchanges the ports")
+ * and δδ crossed (L1–R1, L2–R2).
  */
 export function combinators(): System {
   const sys = new System()
@@ -12,8 +13,8 @@ export function combinators(): System {
     .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2 })
     .addType({ id: "ε", name: "eraser", symbol: "ε", arity: 0 });
 
-  sys.addRule({ left: "γ", right: "γ", agents: [], wires: [[L(1), R(1)], [L(2), R(2)]] });
-  sys.addRule({ left: "δ", right: "δ", agents: [], wires: [[L(1), R(2)], [L(2), R(1)]] });
+  sys.addRule({ left: "γ", right: "γ", agents: [], wires: [[L(1), R(2)], [L(2), R(1)]] });
+  sys.addRule({ left: "δ", right: "δ", agents: [], wires: [[L(1), R(1)], [L(2), R(2)]] });
   sys.addRule({ left: "ε", right: "ε", agents: [], wires: [] });
   for (const t of ["γ", "δ"]) {
     // The eraser propagates: one fresh ε on each aux wire.
@@ -31,12 +32,16 @@ export function combinators(): System {
   return sys;
 }
 
-/** Lafont's unary arithmetic: 0, S, + and ×, with δ and ε to copy and erase numbers. */
+/**
+ * Lafont's unary arithmetic (1997, §1.5): 0, S, + and ×, with δ and ε to
+ * copy and erase numbers. As in the paper, + and × take their first
+ * argument on the principal port; aux 1 is the result and aux 2 the second
+ * argument (clockwise from the tip, so drawn △ they read y, x+y left to right).
+ */
 export function arithmetic(): System {
   const sys = new System()
     .addType({ id: "0", name: "zero", symbol: "0", arity: 0 })
     .addType({ id: "S", name: "successor", symbol: "S", arity: 1 })
-    // + and ×: principal port takes the first argument, aux 1 the second, aux 2 is the result.
     .addType({ id: "+", name: "add", symbol: "+", arity: 2 })
     .addType({ id: "×", name: "multiply", symbol: "×", arity: 2 })
     .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2 })
@@ -49,22 +54,22 @@ export function arithmetic(): System {
     left: "+",
     right: "S",
     agents: ["S", "+"],
-    wires: [[A(0, 0), L(2)], [A(0, 1), A(1, 2)], [A(1, 0), R(1)], [A(1, 1), L(1)]],
+    wires: [[A(0, 0), L(1)], [A(0, 1), A(1, 1)], [A(1, 0), R(1)], [A(1, 2), L(2)]],
   });
   // 0 × y = 0, erasing y
-  sys.addRule({ left: "×", right: "0", agents: ["ε", "0"], wires: [[A(0, 0), L(1)], [A(1, 0), L(2)]] });
-  // S x × y = y + (x × y), copying y
+  sys.addRule({ left: "×", right: "0", agents: ["ε", "0"], wires: [[A(0, 0), L(2)], [A(1, 0), L(1)]] });
+  // S x × y = (x × y) + y, copying y
   sys.addRule({
     left: "×",
     right: "S",
     agents: ["δ", "×", "+"],
     wires: [
-      [A(0, 0), L(1)], // copy y
+      [A(0, 0), L(2)], // copy y
       [A(1, 0), R(1)], // x × y'
-      [A(1, 1), A(0, 1)],
-      [A(2, 0), A(0, 2)], // y'' + (x × y')
-      [A(2, 1), A(1, 2)],
-      [A(2, 2), L(2)],
+      [A(1, 2), A(0, 1)],
+      [A(1, 1), A(2, 0)], // (x × y') + y''
+      [A(2, 2), A(0, 2)],
+      [A(2, 1), L(1)],
     ],
   });
   // δ copies numbers, ε erases them.
