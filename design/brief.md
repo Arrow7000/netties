@@ -79,10 +79,24 @@ This is what the user reported. Each item is a requirement unless it's marked
 as an idea.
 
 ### Wires
-- Dragging from a port must never disconnect it from where it's wired. At the
-  moment, dragging a wire's end onto a bare port moves the wire, and dragging
-  it onto another wire's end disconnects both. *Exactly what these gestures
-  should do is still an open question; see below.*
+What a drag means depends on where it starts, so you can always tell what's
+going to happen:
+- **From an empty port:** you're drawing a new wire. Drop it on another
+  empty port to connect the two, or on a loose end to join it to that wire.
+- **From a port with a wire in it:** you're unplugging that end of the wire
+  and carrying it. The real wire follows the cursor, rather than a new dashed
+  one appearing, and the port is left empty. Drop it on an empty port to plug
+  it in there, or on a loose end to join the two wires.
+- **Loose ends are the net's free ports.** A wire end that isn't plugged into
+  anything is exactly what interaction nets call a free port: the net's
+  connection to the outside. Dropping a carried end on empty canvas leaves it
+  loose. In auto layout, a loose end then moves to the top or bottom edge.
+  That's a chance to teach the concept.
+- *Proposal:* a port that already has a wire isn't a drop target. Hovering
+  over it says why: each port takes exactly one wire. That teaches another
+  rule of the formalism.
+- Re-laying out after an edit is animated, the same way steps are, so you can
+  keep track of what moved. (Done in the current version.)
 - The dashed preview wire must be routed exactly like the real wire would be.
 - While you're dragging a wire, highlight both the port you started from and,
   above all, the port you're over: "let go now and it goes here".
@@ -158,8 +172,8 @@ as an idea.
 
 ## Open questions
 
-1. What should dragging from a port that already has a wire do? (Asked in
-   chat.)
+1. Should dropping onto a port that's already wired be refused (the
+   proposal above), or should it do something?
 2. On a trackpad, should two-finger scroll pan and pinch zoom, as in Figma?
 3. Should the rule list, component library and examples live in the sidebar,
    or move to their own places?

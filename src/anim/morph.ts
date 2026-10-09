@@ -1,5 +1,6 @@
 import type { AgentId, End, Net, WireId } from "../core/net";
 import type { StepRecord } from "../core/reduce";
+import type { System } from "../core/system";
 import { G, type Orient, type Placed, type Placement, type Pt, portPos } from "../layout/geometry";
 import type { Routed } from "../layout/route";
 import { flattenPath, resample } from "../render/path";
@@ -19,6 +20,8 @@ import { flattenPath, resample } from "../render/path";
 
 export interface Snapshot {
   net: Net;
+  /** What each agent type looks like, including instance boxes. */
+  sys: System;
   placement: Placement;
   routed: Routed;
 }
@@ -27,6 +30,9 @@ export interface AgentFrame {
   id: AgentId;
   type: string;
   arity: number;
+  symbol: string;
+  filled: boolean;
+  box: boolean;
   x: number;
   y: number;
   /** 0 points down, π points up. */
@@ -66,6 +72,7 @@ interface AgentTrack {
   id: AgentId;
   type: string;
   arity: number;
+  look: { symbol: string; filled: boolean; box: boolean };
   from: Pose;
   to: Pose;
 }
@@ -82,7 +89,21 @@ const SAMPLES = 40;
 const angleOf = (o: Orient) => (o === "down" ? 0 : Math.PI);
 const pose = (p: Placed, scale = 1, opacity = 1): Pose => ({ x: p.x, y: p.y, angle: angleOf(p.orient), scale, opacity });
 
-export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecord[]) {
+/**
+ * For edits rather than steps: where an agent that's appearing was drawn
+ * before (an instance box it's coming out of), and where one that's
+ * disappearing goes (the box it's being folded into).
+ */
+export interface Hints {
+  from?: (id: AgentId) => AgentId | undefined;
+  to?: (id: AgentId) => AgentId | undefined;
+}
+
+export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecord[], hints: Hints = {}) {
+  const look = (type: string) => {
+    const t = after.sys.types.get(type) ?? before.sys.types.get(type);
+    return { symbol: t?.symbol ?? "", filled: !!t?.filled, box: !!t?.box };
+  };
   // Agent tracks.
   const tracks = new Map<AgentId, AgentTrack>();
   const absorbed = new Set<AgentId>();
@@ -90,7 +111,10 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     const a = after.net.agents.get(id);
     if (!a) continue;
     const old = before.placement.get(id);
-    tracks.set(id, { id, type: a.type, arity: a.wires.length - 1, from: old ? pose(old) : pose(p, 0.1, 0), to: pose(p) });
+    const src = old ? undefined : hints.from?.(id);
+    const was = src === undefined ? undefined : before.placement.get(src);
+    const from = old ? pose(old) : was ? { ...pose(p, 0.1, 0), x: was.x, y: was.y } : pose(p, 0.1, 0);
+    tracks.set(id, { id, type: a.type, arity: a.wires.length - 1, look: look(a.type), from, to: pose(p) });
   }
   for (const rec of records) {
     const olds = rec.removed.map((id) => ({ id, p: before.placement.get(id), type: before.net.agents.get(id)?.type }));
@@ -110,8 +134,21 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     for (const o of known) {
       if (absorbed.has(o.id)) continue;
       const arity = before.net.agent(o.id).wires.length - 1;
-      tracks.set(o.id, { id: o.id, type: o.type, arity, from: pose(o.p), to: { ...pose(o.p), x: mid.x, y: mid.y, scale: 0.1, opacity: 0 } });
+      tracks.set(o.id, { id: o.id, type: o.type, arity, look: look(o.type), from: pose(o.p), to: { ...pose(o.p), x: mid.x, y: mid.y, scale: 0.1, opacity: 0 } });
     }
+  }
+
+  // Agents that went without a step taking them (deleted, or folded into a
+  // box) fade where they are, or shrink into their box.
+  const stepped = new Set(records.flatMap((r) => r.removed));
+  for (const [id, p] of before.placement) {
+    if (tracks.has(id) || stepped.has(id)) continue;
+    const a = before.net.agents.get(id);
+    if (!a) continue;
+    const dst = hints.to?.(id);
+    const goes = dst === undefined ? undefined : after.placement.get(dst);
+    const to = goes ? { ...pose(p), x: goes.x, y: goes.y, scale: 0.1, opacity: 0 } : { ...pose(p), opacity: 0 };
+    tracks.set(id, { id, type: a.type, arity: a.wires.length - 1, look: look(a.type), from: pose(p), to });
   }
 
   // Which old wires each wire in the result continues, composed across
@@ -161,7 +198,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
       for (const tr of tracks.values()) {
         const p = lerpPose(tr.from, tr.to, t);
         now.set(tr.id, p);
-        agents.push({ id: tr.id, type: tr.type, arity: tr.arity, ...p });
+        agents.push({ id: tr.id, type: tr.type, arity: tr.arity, ...tr.look, ...p });
       }
       const endNow = (e: End): Pt | undefined => {
         if (e.kind === "free") {

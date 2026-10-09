@@ -70,7 +70,34 @@ export function createNetModel(opts: NetModelOptions) {
   const [frame, setFrame] = createSignal<Frame>();
   let raf = 0;
 
-  const bump = () => setRev((r) => r + 1);
+  /**
+   * The net as drawn just before the current edit. The next `bump` animates
+   * from it to the result, so a change re-lays the net out smoothly instead
+   * of jumping. Steps animate themselves, with their records.
+   */
+  let pending: AnimSnapshot | undefined;
+
+  const bump = () => {
+    setRev((r) => r + 1);
+    const before = pending;
+    if (!before) return;
+    // Let the rest of the edit finish first; a step may still claim it.
+    queueMicrotask(() => {
+      if (pending !== before) return;
+      pending = undefined;
+      animate(before, [], true);
+    });
+  };
+  /** Animate the next change from the net as it's drawn now. */
+  const expectEdit = () => {
+    if (!pending) pending = animSnapshot();
+  };
+  /** Changes that follow the pointer, or replace the net wholesale, shouldn't animate. */
+  const noAnimation = () => {
+    pending = undefined;
+    cancelAnimationFrame(raf);
+    if (frame()) setFrame(undefined);
+  };
   const requestFit = () => setFitTick((t) => t + 1);
   const defs = () => opts.defs?.() ?? noDefs;
 
@@ -99,6 +126,7 @@ export function createNetModel(opts: NetModelOptions) {
 
   /** Record the current state so the next change can be undone. */
   const checkpoint = () => {
+    expectEdit();
     undoStack.push(snapshot());
     if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
     redoStack.length = 0;
@@ -108,6 +136,7 @@ export function createNetModel(opts: NetModelOptions) {
   const undo = () => {
     const prev = undoStack.pop();
     if (!prev) return;
+    expectEdit();
     redoStack.push(snapshot());
     restoreSnapshot(prev);
     setHistorySize({ undo: undoStack.length, redo: redoStack.length });
@@ -116,6 +145,7 @@ export function createNetModel(opts: NetModelOptions) {
   const redo = () => {
     const next = redoStack.pop();
     if (!next) return;
+    expectEdit();
     undoStack.push(snapshot());
     restoreSnapshot(next);
     setHistorySize({ undo: undoStack.length, redo: redoStack.length });
@@ -214,6 +244,43 @@ export function createNetModel(opts: NetModelOptions) {
     return g !== undefined ? { group: g } : { agent: viewId };
   };
 
+  /** Capture the net as drawn now, to animate from after a change. */
+  function animSnapshot(): AnimSnapshot {
+    const l = layout();
+    return { net: view().net.clone(), sys: view().sys, placement: l.placement, routed: l.routed };
+  }
+
+  /** Animate from a snapshot to the net as it is now, given what the step did (if it was a step). */
+  function animate(before: AnimSnapshot, records: StepRecord[], edit = false, duration = 420) {
+    pending = undefined;
+    cancelAnimationFrame(raf);
+    setFrame(undefined);
+    if ((!records.length && !edit) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const l = layout();
+    let morph;
+    try {
+      // An agent coming out of a collapsed instance, or going into one, moves via its box.
+      const boxOf = (shown: Placement) => (id: AgentId) =>
+        id < 0 ? undefined : groups.chain(groups.of.get(id)).map((g) => -g).find((b) => shown.has(b));
+      morph = buildMorph(before, { net: view().net, sys: view().sys, placement: l.placement, routed: l.routed }, records, {
+        from: boxOf(before.placement),
+        to: boxOf(l.placement),
+      });
+    } catch (e) {
+      console.error("animation failed", e);
+      return;
+    }
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const t = (now - t0) / duration;
+      if (t >= 1) return setFrame(undefined);
+      setFrame(morph.at(t));
+      raf = requestAnimationFrame(tick);
+    };
+    setFrame(morph.at(0));
+    raf = requestAnimationFrame(tick);
+  }
+
   return {
     rev,
     bump,
@@ -230,6 +297,7 @@ export function createNetModel(opts: NetModelOptions) {
     defs,
     /** Replace the whole net (not undoable by itself; call `checkpoint` first if it should be). */
     setNet(n: Net, pos = new Map<AgentId, Placed>(), gs = new Groups()) {
+      noAnimation();
       lastAuto = undefined;
       batch(() => {
         net = n;
@@ -258,36 +326,10 @@ export function createNetModel(opts: NetModelOptions) {
     clearHistory,
     fixedInterface: !!opts.fixedInterface,
 
-    /** The current animation frame, while a step is being animated. */
+    /** The current animation frame, while a change is being animated. */
     frame,
-    /** Capture the net as drawn now, to animate from after a change. */
-    animSnapshot(): AnimSnapshot {
-      const l = layout();
-      return { net: view().net.clone(), placement: l.placement, routed: l.routed };
-    },
-    /** Animate from a snapshot to the net as it is now, given what the step did. */
-    animate(before: AnimSnapshot, records: StepRecord[], duration = 420) {
-      cancelAnimationFrame(raf);
-      setFrame(undefined);
-      if (!records.length || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      const l = layout();
-      let morph;
-      try {
-        morph = buildMorph(before, { net: view().net, placement: l.placement, routed: l.routed }, records);
-      } catch (e) {
-        console.error("animation failed", e);
-        return;
-      }
-      const t0 = performance.now();
-      const tick = (now: number) => {
-        const t = (now - t0) / duration;
-        if (t >= 1) return setFrame(undefined);
-        setFrame(morph.at(t));
-        raf = requestAnimationFrame(tick);
-      };
-      setFrame(morph.at(0));
-      raf = requestAnimationFrame(tick);
-    },
+    animSnapshot,
+    animate,
 
     /** Whether a view agent is selected (a box counts when its instance is). */
     isSelected(viewId: AgentId) {
@@ -467,6 +509,7 @@ export function createNetModel(opts: NetModelOptions) {
     moveAgent(viewId: AgentId, to: Pt) {
       const g = view().box.get(viewId);
       const ids = g !== undefined ? groups.members(g) : [viewId];
+      noAnimation();
       const cur = layout().placement.get(viewId);
       if (!cur) return;
       const dx = to.x - cur.x;
@@ -480,6 +523,7 @@ export function createNetModel(opts: NetModelOptions) {
 
     /** Manual mode: move every agent in an expanded instance. */
     moveGroup(g: GroupId, dx: number, dy: number) {
+      noAnimation();
       for (const id of groups.members(g)) {
         const p = positions.get(id);
         if (p) positions.set(id, { ...p, x: p.x + dx, y: p.y + dy });
@@ -498,12 +542,14 @@ export function createNetModel(opts: NetModelOptions) {
 
     /** Lay the net out afresh, forgetting where things were. */
     tidy() {
+      expectEdit();
       lastAuto = undefined;
       bump();
     },
 
     /** Restore mode and positions directly, e.g. when loading a saved document. */
     restoreView(m: LayoutMode, pos: Map<AgentId, Placed>) {
+      noAnimation();
       positions = pos;
       setModeSignal(m);
       bump();

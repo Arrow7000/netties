@@ -325,7 +325,7 @@ export function Canvas(props: CanvasProps) {
         aria-label="Net canvas"
       >
         <g transform={`translate(${view().x} ${view().y}) scale(${view().k})`}>
-          <Show when={ed.frame()}>{(f) => <Animated frame={f()} system={sys} freeLabel={props.freeLabel} />}</Show>
+          <Show when={ed.frame()}>{(f) => <Animated frame={f()} freeLabel={props.freeLabel} />}</Show>
           <g style={{ display: ed.frame() ? "none" : undefined }}>
             <For each={hulls()}>
               {(h) => (
@@ -520,7 +520,7 @@ function grow(points: Pt[], by: number): string {
 }
 
 /** One frame of a step being animated. */
-function Animated(props: { frame: Frame; system: () => System; freeLabel?: (name: string) => string }) {
+function Animated(props: { frame: Frame; freeLabel?: (name: string) => string }) {
   return (
     <g class="animated" style={{ "pointer-events": "none" }}>
       <Index each={props.frame.wires}>
@@ -536,19 +536,18 @@ function Animated(props: { frame: Frame; system: () => System; freeLabel?: (name
       </Index>
       <Index each={props.frame.agents}>
         {(a) => {
-          const type = () => props.system().types.get(a().type);
-          const o = () => agentOutline({ x: 0, y: 0, orient: "down" }, a().arity);
+          const o = () => agentOutline({ x: 0, y: 0, orient: "down" }, a().arity, a().box);
           const deg = () => (a().angle * 180) / Math.PI;
           const label = () => {
             // The label sits at the centroid of the turned triangle, kept upright.
             const sh = shape(a().arity);
-            const ly = sh.circle ? 0 : -sh.h / 6;
+            const ly = sh.circle || a().box ? 0 : -sh.h / 6;
             return { x: -Math.sin(a().angle) * ly, y: Math.cos(a().angle) * ly };
           };
           return (
             <g
               class="agent"
-              classList={{ filled: !!type()?.filled }}
+              classList={{ filled: a().filled, box: a().box }}
               transform={`translate(${a().x} ${a().y}) scale(${a().scale})`}
               style={{ opacity: a().opacity }}
             >
@@ -562,9 +561,9 @@ function Animated(props: { frame: Frame; system: () => System; freeLabel?: (name
                   );
                 })()}
               </g>
-              <Show when={type()?.symbol}>
+              <Show when={a().symbol}>
                 <text class="symbol" x={label().x} y={label().y} text-anchor="middle" dominant-baseline="central">
-                  {type()!.symbol}
+                  {a().symbol}
                 </text>
               </Show>
             </g>
