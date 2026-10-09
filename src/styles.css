@@ -835,3 +835,26 @@ details.missing .pair {
     grid-template-rows: minmax(0, 1fr) 28px minmax(0, 1fr);
   }
 }
+
+/* Text */
+
+.text-view {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.text-area {
+  margin: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+  padding: 12px 14px;
+  font-family: "STIX Two Text", serif;
+  font-size: 15px;
+  line-height: 1.6;
+  resize: none;
+  tab-size: 2;
+}
+
+.text-error {
+  color: var(--warn);
+}

@@ -4,6 +4,7 @@ import { createEditor } from "./state/editor";
 import { Canvas } from "./ui/Canvas";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { RuleEditor } from "./ui/RuleEditor";
+import { TextView } from "./ui/TextView";
 import { TranslateView } from "./ui/TranslateView";
 import { Sidebar } from "./ui/Sidebar";
 
@@ -181,6 +182,9 @@ export function App(props: { initial?: Doc }) {
         </div>
         <Show when={ed.rev() >= 0 && ed.net.agents.size === 0 && ed.net.free.size === 0}>
           <div class="hint">Add an agent from the list on the right, then drag between ports to wire them up.</div>
+        </Show>
+        <Show when={ed.textOpen()}>
+          <TextView ed={ed} />
         </Show>
         <Show when={ed.translateOpen()}>
           <TranslateView ed={ed} />

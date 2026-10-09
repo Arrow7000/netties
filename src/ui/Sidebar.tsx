@@ -345,6 +345,9 @@ export function Sidebar(props: { ed: Editor; theme: string; setTheme: (t: string
         <button class="btn" onClick={exportSVG}>
           Export SVG
         </button>
+        <button class="btn" onClick={ed.openText} title="See and edit the agents, rules and net as text">
+          Text
+        </button>
       </div>
     </aside>
   );

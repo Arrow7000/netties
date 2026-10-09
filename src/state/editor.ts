@@ -41,6 +41,7 @@ export function createEditor(initial: Doc | undefined) {
   /** The component open in the component editor. */
   const [componentOpen, setComponentOpen] = createSignal<string>();
   const [translateOpen, setTranslateOpen] = createSignal(false);
+  const [textOpen, setTextOpen] = createSignal(false);
 
   /** Changes to the net or to the system. */
   const rev = createMemo(() => model.rev() + sysRev() * 1e6);
@@ -402,6 +403,23 @@ export function createEditor(initial: Doc | undefined) {
       if (g !== undefined) model.bump();
     },
 
+    textOpen,
+    openText: () => setTextOpen(true),
+    closeText: () => setTextOpen(false),
+    /** Replace everything with a parsed system and net. */
+    loadParsed(sys: System, net: Net) {
+      stop();
+      model.checkpoint();
+      batch(() => {
+        system = sys;
+        library = new Map();
+        touchSystem();
+        model.setNet(net);
+        model.restoreView("auto", new Map());
+        setStats(emptyStats());
+      });
+      model.requestFit();
+    },
     translateOpen,
     /** Open the combinator translation, if the net is ready for it. */
     openTranslate() {
