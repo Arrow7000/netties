@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties: canvas-first</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=STIX+Two+Text:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ui-font:'Geist',system-ui,sans-serif;
+  --paper:#ffffff; --ink:#000000;
+  --chrome:#ffffff; --chrome-2:#f3f4f6; --chrome-3:#e9ebee; --line:#e2e4e8; --line-2:#cfd3d9;
+  --text:#1c1f24; --muted:#697080; --faint:#9aa0ab;
+  --accent:#2d5bff; --accent-soft:#e8eeff; --active:#f2a20c; --on-active:#2a1b00; --stuck:#d9472b;
+  --dot:rgba(0,0,0,.10);
+  --shadow:0 1px 2px rgba(16,20,28,.06),0 8px 24px rgba(16,20,28,.08);
+  --radius-island:12px; --radius-ctl:8px;
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  --active-op:.85;
+  --paper:#000000; --ink:#ffffff;
+  --chrome:#17181b; --chrome-2:#202226; --chrome-3:#2a2d32; --line:#2c2f35; --line-2:#3b3f46;
+  --text:#eceef1; --muted:#9aa1ad; --faint:#6b717c;
+  --accent:#7090ff; --accent-soft:#1d2645; --active:#ffb321; --on-active:#2a1b00; --stuck:#ff6a4d;
+  --dot:rgba(255,255,255,.13);
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.45);
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme=light]){
+    --active-op:.85;
+    --paper:#000000; --ink:#ffffff;
+    --chrome:#17181b; --chrome-2:#202226; --chrome-3:#2a2d32; --line:#2c2f35; --line-2:#3b3f46;
+    --text:#eceef1; --muted:#9aa1ad; --faint:#6b717c;
+    --accent:#7090ff; --accent-soft:#1d2645; --active:#ffb321; --on-active:#2a1b00; --stuck:#ff6a4d;
+    --dot:rgba(255,255,255,.13);
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.45);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--paper);color:var(--text);font:400 13px/1.4 var(--ui-font);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 1}
+button{font:inherit;color:inherit}
+#canvas{position:fixed;inset:0;background-color:var(--paper);background-image:radial-gradient(var(--dot) 1px,transparent 1.2px)}
+/* islands */
+.island{position:fixed;z-index:10;background:var(--chrome);border:1px solid var(--line);border-radius:var(--radius-island);box-shadow:var(--shadow);display:flex;align-items:center;gap:2px;padding:4px}
+.sep{width:1px;align-self:stretch;background:var(--line);margin:4px 4px}
+.btn{height:32px;min-width:32px;padding:0 10px;border:0;border-radius:var(--radius-ctl);background:transparent;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;white-space:nowrap;font-weight:500}
+.btn:hover{background:var(--chrome-2)}
+.btn:active{background:var(--chrome-3)}
+.btn:focus-visible,.seg button:focus-visible,.tile:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn[disabled]{opacity:.4;cursor:default;background:transparent}
+.btn.icon{padding:0;width:32px}
+.btn.primary{background:var(--text);color:var(--chrome)}
+.btn.primary:hover{background:color-mix(in srgb,var(--text) 85%,var(--chrome))}
+.btn.run{background:var(--active);color:var(--on-active)}
+.btn.run:hover{background:color-mix(in srgb,var(--active) 85%,#fff)}
+.btn.stop{background:var(--stuck);color:#fff}
+.btn.ghost{border:1px solid var(--line-2)}
+.btn.danger{color:var(--stuck)}
+.btn svg{width:16px;height:16px;flex:none}
+.btn .kbd{color:var(--faint);font-weight:400;font-size:11px}
+.seg{display:inline-flex;background:var(--chrome-2);border-radius:var(--radius-ctl);padding:2px;gap:2px}
+.seg button{border:0;background:transparent;height:28px;padding:0 10px;border-radius:6px;cursor:pointer;color:var(--muted);font-weight:500}
+.seg button[aria-pressed=true]{background:var(--chrome);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.12),0 0 0 1px var(--line)}
+.brand{font-weight:600;letter-spacing:-.01em;padding:0 8px 0 6px;display:flex;align-items:center;gap:7px}
+.brand i{font:italic 500 18px 'STIX Two Text',serif;line-height:1}
+#top-left{top:12px;left:12px}
+#top-mid{top:12px;left:50%;transform:translateX(-50%)}
+#top-right{top:12px;right:12px}
+#run{bottom:14px;left:50%;transform:translateX(-50%);padding:5px}
+#viewctl{bottom:14px;right:12px}
+#stats{bottom:14px;left:12px;padding:4px 6px 4px 4px}
+.zoomval{min-width:48px;font-variant-numeric:tabular-nums;color:var(--muted)}
+/* speed */
+.speed{display:flex;align-items:center;gap:8px;padding:0 6px 0 4px}
+.speed input{width:110px;accent-color:var(--text)}
+.speed output{min-width:38px;font-variant-numeric:tabular-nums;color:var(--muted);text-align:right}
+.chip{display:flex;flex-direction:column;padding:2px 10px;line-height:1.15}
+.chip b{font-weight:600;font-size:14px}
+.chip span{font-size:11px;color:var(--muted)}
+/* palette panel */
+#panel{top:64px;right:12px;max-height:calc(100vh - 140px);width:236px;flex-direction:column;align-items:stretch;padding:0;gap:0;overflow:hidden}
+#panel section{padding:12px 12px 10px;border-bottom:1px solid var(--line)}
+#panel section:last-child{border-bottom:0;flex:1;overflow:auto}
+.sec-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sec-h h2{font-size:12px;font-weight:600;margin:0;color:var(--text)}
+.sec-h .btn{height:26px;padding:0 8px;font-size:12px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.tile{position:relative;border:1px solid var(--line);background:var(--chrome);border-radius:10px;padding:6px 2px 5px;display:flex;flex-direction:column;align-items:center;gap:1px;cursor:grab;color:var(--ink)}
+.tile:hover{border-color:var(--line-2);background:var(--chrome-2)}
+.tile.dragging{opacity:.4}
+.tile .nm{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 3px}
+.tile .edit{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:5px;display:none;align-items:center;justify-content:center;color:var(--muted)}
+.tile:hover .edit{display:flex}
+.tile .edit svg{width:12px;height:12px}
+.tile.comp{border-style:dashed}
+.tile.comp .tag{font-size:10px;color:var(--faint)}
+.hintline{font-size:11.5px;color:var(--muted);margin-top:8px}
+.rules{list-style:none;margin:0;padding:0}
+.rule{display:flex;align-items:center;gap:8px;padding:3px 4px 3px 2px;border-radius:8px;cursor:pointer;color:var(--ink)}
+.rule:hover{background:var(--chrome-2)}
+.rule .lbl{flex:1;color:var(--text)}
+.rule .lbl i,.sym{font:italic 15px 'STIX Two Text',serif}
+.rule .pen{opacity:.55;width:26px;height:26px}
+.rule:hover .pen{opacity:1}
+.rule.missing .lbl{color:var(--muted)}
+.rule.flash{animation:flash 1s}
+@keyframes flash{0%,40%{background:var(--accent-soft)}100%{background:transparent}}
+details.miss summary{cursor:pointer;font-size:12px;color:var(--muted);padding:6px 2px;list-style:none;display:flex;align-items:center;gap:6px}
+details.miss summary::-webkit-details-marker{display:none}
+details.miss summary svg{width:12px;height:12px;transition:transform .15s}
+details.miss[open] summary svg{transform:rotate(90deg)}
+/* context bar */
+#ctx{position:fixed;z-index:12;display:none;transform:translate(-50%,-100%)}
+#ctx.on{display:flex}
+#ctx .what{padding:0 8px;color:var(--muted);white-space:nowrap}
+/* menus */
+.menu{position:fixed;z-index:40;min-width:240px;background:var(--chrome);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;display:none}
+.menu.on{display:block}
+.menu .mh{padding:8px 10px 6px;font-size:12px;color:var(--muted)}
+.menu .mi{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;padding:6px 10px;border-radius:8px;cursor:pointer}
+.menu .mi:hover{background:var(--chrome-2)}
+.menu .mi .th{width:44px;height:34px;border:1px solid var(--line);border-radius:6px;background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--ink);flex:none}
+.menu .mi .mt{display:flex;flex-direction:column}
+.menu .mi .ms{font-size:11.5px;color:var(--muted)}
+.menu .mi.cur{background:var(--accent-soft)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:6px 4px}
+.menu .mi.danger{color:var(--stuck)}
+/* popover editor */
+.pop{position:fixed;z-index:30;background:var(--chrome);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);display:none}
+.pop.on{display:block}
+#typeEd{width:520px;right:262px;top:64px}
+.ed-grid{display:grid;grid-template-columns:220px 1fr}
+.ed-prev{background:var(--paper);border-right:1px solid var(--line);border-radius:14px 0 0 14px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;padding:14px;color:var(--ink);min-height:300px}
+.ed-prev .stage{width:190px;height:190px;display:flex;align-items:center;justify-content:center}
+.ed-prev .stage svg{transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
+.ed-prev .stage.bump svg{transform:scale(1.08)}
+.ed-prev .legend{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-top:6px}
+.ed-prev .legend span{display:flex;align-items:center;gap:5px}
+.ed-prev .legend .d{width:8px;height:8px;border-radius:50%;background:var(--active)}
+.ed-prev .legend .o{width:8px;height:8px;border-radius:50%;border:1.2px solid var(--ink)}
+.ed-form{padding:14px 16px 14px;display:flex;flex-direction:column;gap:12px}
+.ed-form .row{display:flex;flex-direction:column;gap:5px}
+.ed-form label,.ed-form .lab{font-size:12px;color:var(--muted);font-weight:500}
+.ed-form .two{display:grid;grid-template-columns:76px 1fr;gap:10px}
+.inp{height:34px;border:1px solid var(--line-2);border-radius:8px;background:var(--chrome);color:var(--text);padding:0 10px;font:inherit;width:100%}
+.inp:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.inp.symbol{font:italic 22px 'STIX Two Text',serif;text-align:center;padding:0}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line-2);border-radius:8px;height:34px}
+.stepper button{width:34px;height:32px;border:0;background:transparent;cursor:pointer;font-size:16px}
+.stepper button:hover{background:var(--chrome-2)}
+.stepper output{min-width:34px;text-align:center;font-weight:600}
+.ed-note{font-size:12px;color:var(--muted);background:var(--chrome-2);border-radius:10px;padding:10px 12px}
+.ed-note b{color:var(--text);font-weight:600}
+.ed-note .rl{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ed-note .rl button{border:1px solid var(--line-2);background:var(--chrome);border-radius:999px;padding:2px 10px 2px 8px;cursor:pointer;display:flex;align-items:center;gap:4px;color:var(--text)}
+.ed-head{display:flex;justify-content:space-between;align-items:center}
+.ed-head h3{margin:0;font-size:14px;font-weight:600}
+.ed-foot{display:flex;justify-content:space-between;gap:8px;margin-top:2px}
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(10,12,16,.28);z-index:50;display:none;align-items:center;justify-content:center}
+.scrim.on{display:flex}
+.sheet{background:var(--chrome);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);width:min(640px,calc(100vw - 32px));padding:18px}
+.sheet h3{margin:0 0 4px;font-size:16px}
+.sheet p{margin:0 0 12px;color:var(--muted)}
+.rule-io{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center}
+.rule-io .side{border:1px solid var(--line);border-radius:12px;height:200px;background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--ink);position:relative}
+.rule-io .side .cap{position:absolute;top:8px;left:10px;font-size:11px;color:var(--muted)}
+.rule-io .arrow{color:var(--muted);font-size:20px}
+.placeholder{color:var(--muted);font-size:12px;text-align:center;padding:0 20px}
+/* combinators screen */
+#comb{position:fixed;inset:0;z-index:5;background:var(--paper);display:none;align-items:center;justify-content:center}
+#comb.on{display:flex}
+#comb .box{max-width:420px;text-align:center;color:var(--muted)}
+#comb h2{color:var(--text);font-size:18px;margin:0 0 6px}
+/* toast */
+#toast{position:fixed;left:50%;bottom:78px;transform:translate(-50%,10px);z-index:60;background:var(--text);color:var(--chrome);border-radius:10px;padding:8px 8px 8px 14px;display:flex;gap:10px;align-items:center;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;max-width:min(560px,calc(100vw - 32px))}
+#toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#toast button{background:transparent;border:1px solid color-mix(in srgb,var(--chrome) 35%,transparent);color:var(--chrome);border-radius:7px;height:28px;padding:0 10px;cursor:pointer;font-weight:500}
+/* kit tooltip skin */
+.nk-tip{background:var(--chrome);color:var(--text);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:8px 10px;font-size:12px}
+.nk-tip .tip-h{font-weight:600;margin-bottom:2px}
+.nk-tip .tip-b{color:var(--muted)}
+.nk-tip .tip-dim{color:var(--muted);font-weight:400}
+.nk-tip.refuse{border-color:var(--stuck)}
+.nk-tip.refuse .tip-h{color:var(--stuck)}
+.nk-tip.typed{border-color:var(--line-2)}
+.nk-tip.fire{border-color:var(--active)}
+.nk-tip.stuck{border-color:var(--stuck)}
+.nk-emptyin{color:var(--muted);text-align:center;font-size:13px;border:1.5px dashed var(--line-2);border-radius:14px;padding:22px 28px;background:var(--chrome)}
+.nk-emptyin b{color:var(--text);display:block;font-size:14px;margin-bottom:3px}
+.nk-paghost .nk-glyph{filter:drop-shadow(0 4px 10px rgba(0,0,0,.18))}
+.nk-paghost.off{opacity:.45}
+.typedflag{position:fixed;top:64px;left:12px;z-index:9;max-width:300px;font-size:12px;color:var(--muted);background:var(--chrome);border:1px solid var(--line);border-radius:10px;padding:8px 10px;box-shadow:var(--shadow);display:none}
+.typedflag.on{display:block}
+.typedflag b{color:var(--text)}
+@media (max-width:760px){#panel{display:none}#top-mid{display:none}.speed input{width:70px}#stats{display:none}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="canvas"></div>
+
+<div class="island" id="top-left" data-chrome>
+  <div class="brand"><i>γ</i>netties</div>
+  <div class="sep"></div>
+  <button class="btn" id="exBtn" aria-haspopup="menu">Examples <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn" id="fileBtn" aria-haspopup="menu">Net <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+</div>
+<div class="island" id="top-mid" data-chrome>
+  <div class="seg" role="tablist" aria-label="Screen">
+    <button role="tab" aria-pressed="true" data-screen="net">Net</button>
+    <button role="tab" aria-pressed="false" data-screen="comb">Combinator translation</button>
+  </div>
+</div>
+<div class="island" id="top-right" data-chrome>
+  <button class="btn icon" id="undo" title="Undo"><svg viewBox="0 0 16 16"><path d="M6 4L3 7l3 3M3.5 7H10a3 3 0 010 6H8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <button class="btn icon" id="redo" title="Redo"><svg viewBox="0 0 16 16"><path d="M10 4l3 3-3 3M12.5 7H6a3 3 0 000 6h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <div class="sep"></div>
+  <button class="btn icon" id="theme" title="Switch theme"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 2.5a5.5 5.5 0 010 11z" fill="currentColor"/></svg></button>
+</div>
+
+<div class="typedflag" id="typedflag" data-chrome><b>Typed ports (preview).</b> Every port here is a Nat input or output. Drag any wire end: ports it can't plug into turn grey.</div>
+
+<aside class="island" id="panel" data-chrome aria-label="Palette">
+  <section>
+    <div class="sec-h"><h2>Agents</h2><button class="btn ghost" id="newType"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5"/></svg>New type</button></div>
+    <div class="tiles" id="typeTiles"></div>
+    <div class="sec-h" style="margin-top:12px"><h2>Components</h2><button class="btn ghost" id="newComp" title="Select some agents first"><svg viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.5"/><path d="M8 6v4M6 8h4" stroke="currentColor" stroke-width="1.3"/></svg>From selection</button></div>
+    <div class="tiles" id="compTiles"></div>
+    <div class="hintline">Drag onto the canvas to add. Click to edit.</div>
+  </section>
+  <section>
+    <div class="sec-h"><h2>Rules</h2><button class="btn ghost" id="newRule"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5"/></svg>New rule</button></div>
+    <ul class="rules" id="ruleList"></ul>
+    <details class="miss" id="missing"><summary></summary><ul class="rules" id="missList"></ul></details>
+  </section>
+</aside>
+
+<div class="island" id="stats" data-chrome title="Stats for this run">
+  <div class="chip"><b id="stSteps">0</b><span>steps</span></div>
+  <div class="chip"><b id="stInter">0</b><span>interactions</span></div>
+  <div class="chip"><b id="stAgents">0</b><span>agents</span></div>
+</div>
+
+<div class="island" id="run" data-chrome aria-label="Run">
+  <button class="btn ghost" id="step" title="Fire one active pair (Space)">
+    <svg viewBox="0 0 16 16"><path d="M4 3.5l6 4.5-6 4.5z" fill="currentColor"/><path d="M12 3.5v9" stroke="currentColor" stroke-width="1.6"/></svg>Step</button>
+  <button class="btn ghost" id="stepAll" title="Fire every active pair at once">
+    <svg viewBox="0 0 16 16"><path d="M2 3.5l5 4.5-5 4.5zM8 3.5l5 4.5-5 4.5z" fill="currentColor"/></svg>Step all</button>
+  <button class="btn run" id="runBtn"><svg viewBox="0 0 16 16"><path d="M4.5 3l8 5-8 5z" fill="currentColor"/></svg><span>Run</span></button>
+  <div class="sep"></div>
+  <div class="speed" title="Animation speed">
+    <button class="btn icon" id="slowmo" title="Slow motion (0.2×)" aria-pressed="false"><svg viewBox="0 0 16 16"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.5v3l2 1.5M6.5 1.8h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+    <input type="range" id="speed" min="0" max="100" value="50" aria-label="Speed">
+    <output id="speedOut">1×</output>
+  </div>
+</div>
+
+<div class="island" id="viewctl" data-chrome>
+  <div class="seg" aria-label="Layout mode">
+    <button aria-pressed="true" data-layout="auto" title="The engine places agents">Auto layout</button>
+    <button aria-pressed="false" data-layout="manual" title="You place agents">Manual</button>
+  </div>
+  <button class="btn" id="tidy" title="Tidy up positions (manual layout)">Tidy</button>
+  <div class="sep"></div>
+  <button class="btn icon" id="zoomOut" title="Zoom out"><svg viewBox="0 0 16 16"><path d="M3.5 8h9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn zoomval" id="zoomVal" title="Reset to 100%">100%</button>
+  <button class="btn icon" id="zoomIn" title="Zoom in"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn" id="fit" title="Fit net to view (F)"><svg viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Fit</button>
+</div>
+
+<div class="island" id="ctx" data-chrome></div>
+
+<div class="menu" id="exMenu" role="menu" data-chrome></div>
+<div class="menu" id="fileMenu" role="menu" data-chrome>
+  <button class="mi" data-act="text"><div class="mt">Text view<span class="ms">Edit the net as text</span></div></button>
+  <button class="mi" data-act="open"><div class="mt">Open file…</div></button>
+  <button class="mi" data-act="save"><div class="mt">Save file</div></button>
+  <hr>
+  <button class="mi" data-act="share"><div class="mt">Copy share link</div></button>
+  <button class="mi" data-act="svg"><div class="mt">Export SVG</div></button>
+  <hr>
+  <button class="mi danger" data-act="clear"><div class="mt">Clear net<span class="ms">Removes everything. You can undo it.</span></div></button>
+</div>
+
+<div class="pop" id="typeEd" data-chrome role="dialog" aria-label="Agent type"></div>
+
+<div class="scrim" id="ruleScrim"><div class="sheet" id="ruleSheet" data-chrome></div></div>
+
+<div id="comb"><div class="box"><h2>Combinator translation</h2>Translates each agent type and rule into the three Lafont combinators, so you can step both side by side. This screen isn't part of the prototype.<br><br><button class="btn ghost" id="combBack">Back to the net</button></div></div>
+
+<div id="toast" role="status"><span id="toastText"></span><button id="toastUndo">Undo</button></div>
+
+<script src="../shared/netkit.js"></script>
+<script>
+(async function () {
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
+  const esc = NetKit.esc;
+  const data = await NetKit.load("../../assets/nets.json");
+  const view = new NetKit.View($("#canvas"), {
+    selectWireKey: "alt",
+    previewOnHover: true,
+    fitPad: { t: 80, r: 290, b: 90, l: 60 },
+    emptyHTML: "<b>The net is empty</b>Drag an agent in from the palette on the right.",
+  });
+  const S = new NetKit.Session(data, view);
+
+  /* ---------- theme */
+  const root = document.documentElement;
+  try { const t = localStorage.getItem("nt-theme-a"); if (t) root.dataset.theme = t; } catch (_) {}
+  $("#theme").onclick = () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("nt-theme-a", root.dataset.theme); } catch (_) {}
+  };
+
+  /* ---------- toast */
+  let toastT;
+  function toast(text, undo) {
+    $("#toastText").textContent = text; $("#toastUndo").style.display = undo ? "" : "none";
+    $("#toast").classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => $("#toast").classList.remove("on"), undo ? 6000 : 3800);
+  }
+  $("#toastUndo").onclick = () => { S.undo(); $("#toast").classList.remove("on"); };
+
+  /* ---------- camera grid + zoom readout */
+  view.on("camera", (c) => {
+    const g = 20 * c.z; $("#canvas").style.backgroundSize = `${g}px ${g}px`; $("#canvas").style.backgroundPosition = `${c.x}px ${c.y}px`;
+    $("#zoomVal").textContent = Math.round(c.z * 100) + "%"; placeCtx();
+  });
+
+  /* ---------- examples menu */
+  function buildExMenu() {
+    const m = $("#exMenu");
+    m.innerHTML = `<div class="mh">Loading an example replaces the whole net. You can undo it.</div>` +
+      data.examples.map((e, i) => `<button class="mi${i === S.exIndex ? " cur" : ""}" data-i="${i}"><span class="th">${NetKit.miniSVG(e.states[0], e.types, 40, 30, { pad: 14 })}</span><span class="mt">${esc(e.name)}<span class="ms">${e.preview ? "Preview of typed ports" : e.synthetic ? "Shows a stuck pair" : (e.states.length - 1) + (e.states.length === 2 ? " step" : " steps") + " to the end"}</span></span></button>`).join("");
+    m.querySelectorAll(".mi").forEach((b) => (b.onclick = () => { closeMenus(); const was = S.dirty; S.load(+b.dataset.i); toast(`Loaded "${S.ex.name}". It replaced the net you had.`, true); }));
+  }
+  function openMenu(m, anchor) {
+    const open = m.classList.contains("on"); closeMenus(); if (open) return;
+    const r = anchor.getBoundingClientRect(); m.style.left = r.left + "px"; m.style.top = r.bottom + 8 + "px"; m.classList.add("on");
+  }
+  function closeMenus() { $$(".menu").forEach((m) => m.classList.remove("on")); }
+  $("#exBtn").onclick = (e) => { e.stopPropagation(); buildExMenu(); openMenu($("#exMenu"), $("#exBtn")); };
+  $("#fileBtn").onclick = (e) => { e.stopPropagation(); openMenu($("#fileMenu"), $("#fileBtn")); };
+  document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".menu") && !e.target.closest("#exBtn,#fileBtn")) closeMenus(); if (!e.target.closest("#typeEd") && !e.target.closest(".tile") && $("#typeEd").classList.contains("on") && !e.target.closest("#newType")) closeEditor(); });
+  $("#fileMenu").onclick = (e) => {
+    const b = e.target.closest(".mi"); if (!b) return; closeMenus();
+    const a = b.dataset.act;
+    if (a === "clear") { S.clear(); toast("Cleared the net.", true); }
+    else toast({ text: "The text view isn't part of this prototype.", open: "Opening files isn't part of this prototype.", save: "Saving isn't part of this prototype.", share: "Link copied (not really, this is a prototype).", svg: "SVG export isn't part of this prototype." }[a]);
+  };
+
+  /* ---------- screen switch */
+  $$("[data-screen]").forEach((b) => (b.onclick = () => {
+    $$("[data-screen]").forEach((x) => x.setAttribute("aria-pressed", x === b)); $("#comb").classList.toggle("on", b.dataset.screen === "comb");
+  }));
+  $("#combBack").onclick = () => $("[data-screen=net]").click();
+
+  /* ---------- palette */
+  const ICON_EDIT = `<svg viewBox="0 0 16 16"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+  function buildPalette() {
+    $("#typeTiles").innerHTML = S.types.map((t) => `<button class="tile" data-id="${esc(t.id)}" title="Drag to add ${esc(t.symbol)}. Click to edit.">${NetKit.glyph(t, { size: 34 })}<span class="nm">${esc(t.name || "unnamed")}</span><span class="edit">${ICON_EDIT}</span></button>`).join("");
+    $("#compTiles").innerHTML = S.components.map((c) => `<button class="tile comp" data-id="${esc(c.id)}" title="Component. Drag to add, click to edit its definition.">${NetKit.glyph(c, { size: 34, w: 56 })}<span class="tag">component</span></button>`).join("");
+    $$(".tile").forEach((el) => {
+      const id = el.dataset.id, t = S.typeById(id);
+      NetKit.paletteDrag(el, { typeId: id, view, ghost: () => NetKit.glyph(S.typeById(id), { size: Math.max(34, 34 * view.cam.z), w: t.component ? 56 * view.cam.z : null }), onClick: () => (t.component ? openComponent(t) : openEditor(id, el)) });
+    });
+    buildRules();
+  }
+  function ruleLabel(k) { const [a, b] = k.split("|").map((id) => S.typeById(id) || { symbol: id }); return `<i>${esc(a.symbol)}</i> with <i>${esc(b.symbol)}</i>`; }
+  function ruleGlyph(k) { const [a, b] = k.split("|").map((id) => S.typeById(id) || { id, symbol: id, arity: 0, circle: true }); return NetKit.pairGlyph(a, b, { w: 22, h: 32 }); }
+  function buildRules() {
+    $("#ruleList").innerHTML = S.rules.map((k) => `<li class="rule" data-k="${esc(k)}" title="Open this rule">${ruleGlyph(k)}<span class="lbl">${ruleLabel(k)}</span><button class="btn icon pen" title="Edit rule">${ICON_EDIT}</button></li>`).join("") || `<li class="hintline">No rules yet. Without rules, nothing can happen.</li>`;
+    const miss = S.missingRules();
+    $("#missing").style.display = miss.length ? "" : "none";
+    $("#missing summary").innerHTML = `<svg viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>${miss.length} pair${miss.length === 1 ? " has" : "s have"} no rule`;
+    $("#missList").innerHTML = miss.map((k) => `<li class="rule missing" data-k="${esc(k)}" data-missing="1" title="Write a rule for this pair">${ruleGlyph(k)}<span class="lbl">${ruleLabel(k)}</span><button class="btn icon pen" title="Add rule"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5"/></svg></button></li>`).join("");
+    $$(".rule[data-k]").forEach((li) => (li.onclick = () => openRule(li.dataset.k, !!li.dataset.missing)));
+  }
+  $("#newType").onclick = (e) => { e.stopPropagation(); const t = S.newType(); buildPalette(); openEditor(t.id, $(`.tile[data-id="${t.id}"]`)); };
+  $("#newComp").onclick = () => { const n = view.selection().agents.length; toast(n ? `Would bundle ${n} agents into a component. Not part of this prototype.` : "Select some agents first, then make them a component."); };
+  $("#newRule").onclick = () => $("#missing").open = true;
+
+  /* ---------- type editor */
+  let edId = null;
+  function openEditor(id, anchor) {
+    edId = id; renderEditor(); const p = $("#typeEd"); p.classList.add("on");
+    const r = anchor ? anchor.getBoundingClientRect() : { top: 80 };
+    p.style.top = Math.min(Math.max(64, r.top - 40), innerHeight - p.offsetHeight - 16) + "px";
+    setTimeout(() => { const f = p.querySelector(".inp.symbol"); f && S.typeById(id).isNew && f.select(); }, 0);
+  }
+  function closeEditor() { $("#typeEd").classList.remove("on"); if (edId) { const t = S.typeById(edId); if (t) delete t.isNew; } edId = null; }
+  function previewSVG(t) {
+    // the agent, plus wire stubs so the ports read as ports
+    return NetKit.glyph(t, { size: 180, labels: true });
+  }
+  function renderEditor() {
+    const t = S.typeById(edId); if (!t) return;
+    const rules = S.rulesFor(t.id);
+    $("#typeEd").innerHTML = `<div class="ed-grid">
+      <div class="ed-prev"><div class="stage" id="stage">${previewSVG(t)}</div>
+        <div class="legend"><span><i class="d"></i>principal port</span><span><i class="o"></i>aux port</span></div></div>
+      <div class="ed-form">
+        <div class="ed-head"><h3>Agent type</h3><button class="btn icon" id="edClose" title="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5"/></svg></button></div>
+        <div class="two"><div class="row"><label for="edSym">Symbol</label><input class="inp symbol" id="edSym" maxlength="3" value="${esc(t.symbol)}"></div>
+        <div class="row"><label for="edName">Name</label><input class="inp" id="edName" placeholder="e.g. duplicator" value="${esc(t.name)}"></div></div>
+        <div class="row"><span class="lab">Aux ports</span><div><span class="stepper"><button id="arM" aria-label="Fewer">−</button><output id="arV">${t.arity}</output><button id="arP" aria-label="More">+</button></span></div></div>
+        <div class="row"><span class="lab">Shape</span><div class="seg"><button aria-pressed="${!t.circle}" data-shape="tri">Triangle</button><button aria-pressed="${!!t.circle}" data-shape="circle">Circle</button></div></div>
+        <div class="row"><span class="lab">Fill</span><div class="seg"><button aria-pressed="${!t.filled}" data-fill="0">Hollow</button><button aria-pressed="${!!t.filled}" data-fill="1">Filled</button></div></div>
+        <div class="ed-note"><b>Symbol, shape and fill are only labels</b> so you can tell agents apart. What <span class="sym">${esc(t.symbol)}</span> does comes from its rules${rules.length ? ":" : ". It has none yet, so it can't interact with anything."}
+          <div class="rl">${rules.map((k) => `<button data-k="${esc(k)}">${ruleLabel(k)}</button>`).join("")}<button data-new="1">+ Add rule</button></div></div>
+        <div class="ed-foot"><button class="btn danger" id="edDel">Delete type</button><button class="btn primary" id="edDone">Done</button></div>
+      </div></div>`;
+    const bump = () => { const st = $("#stage"); st.innerHTML = previewSVG(S.typeById(edId)); st.classList.add("bump"); setTimeout(() => st.classList.remove("bump"), 160); };
+    const upd = (patch, commit) => { S.updateType(edId, patch, commit); bump(); buildPalette(); };
+    $("#edSym").oninput = (e) => { upd({ symbol: e.target.value || "?" }); $("#typeEd .ed-note .sym").textContent = e.target.value; };
+    $("#edSym").onchange = () => S._push("Edit symbol");
+    $("#edName").oninput = (e) => upd({ name: e.target.value });
+    $("#arM").onclick = () => { const v = Math.max(0, t.arity - 1); upd({ arity: v }, true); $("#arV").textContent = v; };
+    $("#arP").onclick = () => { const v = Math.min(5, t.arity + 1); upd({ arity: v }, true); $("#arV").textContent = v; };
+    $$("#typeEd [data-shape]").forEach((b) => (b.onclick = () => { upd({ circle: b.dataset.shape === "circle" }, true); $$("#typeEd [data-shape]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+    $$("#typeEd [data-fill]").forEach((b) => (b.onclick = () => { upd({ filled: b.dataset.fill === "1" }, true); $$("#typeEd [data-fill]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+    $$("#typeEd .rl button").forEach((b) => (b.onclick = () => (b.dataset.new ? openRule(t.id + "|" + t.id, true, true) : openRule(b.dataset.k))));
+    $("#edClose").onclick = closeEditor; $("#edDone").onclick = closeEditor;
+    $("#edDel").onclick = () => { const id = edId; closeEditor(); S.deleteType(id); buildPalette(); toast("Deleted the agent type.", true); };
+  }
+
+  /* ---------- rule sheet (placeholder) */
+  function openRule(k, missing, chooseOther) {
+    const [a, b] = k.split("|").map((id) => S.typeById(id) || { id, symbol: id, arity: 0 });
+    const eff = NetKit.effectFor(a.id, b.id);
+    $("#ruleSheet").innerHTML = `<h3>${missing ? "New rule: " : "Rule: "}${ruleLabel(k)}</h3>
+      <p>${missing ? `There's no rule yet, so when <span class="sym">${esc(a.symbol)}</span> meets <span class="sym">${esc(b.symbol)}</span> they get stuck.` : esc(eff.say)}</p>
+      <div class="rule-io"><div class="side"><span class="cap">When these meet</span>${NetKit.pairGlyph(a, b, { w: 90, h: 130, active: true })}</div><div class="arrow">→</div>
+      <div class="side"><span class="cap">They become</span><div class="placeholder">The rule editor goes here. You'd draw the replacement net, then wire it to the pair's outer ports.</div></div></div>
+      <div class="ed-foot" style="margin-top:14px">${missing ? `<span></span><span><button class="btn" id="rsCancel">Cancel</button> <button class="btn primary" id="rsAdd">Add empty rule</button></span>` : `<button class="btn danger" id="rsDel">Delete rule</button><button class="btn primary" id="rsCancel">Close</button>`}</div>`;
+    $("#ruleScrim").classList.add("on");
+    $("#rsCancel").onclick = () => $("#ruleScrim").classList.remove("on");
+    if ($("#rsAdd")) $("#rsAdd").onclick = () => { S.addRule(k); $("#ruleScrim").classList.remove("on"); buildRules(); toast("Added the rule. Pairs of these agents can fire now.", true); };
+    if ($("#rsDel")) $("#rsDel").onclick = () => { S.removeRule(k); $("#ruleScrim").classList.remove("on"); buildRules(); toast("Deleted the rule. Pairs that used it are stuck now.", true); };
+  }
+  $("#ruleScrim").onclick = (e) => { if (e.target.id === "ruleScrim") $("#ruleScrim").classList.remove("on"); };
+  function openComponent(c) {
+    const d = S.componentDef(c);
+    $("#ruleSheet").innerHTML = `<h3>Component: ${esc(c.name)}</h3><p>A component bundles a piece of net into one box. Editing it here updates every copy on the canvas.</p>
+      <div class="rule-io" style="grid-template-columns:1fr"><div class="side" style="height:260px"><span class="cap">Definition</span>${NetKit.miniSVG(d.state, d.types, 300, 220, { pad: 16 })}</div></div>
+      <div class="ed-foot" style="margin-top:14px"><span class="hintline">The component editor isn't part of this prototype.</span><button class="btn primary" id="rsCancel">Close</button></div>`;
+    $("#ruleScrim").classList.add("on"); $("#rsCancel").onclick = () => $("#ruleScrim").classList.remove("on");
+  }
+
+  /* ---------- context bar */
+  function placeCtx() {
+    const sel = view.selection(); const el = $("#ctx");
+    if (!sel.agents.length && !sel.wires.length) { el.classList.remove("on"); return; }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity;
+    for (const id of sel.agents) { const a = view.agent(id); if (!a) continue; const b = NetKit.agentBox(a); x0 = Math.min(x0, b.x0); x1 = Math.max(x1, b.x1); y0 = Math.min(y0, b.y0); }
+    for (const id of sel.wires) { const w = view.state.wires.find((w) => w.id === id); if (!w) continue; for (const p of w.path) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); } }
+    if (!isFinite(x0)) { el.classList.remove("on"); return; }
+    const [sx, sy] = view.toScreen((x0 + x1) / 2, y0);
+    el.style.left = clampN(sx, 160, innerWidth - 420) + "px"; el.style.top = Math.max(110, sy - 18) + "px";
+  }
+  const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+  view.on("select", (sel) => {
+    const el = $("#ctx");
+    if (!sel.agents.length && !sel.wires.length) { el.classList.remove("on"); return; }
+    let what, extra = "";
+    if (sel.agents.length === 1 && !sel.wires.length) {
+      const a = view.agent(sel.agents[0]); const t = S.typeById(a.type) || {};
+      what = `<span class="sym">${esc(t.symbol || a.type)}</span>&nbsp;${esc(t.name || "")}`;
+      extra = t.component ? `<button class="btn" data-c="expand">Expand</button><button class="btn" data-c="break">Break apart</button>` : `<button class="btn" data-c="type">Edit type</button><button class="btn" data-c="flip">Flip</button>`;
+    } else if (!sel.agents.length) what = sel.wires.length === 1 ? "Wire" : sel.wires.length + " wires";
+    else { what = `${sel.agents.length} agents`; extra = `<button class="btn" data-c="comp">Make component</button>`; }
+    el.innerHTML = `<span class="what">${what}</span><div class="sep"></div>${extra}<button class="btn danger" data-c="del" title="Delete (Backspace)">Delete</button>`;
+    el.classList.add("on"); placeCtx();
+    el.querySelectorAll("[data-c]").forEach((b) => (b.onclick = () => {
+      const c = b.dataset.c, s = view.selection();
+      if (c === "del") view.deleteSelection();
+      if (c === "flip") view.flip(s.agents);
+      if (c === "type") openEditor(view.agent(s.agents[0]).type, $(`.tile[data-id="${view.agent(s.agents[0]).type}"]`));
+      if (c === "comp") toast(`Would bundle ${s.agents.length} agents into a component. Not part of this prototype.`);
+      if (c === "expand" || c === "break") toast("Expanding components isn't part of this prototype.");
+    }));
+  });
+
+  view.on("dragstate", (k) => { if (k) $("#ctx").classList.remove("on"); else view.emit("select", view.selection()); });
+  /* ---------- canvas events */
+  view.on("fire", () => S.step());
+  view.on("stuck", (w, info) => openRule(info.a.type + "|" + info.b.type, true));
+  view.on("hint", (h) => { if (h.kind !== "refuse") toast(h.text); });
+  view.on("previewpair", (w) => {
+    if (!w) return view.setPreview(null);
+    // Canvas-first keeps the preview light: only rules that just reconnect
+    // wires get drawn (dashed joins, × on the pair).
+    view.setPreview({ wires: [w.id], fromHover: true });
+  });
+
+  /* ---------- run controls */
+  const SPEEDS = (v) => Math.pow(10, (v - 50) / 50 * 0.75); // 0.18× .. 5.6×
+  function setSpeedFromSlider() { const v = SPEEDS(+$("#speed").value); S.setSpeed(v); $("#speedOut").textContent = (v < 1 ? v.toFixed(2).replace(/0$/, "") : v.toFixed(1).replace(/\.0$/, "")) + "×"; $("#slowmo").setAttribute("aria-pressed", v < 0.3); $("#slowmo").style.background = v < 0.3 ? "var(--accent-soft)" : ""; $("#slowmo").style.color = v < 0.3 ? "var(--accent)" : ""; }
+  $("#speed").oninput = setSpeedFromSlider;
+  $("#slowmo").onclick = () => { $("#speed").value = SPEEDS(+$("#speed").value) < 0.3 ? 50 : 4; setSpeedFromSlider(); };
+  $("#step").onclick = () => S.step();
+  $("#stepAll").onclick = () => S.step();
+  $("#runBtn").onclick = () => (S.running ? S.stop() : S.run());
+  $$("[data-layout]").forEach((b) => (b.onclick = () => { S.setLayout(b.dataset.layout); }));
+  $("#tidy").onclick = () => { if (S.layout !== "manual") return; S.tidy(); };
+  $("#fit").onclick = () => view.fit();
+  $("#zoomIn").onclick = () => view.zoomAt(1.25);
+  $("#zoomOut").onclick = () => view.zoomAt(0.8);
+  $("#zoomVal").onclick = () => view.zoomAt(1 / view.cam.z);
+  $("#undo").onclick = () => S.undo();
+  $("#redo").onclick = () => S.redo();
+  S.on("message", (m) => toast(m));
+  S.on("undo", (l) => l && toast("Undid: " + l.toLowerCase()));
+
+  function syncUI() {
+    if (!S.stats) return;
+    const pairs = view.activePairs().length;
+    $("#step").disabled = $("#stepAll").disabled = !pairs || S.busy && !S.running;
+    $("#step").title = pairs ? "Fire one active pair (Space)" : "Nothing to fire";
+    $("#stepAll").title = pairs ? `Fire all ${pairs} active pair${pairs === 1 ? "" : "s"} at once` : "Nothing to fire";
+    $("#runBtn").className = "btn " + (S.running ? "stop" : "run");
+    $("#runBtn").innerHTML = S.running ? `<svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor"/></svg><span>Stop</span>` : `<svg viewBox="0 0 16 16"><path d="M4.5 3l8 5-8 5z" fill="currentColor"/></svg><span>Run</span>`;
+    $("#runBtn").disabled = !S.running && !pairs;
+    $("#undo").disabled = !S.canUndo(); $("#redo").disabled = !S.canRedo();
+    $("#undo").title = S.canUndo() ? "Undo " + (S.undoLabel() || "").toLowerCase() + " (⌘Z)" : "Nothing to undo";
+    $("#redo").title = S.canRedo() ? "Redo " + (S.redoLabel() || "").toLowerCase() + " (⇧⌘Z)" : "Nothing to redo";
+    $$("[data-layout]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.layout === (S.layout || "auto")));
+    $("#tidy").disabled = (S.layout || "auto") !== "manual";
+    $("#tidy").title = (S.layout || "auto") === "manual" ? "Tidy up positions" : "Auto layout keeps things tidy. Tidy is for manual layout.";
+    $("#stSteps").textContent = S.stats.steps; $("#stInter").textContent = S.stats.interactions; $("#stAgents").textContent = view.state.agents.length;
+    $("#stats").title = Object.entries(S.stats.perRule).map(([k, n]) => k.replace("|", " with ") + ": " + n).join("\n") || "Stats for this run";
+    $("#typedflag").classList.toggle("on", !!S.ex.typed);
+    $("#newComp").disabled = view.selection().agents.length < 1;
+  }
+  S.on("update", syncUI); view.on("select", syncUI);
+  S.on("load", () => { buildPalette(); closeEditor(); });
+  S.on("types", () => { buildRules(); });
+  S.on("undo", buildPalette); S.on("redo", buildPalette);
+  S.on("stepped", syncUI);
+
+  /* ---------- keys */
+  addEventListener("keydown", (e) => {
+    if (e.target.closest("input,textarea")) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? S.redo() : S.undo(); }
+    else if (e.key === "Backspace" || e.key === "Delete") view.deleteSelection();
+    else if (e.key === " ") { e.preventDefault(); S.step(); }
+    else if (e.key === "f") view.fit();
+    else if (e.key === "Escape") { view.select([]); closeEditor(); closeMenus(); $("#ruleScrim").classList.remove("on"); }
+    else if (mod && e.key === "a") { e.preventDefault(); view.selectAll(); }
+  });
+
+  S.layout = "auto";
+  S.load(0);
+  setSpeedFromSlider();
+  window.__app = { S, view, openEditor, openRule };
+})();
+</script>
+</body>
+</html>

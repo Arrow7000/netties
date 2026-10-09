@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties: workbench</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ui-font:'IBM Plex Sans',system-ui,sans-serif;
+  --paper:#ffffff; --ink:#000000;
+  --bench:#dfe1e5; --panel:#f1f2f4; --well:#e7e9ec; --head:#d7dade; --line:#c3c8cf; --line-soft:#d3d7dc;
+  --text:#1d2125; --muted:#5b636e; --faint:#8a929c;
+  --accent:#007c89; --accent-soft:#d6eef0; --active:#f07a00; --on-active:#2b1500; --stuck:#c8323c;
+  --btn:#fbfbfc; --btn-hover:#ffffff; --btn-press:#e4e6e9; --btn-border:#b9bfc7;
+  --shadow:0 12px 40px rgba(10,14,20,.22);
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  --paper:#000000; --ink:#ffffff; --active-op:.85;
+  --bench:#16181b; --panel:#202326; --well:#1a1c1f; --head:#2a2e33; --line:#363b41; --line-soft:#2d3136;
+  --text:#e4e6e9; --muted:#9aa1aa; --faint:#6f7680;
+  --accent:#2bb5c2; --accent-soft:#163236; --active:#ff9a2e; --on-active:#2b1500; --stuck:#ff5a63;
+  --btn:#2c3035; --btn-hover:#33383e; --btn-press:#25292d; --btn-border:#41474e;
+  --shadow:0 12px 40px rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme=light]){
+  --paper:#000000; --ink:#ffffff; --active-op:.85;
+  --bench:#16181b; --panel:#202326; --well:#1a1c1f; --head:#2a2e33; --line:#363b41; --line-soft:#2d3136;
+  --text:#e4e6e9; --muted:#9aa1aa; --faint:#6f7680;
+  --accent:#2bb5c2; --accent-soft:#163236; --active:#ff9a2e; --on-active:#2b1500; --stuck:#ff5a63;
+  --btn:#2c3035; --btn-hover:#33383e; --btn-press:#25292d; --btn-border:#41474e;
+  --shadow:0 12px 40px rgba(0,0,0,.6);
+  color-scheme:dark;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bench);color:var(--text);font:400 13px/1.35 var(--ui-font);-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit}
+.app{display:grid;height:100vh;grid-template-columns:minmax(0,1fr) 288px;grid-template-rows:42px minmax(0,1fr) auto 26px;gap:1px;background:var(--line)}
+.app>*{background:var(--panel)}
+/* menubar */
+.menubar{grid-column:1/3;display:flex;align-items:center;gap:6px;padding:0 8px;background:var(--bench)}
+.brand{font-weight:600;padding:0 10px 0 4px;display:flex;gap:6px;align-items:center}
+.brand i{font:italic 500 17px 'STIX Two Text',serif}
+.grow{flex:1}
+.vsep{width:1px;height:22px;background:var(--line);margin:0 4px}
+.btn{height:28px;padding:0 10px;border:1px solid var(--btn-border);border-radius:5px;background:var(--btn);display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;box-shadow:0 1px 0 rgba(0,0,0,.05);font-weight:500}
+.btn:hover{background:var(--btn-hover)}
+.btn:active{background:var(--btn-press);box-shadow:inset 0 1px 2px rgba(0,0,0,.12)}
+.btn:focus-visible,.seg button:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn[disabled]{opacity:.45;cursor:default;box-shadow:none}
+.btn.icon{width:28px;padding:0;justify-content:center}
+.btn svg{width:15px;height:15px;flex:none}
+.btn.go{background:var(--active);border-color:color-mix(in srgb,var(--active) 70%,#000);color:var(--on-active)}
+.btn.halt{background:var(--stuck);border-color:color-mix(in srgb,var(--stuck) 70%,#000);color:#fff}
+.btn.danger{color:var(--stuck)}
+.btn.small{height:24px;padding:0 8px;font-size:12px}
+.btn.plain{border-color:transparent;background:transparent;box-shadow:none}
+.btn.plain:hover{background:var(--well)}
+.seg{display:inline-flex;border:1px solid var(--btn-border);border-radius:5px;overflow:hidden;background:var(--well)}
+.seg button{border:0;background:transparent;height:26px;padding:0 10px;cursor:pointer;color:var(--muted);font-weight:500;border-right:1px solid var(--line-soft)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed=true]{background:var(--btn-hover);color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
+.label{font-size:12px;color:var(--muted);margin-right:2px}
+/* document area */
+.doc{display:flex;flex-direction:column;min-width:0;min-height:0}
+.tabs{display:flex;align-items:flex-end;gap:0;background:var(--bench);height:32px;padding:0 6px;border-bottom:1px solid var(--line)}
+.tab{height:28px;display:flex;align-items:center;gap:8px;padding:0 10px 0 12px;border:1px solid transparent;border-bottom:0;border-radius:6px 6px 0 0;color:var(--muted);cursor:pointer;margin-bottom:-1px;background:transparent}
+.tab[aria-selected=true]{background:var(--panel);border-color:var(--line);color:var(--text)}
+.tab .x{width:16px;height:16px;border-radius:3px;display:flex;align-items:center;justify-content:center;opacity:.6}
+.tab .x:hover{background:var(--well);opacity:1}
+.tab i{font:italic 14px 'STIX Two Text',serif}
+.toolbar{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.group{display:flex;align-items:center;gap:4px;padding-right:8px;margin-right:2px;border-right:1px solid var(--line-soft)}
+.group:last-child{border-right:0}
+.group .gl{font-size:11.5px;color:var(--faint);margin-right:4px}
+.zoomval{min-width:52px;justify-content:center}
+.stage{position:relative;flex:1;min-height:0}
+#canvas{position:absolute;inset:0;background:var(--paper)}
+.rulepane{position:absolute;inset:0;background:var(--panel);display:none;padding:22px;overflow:auto}
+.rulepane.on{display:block}
+/* sidebar */
+.side{overflow:auto;display:flex;flex-direction:column}
+.pnl{border-bottom:1px solid var(--line)}
+.pnl-h{display:flex;align-items:center;gap:6px;height:34px;padding:0 8px 0 10px;background:var(--head);font-weight:600;font-size:12.5px;position:sticky;top:0;z-index:1}
+.pnl-h .c{color:var(--muted);font-weight:400}
+.pnl-h .grow{flex:1}
+.pnl-b{padding:6px}
+.rows{display:flex;flex-direction:column;gap:2px}
+.row{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:8px;padding:3px 4px 3px 6px;border-radius:5px;border:1px solid transparent;cursor:grab;background:transparent;text-align:left;width:100%;color:var(--ink)}
+.row:hover{background:var(--paper);border-color:var(--line-soft)}
+.row.dragging{opacity:.4}
+.row .nm{color:var(--text);display:flex;flex-direction:column;line-height:1.2}
+.row .nm b{font:italic 400 15px 'STIX Two Text',serif}
+.row .nm small{color:var(--muted);font-size:11.5px}
+.row .ed{opacity:0}
+.row:hover .ed,.row:focus-within .ed{opacity:1}
+.row.comp .gw{border:1px dashed var(--line);border-radius:4px}
+.row .tag{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:0 4px;margin-left:4px}
+.gw{width:34px;height:30px;display:flex;align-items:center;justify-content:center}
+.rule{grid-template-columns:28px 1fr auto;cursor:pointer}
+.rule .nm{flex-direction:row;gap:4px;align-items:baseline}
+.rule .nm i{font:italic 15px 'STIX Two Text',serif}
+.rule .ed{opacity:.75}
+.rule.missing .nm{color:var(--muted)}
+.rule.cur{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.dragnote{font-size:11.5px;color:var(--faint);padding:4px 6px 2px}
+details.miss>summary{cursor:pointer;font-size:12px;color:var(--muted);padding:6px 6px;list-style:none}
+details.miss>summary::-webkit-details-marker{display:none}
+details.miss>summary::before{content:"▸ ";display:inline-block;width:12px}
+details.miss[open]>summary::before{content:"▾ "}
+.stats{width:100%;border-collapse:collapse;font-size:12.5px}
+.stats td{padding:4px 6px;border-bottom:1px solid var(--line-soft)}
+.stats td:last-child{text-align:right;font-weight:600}
+.stats .bar{height:6px;background:var(--active);border-radius:3px;opacity:.8}
+.stats .k i{font:italic 14px 'STIX Two Text',serif}
+/* transport */
+.transport{grid-column:1/3;display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--panel)}
+.transport .group{padding-right:12px}
+.tl{flex:1;min-width:160px;display:flex;align-items:flex-end;gap:2px;height:38px;padding:0 6px;background:var(--well);border:1px solid var(--line);border-radius:5px;overflow:hidden;position:relative}
+.tl .tk{width:14px;flex:none;background:var(--line);border-radius:2px 2px 0 0;cursor:pointer;position:relative}
+.tl .tk.past{background:color-mix(in srgb,var(--active) 65%,var(--well))}
+.tl .tk:hover{outline:1px solid var(--accent)}
+.tl .tk.now{background:var(--accent)}
+.tl .tk.next{background:transparent;border:1px dashed var(--faint);border-bottom:0}
+.tl .lab{position:absolute;right:8px;top:4px;font-size:11.5px;color:var(--muted)}
+.tl .lab b{color:var(--text)}
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12.5px}
+.switch input{appearance:none;width:30px;height:18px;border-radius:9px;background:var(--line);position:relative;cursor:pointer;margin:0;transition:background .15s}
+.switch input::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left .15s}
+.switch input:checked{background:var(--accent)}
+.switch input:checked::after{left:14px}
+.switch input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* status bar */
+.status{grid-column:1/3;display:flex;align-items:center;gap:0;font-size:12px;color:var(--muted);background:var(--bench);padding:0 4px}
+.status .cell{padding:0 10px;border-right:1px solid var(--line);height:100%;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.status .cell:last-child{border-right:0}
+.status #hint{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis}
+.status .mouse{display:inline-flex;align-items:center;gap:4px}
+.status kbd{font:inherit;font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 4px;background:var(--panel);color:var(--text)}
+/* menus */
+.menu{position:fixed;z-index:40;min-width:250px;background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:var(--shadow);padding:4px;display:none}
+.menu.on{display:block}
+.menu .mh{padding:8px 10px;font-size:12px;color:var(--text);background:var(--accent-soft);border-radius:4px;margin-bottom:4px;display:flex;gap:8px;align-items:flex-start}
+.menu .mi{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;padding:5px 10px;border-radius:4px;cursor:pointer}
+.menu .mi:hover{background:var(--accent);color:#fff}
+.menu .mi:hover .ms{color:#ffffffcc}
+.menu .mi .ms{font-size:11.5px;color:var(--muted);margin-left:auto}
+.menu .mi.cur::before{content:"✓";width:12px}
+.menu .mi:not(.cur)::before{content:"";width:12px}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px}
+.menu .mi.danger{color:var(--stuck)}
+.menu .mi.danger:hover{background:var(--stuck);color:#fff}
+/* dialog */
+.scrim{position:fixed;inset:0;z-index:50;background:rgba(10,14,20,.35);display:none;align-items:center;justify-content:center}
+.scrim.on{display:flex}
+.dlg{width:min(720px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);overflow:hidden}
+.dlg-h{display:flex;align-items:center;height:40px;padding:0 8px 0 14px;background:var(--head);font-weight:600}
+.dlg-b{display:grid;grid-template-columns:1fr 280px}
+.dlg-f{display:flex;gap:8px;justify-content:flex-end;padding:10px 12px;border-top:1px solid var(--line);background:var(--bench)}
+.form{padding:14px;display:flex;flex-direction:column;gap:14px}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld>span{font-size:12px;color:var(--muted);font-weight:500}
+.inp{height:30px;border:1px solid var(--btn-border);border-radius:5px;background:var(--paper);color:var(--text);padding:0 8px;font:inherit}
+.inp:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.inp.sym{font:italic 20px 'STIX Two Text',serif;width:64px;text-align:center;height:36px}
+.pick{display:flex;gap:6px}
+.pick button{flex:1;border:1px solid var(--btn-border);background:var(--btn);border-radius:6px;padding:8px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;color:var(--ink);font-size:12px}
+.pick button span{color:var(--muted)}
+.pick button[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;background:var(--accent-soft)}
+.pick button[aria-pressed=true] span{color:var(--text)}
+.nums{display:flex;gap:4px}
+.nums button{width:34px;height:30px;border:1px solid var(--btn-border);background:var(--btn);border-radius:5px;cursor:pointer;font-weight:600}
+.nums button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.prev{background:var(--paper);border-left:1px solid var(--line);display:flex;flex-direction:column;color:var(--ink)}
+.prev .big{flex:1;display:flex;align-items:center;justify-content:center;min-height:200px;position:relative}
+.prev .big svg{transition:transform .2s cubic-bezier(.3,1.6,.5,1)}
+.prev .big.bump svg{transform:scale(1.07)}
+.prev .cap{position:absolute;top:8px;left:10px;font-size:11.5px;color:var(--muted)}
+.prev .pair{border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:12px;padding:10px;position:relative;min-height:120px}
+.meaning{margin:0 14px 14px;padding:10px 12px;border-left:3px solid var(--active);background:var(--well);border-radius:0 5px 5px 0;font-size:12.5px;color:var(--muted)}
+.meaning b{color:var(--text)}
+.meaning .rl{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.meaning .rl button{height:24px;font-size:12px}
+.meaning i{font:italic 14px 'STIX Two Text',serif;color:var(--text)}
+/* rule pane */
+.rp-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.rp-h h2{margin:0;font-size:16px}
+.rp-h h2 i{font:italic 18px 'STIX Two Text',serif}
+.rp-io{display:grid;grid-template-columns:1fr 40px 1fr;gap:10px;margin-top:14px;max-width:820px}
+.rp-io .side2{background:var(--paper);border:1px solid var(--line);border-radius:6px;height:300px;position:relative;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.rp-io .side2 .cap{position:absolute;top:8px;left:10px;font-size:12px;color:var(--muted)}
+.rp-io .arr{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px}
+.ph{color:var(--muted);text-align:center;padding:0 30px;font-size:12.5px}
+#comb{position:fixed;inset:43px 0 0 0;z-index:30;background:var(--panel);display:none;align-items:center;justify-content:center}
+#comb.on{display:flex}
+#comb .box{max-width:440px;text-align:center;color:var(--muted)}
+#comb h2{color:var(--text);margin:0 0 6px;font-size:18px}
+/* toasts */
+#toast{position:fixed;right:300px;bottom:100px;z-index:60;background:var(--text);color:var(--panel);border-radius:6px;padding:8px 8px 8px 12px;display:flex;gap:10px;align-items:center;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity .15s,transform .15s;max-width:440px;box-shadow:var(--shadow)}
+#toast.on{opacity:1;transform:none;pointer-events:auto}
+#toast button{background:transparent;border:1px solid color-mix(in srgb,var(--panel) 40%,transparent);color:var(--panel);border-radius:4px;height:26px;padding:0 10px;cursor:pointer}
+/* kit skin */
+.nk-tip{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:5px;box-shadow:var(--shadow);padding:7px 9px;font-size:12px}
+.nk-tip .tip-h{font-weight:600;margin-bottom:2px}
+.nk-tip .tip-b,.nk-tip .tip-dim{color:var(--muted)}
+.nk-tip.refuse{border-color:var(--stuck)}.nk-tip.refuse .tip-h{color:var(--stuck)}
+.nk-tip.fire{border-color:var(--active)}.nk-tip.stuck{border-color:var(--stuck)}
+.nk-emptyin{text-align:center;color:var(--muted)}
+.nk-emptyin b{display:block;color:var(--text);font-size:14px;margin-bottom:4px}
+.nk-paghost.off{opacity:.45}
+.typed-banner{position:absolute;left:10px;top:10px;z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:6px 10px;font-size:12px;color:var(--muted);display:none;max-width:320px}
+.typed-banner.on{display:block}
+.typed-banner b{color:var(--text)}
+@media (max-width:820px){.app{grid-template-columns:1fr;grid-template-rows:42px minmax(0,1fr) auto auto 26px}.side{max-height:40vh}.transport{flex-wrap:wrap}.menubar .hide-s{display:none}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="menubar" data-chrome>
+    <div class="brand"><i>γ</i>netties</div>
+    <button class="btn" id="exBtn">Load example <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+    <button class="btn plain" id="fileBtn">File <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+    <div class="vsep"></div>
+    <button class="btn" id="undo" title="Undo"><svg viewBox="0 0 16 16"><path d="M6 4L3 7l3 3M3.5 7H10a3 3 0 010 6H8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="hide-s">Undo</span></button>
+    <button class="btn" id="redo" title="Redo"><svg viewBox="0 0 16 16"><path d="M10 4l3 3-3 3M12.5 7H6a3 3 0 000 6h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="hide-s">Redo</span></button>
+    <div class="grow"></div>
+    <div class="seg" aria-label="Screen"><button aria-pressed="true" data-screen="net">Net</button><button aria-pressed="false" data-screen="comb">Combinator translation</button></div>
+    <div class="vsep"></div>
+    <button class="btn icon plain" id="theme" title="Switch theme"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 2.5a5.5 5.5 0 010 11z" fill="currentColor"/></svg></button>
+  </header>
+
+  <main class="doc">
+    <div class="tabs" id="tabs" data-chrome></div>
+    <div class="toolbar" data-chrome>
+      <div class="group"><span class="gl">Layout</span>
+        <div class="seg"><button aria-pressed="true" data-layout="auto">Auto</button><button aria-pressed="false" data-layout="manual">Manual</button></div>
+        <button class="btn" id="tidy">Tidy</button></div>
+      <div class="group"><span class="gl">View</span>
+        <button class="btn icon" id="zoomOut" title="Zoom out"><svg viewBox="0 0 16 16"><path d="M3.5 8h9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+        <button class="btn zoomval" id="zoomVal" title="Reset to 100%">100%</button>
+        <button class="btn icon" id="zoomIn" title="Zoom in"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+        <button class="btn" id="fit" title="Fit to view (F)">Fit</button></div>
+      <div class="group" id="selGroup"><span class="gl" id="selLabel">Nothing selected</span>
+        <button class="btn" id="flip" disabled>Flip</button>
+        <button class="btn" id="mkComp" disabled>Make component</button>
+        <button class="btn danger" id="del" disabled>Delete</button></div>
+      <div class="group"><button class="btn danger" id="clear" title="Remove everything. You can undo it.">Clear net</button></div>
+    </div>
+    <div class="stage">
+      <div id="canvas"></div>
+      <div class="typed-banner" id="typedBanner" data-chrome><b>Typed ports (preview).</b> Each port is a Nat input or output. When you drag a wire end, ports it can't plug into turn grey.</div>
+      <div class="rulepane" id="rulePane"></div>
+    </div>
+  </main>
+
+  <aside class="side" data-chrome aria-label="Definitions">
+    <section class="pnl">
+      <div class="pnl-h">Agent types <span class="c" id="typeCount"></span><span class="grow"></span><button class="btn small" id="newType">+ New type</button></div>
+      <div class="pnl-b"><div class="rows" id="typeRows"></div>
+        <div class="pnl-h" style="background:transparent;height:28px;padding:0 4px;margin-top:6px;position:static">Components <span class="grow"></span><button class="btn small" id="newComp" title="Select agents on the canvas first">+ From selection</button></div>
+        <div class="rows" id="compRows"></div>
+        <div class="dragnote">Drag a row onto the canvas to add it. Click it to edit.</div></div>
+    </section>
+    <section class="pnl">
+      <div class="pnl-h">Rules <span class="c" id="ruleCount"></span><span class="grow"></span><button class="btn small" id="newRule">+ New rule</button></div>
+      <div class="pnl-b"><div class="rows" id="ruleRows"></div>
+        <details class="miss" id="miss"><summary></summary><div class="rows" id="missRows"></div></details></div>
+    </section>
+    <section class="pnl" style="border-bottom:0">
+      <div class="pnl-h">Run stats</div>
+      <div class="pnl-b"><table class="stats" id="stats"></table></div>
+    </section>
+  </aside>
+
+  <section class="transport" data-chrome aria-label="Transport">
+    <div class="group">
+      <button class="btn" id="step" title="Fire one active pair (Space)"><svg viewBox="0 0 16 16"><path d="M4 3.5l6 4.5-6 4.5z" fill="currentColor"/><path d="M12 3.5v9" stroke="currentColor" stroke-width="1.6"/></svg>Step</button>
+      <button class="btn" id="stepAll" title="Fire every active pair at once"><svg viewBox="0 0 16 16"><path d="M2 3.5l5 4.5-5 4.5zM8 3.5l5 4.5-5 4.5z" fill="currentColor"/></svg>Step all</button>
+      <button class="btn go" id="runBtn" style="min-width:76px"><svg viewBox="0 0 16 16"><path d="M4.5 3l8 5-8 5z" fill="currentColor"/></svg><span>Run</span></button>
+    </div>
+    <div class="group"><span class="label">Speed</span>
+      <div class="seg" id="speedSeg"><button data-v="0.1" title="Slow motion">0.1×</button><button data-v="0.25" title="Slow motion">¼×</button><button data-v="0.5">½×</button><button data-v="1" aria-pressed="true">1×</button><button data-v="2">2×</button><button data-v="4">4×</button></div>
+    </div>
+    <div class="group"><label class="switch" title="Draws the result of the next step faintly over the net"><input type="checkbox" id="onion">Show next step</label></div>
+    <div class="tl" id="timeline" title="Steps so far. Click one to go back to it."></div>
+  </section>
+
+  <footer class="status" data-chrome>
+    <div class="cell" id="hint">Ready</div>
+    <div class="cell" id="stAgents"></div>
+    <div class="cell" id="stWires"></div>
+    <div class="cell" id="stPairs"></div>
+  </footer>
+</div>
+
+<div class="menu" id="exMenu" data-chrome></div>
+<div class="menu" id="fileMenu" data-chrome>
+  <button class="mi" data-act="text">Text view<span class="ms">⌘E</span></button>
+  <button class="mi" data-act="open">Open file…<span class="ms">⌘O</span></button>
+  <button class="mi" data-act="save">Save file<span class="ms">⌘S</span></button>
+  <hr>
+  <button class="mi" data-act="share">Copy share link</button>
+  <button class="mi" data-act="svg">Export SVG</button>
+  <button class="mi" data-act="tikz" disabled style="opacity:.5">Export TikZ<span class="ms">Later</span></button>
+</div>
+<div class="scrim" id="typeScrim"><div class="dlg" id="typeDlg" role="dialog" aria-label="Agent type" data-chrome></div></div>
+<div id="comb"><div class="box"><h2>Combinator translation</h2>Translates every agent type and rule into Lafont's three combinators, so you can step the source and the translation side by side. Not part of this prototype.</div></div>
+<div id="toast" role="status"><span id="toastText"></span><button id="toastUndo">Undo</button></div>
+
+<script src="../shared/netkit.js"></script>
+<script>
+(async function () {
+  const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)], esc = NetKit.esc;
+  const data = await NetKit.load("../../assets/nets.json");
+  const view = new NetKit.View($("#canvas"), {
+    selectWireKey: "shift",
+    firePill: false,
+    fitPad: { t: 50, r: 50, b: 50, l: 50 },
+    emptyHTML: "<b>Empty net</b>Drag an agent type from the panel on the right.",
+  });
+  const S = new NetKit.Session(data, view);
+  const root = document.documentElement;
+  try { const t = localStorage.getItem("nt-theme-b"); if (t) root.dataset.theme = t; } catch (_) {}
+  $("#theme").onclick = () => { const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("nt-theme-b", root.dataset.theme); } catch (_) {} };
+
+  let toastT;
+  function toast(t, undo) { $("#toastText").textContent = t; $("#toastUndo").style.display = undo ? "" : "none"; $("#toast").classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => $("#toast").classList.remove("on"), undo ? 6000 : 4000); }
+  $("#toastUndo").onclick = () => { S.undo(); $("#toast").classList.remove("on"); };
+
+  /* ---------- status bar hints */
+  const IDLE_HINT = `<span class="mouse"><kbd>Drag</kbd> select</span>&nbsp;&nbsp;<span class="mouse"><kbd>Right-drag</kbd> pan</span>&nbsp;&nbsp;<span class="mouse"><kbd>Scroll</kbd> zoom</span>&nbsp;&nbsp;<span class="mouse"><kbd>Space</kbd> step</span>`;
+  function setHint(h) { $("#hint").innerHTML = h || IDLE_HINT; }
+  function hintHTML(text) { return esc(text).replace(/^([A-Za-z-]+(?: [a-z]+)?):/g, "<kbd>$1</kbd>").replace(/\.\s+([A-Z][a-z]+-click):/g, "&nbsp;&nbsp;<kbd>$1</kbd>"); }
+  view.on("hover", (h) => setHint(h && h.hint ? hintHTML(h.hint) : null));
+  view.on("hint", (h) => { if (h.kind === "refuse") setHint(`<span style="color:var(--stuck)">${esc(h.text)}</span>`); else toast(h.text); });
+
+  /* ---------- menus */
+  function openMenu(m, a) { const was = m.classList.contains("on"); closeMenus(); if (was) return; const r = a.getBoundingClientRect(); m.style.left = r.left + "px"; m.style.top = r.bottom + 4 + "px"; m.classList.add("on"); }
+  function closeMenus() { $$(".menu").forEach((m) => m.classList.remove("on")); }
+  document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".menu,#exBtn,#fileBtn")) closeMenus(); });
+  $("#exBtn").onclick = () => {
+    $("#exMenu").innerHTML = `<div class="mh"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M8 2l6.5 11.5h-13z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 6.5v3.2M8 11.3v.4" stroke="currentColor" stroke-width="1.4"/></svg><span>Loading an example <b>replaces the current net</b>, its types and rules. Undo brings them back.</span></div>` +
+      data.examples.map((e, i) => `<button class="mi${i === S.exIndex ? " cur" : ""}" data-i="${i}">${esc(e.name)}<span class="ms">${e.preview ? "preview" : e.family === "comb" ? "combinators" : "arithmetic"}</span></button>`).join("");
+    $$("#exMenu .mi").forEach((b) => (b.onclick = () => { closeMenus(); S.load(+b.dataset.i); toast(`Replaced the net with "${S.ex.name}".`, true); }));
+    openMenu($("#exMenu"), $("#exBtn"));
+  };
+  $("#fileBtn").onclick = () => openMenu($("#fileMenu"), $("#fileBtn"));
+  $("#fileMenu").onclick = (e) => { const b = e.target.closest(".mi"); if (!b || b.disabled) return; closeMenus(); toast("Not part of this prototype."); };
+  $$("[data-screen]").forEach((b) => (b.onclick = () => { $$("[data-screen]").forEach((x) => x.setAttribute("aria-pressed", x === b)); $("#comb").classList.toggle("on", b.dataset.screen === "comb"); }));
+
+  /* ---------- document tabs (net + open rules) */
+  let tabs = [], curTab = "net";
+  function renderTabs() {
+    $("#tabs").innerHTML = `<div class="tab" role="tab" data-t="net" aria-selected="${curTab === "net"}">Net: ${esc(S.ex.name)}${S.dirty ? " (edited)" : ""}</div>` +
+      tabs.map((k) => `<div class="tab" role="tab" data-t="${esc(k)}" aria-selected="${curTab === k}">Rule: ${ruleLabel(k)}<span class="x" data-close="${esc(k)}" title="Close">×</span></div>`).join("");
+    $$("#tabs .tab").forEach((t) => (t.onclick = (e) => { if (e.target.dataset.close) { tabs = tabs.filter((x) => x !== e.target.dataset.close); if (curTab === e.target.dataset.close) curTab = "net"; } else curTab = t.dataset.t; showTab(); }));
+  }
+  function showTab() {
+    renderTabs();
+    const pane = $("#rulePane");
+    $$(".rule").forEach((r) => r.classList.toggle("cur", r.dataset.k === curTab));
+    $(".toolbar").style.display = curTab === "net" ? "" : "none";
+    if (curTab === "net") { pane.classList.remove("on"); return; }
+    const k = curTab, [a, b] = k.split("|").map((id) => S.typeById(id) || { id, symbol: id, arity: 0 }), has = S.rules.includes(k);
+    pane.innerHTML = `<div class="rp-h"><h2>${has ? "Rule" : "New rule"}: ${ruleLabel(k)}</h2><span class="grow"></span>${has ? `<button class="btn danger" id="rpDel">Delete rule</button>` : `<button class="btn go" id="rpAdd">Add this rule</button>`}</div>
+      <div style="color:var(--muted)">${has ? esc(NetKit.effectFor(a.id, b.id).say) : `No rule yet. When <i class="sym">${esc(a.symbol)}</i> meets <i class="sym">${esc(b.symbol)}</i> they're stuck.`}</div>
+      <div class="rp-io"><div class="side2"><span class="cap">When these two meet</span>${NetKit.pairGlyph(a, b, { w: 120, h: 180, active: true })}</div><div class="arr">→</div><div class="side2"><span class="cap">they become</span><div class="ph">Rule editor placeholder. You'd draw the replacement here and wire it to the outer ports on the left.</div></div></div>`;
+    pane.classList.add("on");
+    if ($("#rpDel")) $("#rpDel").onclick = () => { S.removeRule(k); toast("Deleted the rule. Pairs that used it are now stuck.", true); showTab(); };
+    if ($("#rpAdd")) $("#rpAdd").onclick = () => { S.addRule(k); toast("Added the rule.", true); showTab(); };
+  }
+  function openRule(k) { if (!tabs.includes(k)) tabs.push(k); curTab = k; showTab(); }
+
+  /* ---------- sidebar */
+  const PEN = `<svg viewBox="0 0 16 16"><path d="M10.5 2.5l3 3L6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+  function ruleLabel(k) { const [a, b] = k.split("|").map((id) => S.typeById(id) || { symbol: id }); return `<i>${esc(a.symbol)}</i> with <i>${esc(b.symbol)}</i>`; }
+  function buildSide() {
+    $("#typeCount").textContent = S.types.length;
+    $("#typeRows").innerHTML = S.types.map((t) => `<div class="row" tabindex="0" data-id="${esc(t.id)}" title="Drag onto the canvas to add. Click to edit."><span class="gw">${NetKit.glyph(t, { size: 32 })}</span><span class="nm"><b>${esc(t.symbol)}</b><small>${esc(t.name || "unnamed")}, ${t.arity} aux port${t.arity === 1 ? "" : "s"}</small></span><button class="btn icon plain ed" title="Edit type">${PEN}</button></div>`).join("");
+    $("#compRows").innerHTML = S.components.map((c) => `<div class="row comp" tabindex="0" data-id="${esc(c.id)}" title="Drag to add. Click to edit the definition."><span class="gw">${NetKit.glyph(c, { size: 28, w: 34 })}</span><span class="nm" style="flex-direction:row;align-items:center">${esc(c.name)}<span class="tag">component</span></span><button class="btn icon plain ed" title="Edit definition">${PEN}</button></div>`).join("");
+    $$("#typeRows .row, #compRows .row").forEach((el) => { const id = el.dataset.id, t = S.typeById(id); NetKit.paletteDrag(el, { typeId: id, view, ghost: () => NetKit.glyph(S.typeById(id), { size: 34 * view.cam.z, w: t.component ? 56 * view.cam.z : null }), onClick: () => (t.component ? toast("The component editor isn't part of this prototype.") : openEditor(id)) }); });
+    $("#ruleCount").textContent = S.rules.length;
+    $("#ruleRows").innerHTML = S.rules.map((k) => `<button class="row rule" data-k="${esc(k)}" title="Open rule">${pairG(k)}<span class="nm">${ruleLabel(k)}</span><span class="btn small ed">Edit</span></button>`).join("");
+    const miss = S.missingRules();
+    $("#miss").style.display = miss.length ? "" : "none";
+    $("#miss>summary").textContent = `${miss.length} pair${miss.length === 1 ? " has" : "s have"} no rule`;
+    $("#missRows").innerHTML = miss.map((k) => `<button class="row rule missing" data-k="${esc(k)}" title="Write a rule">${pairG(k)}<span class="nm">${ruleLabel(k)}</span><span class="btn small ed">Add</span></button>`).join("");
+    $$(".rule").forEach((r) => (r.onclick = () => openRule(r.dataset.k)));
+    showTab();
+  }
+  function pairG(k) { const [a, b] = k.split("|").map((id) => S.typeById(id) || { id, symbol: id, arity: 0, circle: true }); return NetKit.pairGlyph(a, b, { w: 22, h: 30 }); }
+  $("#newType").onclick = () => { const t = S.newType(); buildSide(); openEditor(t.id); };
+  $("#newRule").onclick = () => { $("#miss").open = true; toast("Pick a pair below that has no rule yet."); };
+  $("#newComp").onclick = () => toast(view.selection().agents.length ? "Would bundle the selection into a component. Not part of this prototype." : "Select some agents on the canvas first.");
+
+  /* ---------- type editor dialog */
+  let edId = null;
+  function openEditor(id) { edId = id; renderEditor(); $("#typeScrim").classList.add("on"); setTimeout(() => { const t = S.typeById(id); if (t && t.isNew) $("#edSym").select(); }, 0); }
+  function closeEditor() { $("#typeScrim").classList.remove("on"); const t = edId && S.typeById(edId); if (t) delete t.isNew; edId = null; }
+  $("#typeScrim").onclick = (e) => { if (e.target.id === "typeScrim") closeEditor(); };
+  function renderEditor() {
+    const t = S.typeById(edId), rules = S.rulesFor(t.id);
+    const tri = { ...t, circle: false, filled: false }, cir = { ...t, circle: true, filled: false };
+    $("#typeDlg").innerHTML = `<div class="dlg-h">${t.isNew ? "New agent type" : "Agent type"}<span class="grow"></span><button class="btn icon plain" id="edX" title="Close">×</button></div>
+      <div class="dlg-b"><div>
+        <div class="form">
+          <div style="display:flex;gap:12px"><label class="fld"><span>Symbol</span><input class="inp sym" id="edSym" maxlength="3" value="${esc(t.symbol)}"></label>
+            <label class="fld" style="flex:1"><span>Name</span><input class="inp" id="edName" value="${esc(t.name)}" placeholder="e.g. duplicator"></label></div>
+          <div class="fld"><span>Aux ports</span><div class="nums">${[0, 1, 2, 3, 4, 5].map((n) => `<button data-n="${n}" aria-pressed="${t.arity === n}">${n}</button>`).join("")}</div></div>
+          <div class="fld"><span>Shape</span><div class="pick"><button data-shape="tri" aria-pressed="${!t.circle}">${NetKit.glyph(tri, { size: 30 })}<span>Triangle</span></button><button data-shape="circle" aria-pressed="${!!t.circle}">${NetKit.glyph(cir, { size: 30 })}<span>Circle</span></button></div></div>
+          <div class="fld"><span>Fill</span><div class="pick"><button data-fill="0" aria-pressed="${!t.filled}">${NetKit.glyph({ ...t, filled: false }, { size: 30 })}<span>Hollow</span></button><button data-fill="1" aria-pressed="${!!t.filled}">${NetKit.glyph({ ...t, filled: true }, { size: 30 })}<span>Filled</span></button></div></div>
+        </div>
+        <div class="meaning"><b>These are only labels.</b> Symbol, shape and fill help you tell agents apart; they don't change what an agent does. Its rules do.
+          <div class="rl">${rules.map((k) => `<button class="btn small" data-k="${esc(k)}">${ruleLabel(k)}</button>`).join("") || `<span>No rules yet, so it can't interact with anything.</span>`}</div></div>
+      </div>
+      <div class="prev"><div class="big" id="edBig"><span class="cap">Preview</span>${NetKit.glyph(t, { size: 170, labels: true })}</div>
+        <div class="pair"><span class="cap">Facing another one</span>${NetKit.pairGlyph(t, t, { w: 70, h: 100, active: true })}</div></div></div>
+      <div class="dlg-f"><button class="btn danger" id="edDel" style="margin-right:auto">Delete type</button><button class="btn" id="edDone">Done</button></div>`;
+    const re = (commit, patch) => { S.updateType(edId, patch, commit); const keepSym = document.activeElement && document.activeElement.id; buildSide(); refreshPreview(); };
+    const refreshPreview = () => { const tt = S.typeById(edId); const big = $("#edBig"); big.innerHTML = `<span class="cap">Preview</span>` + NetKit.glyph(tt, { size: 170, labels: true }); big.classList.add("bump"); setTimeout(() => big.classList.remove("bump"), 150); $("#typeDlg .pair").innerHTML = `<span class="cap">Facing another one</span>` + NetKit.pairGlyph(tt, tt, { w: 70, h: 100, active: true }); };
+    $("#edSym").oninput = (e) => re(false, { symbol: e.target.value || "?" });
+    $("#edSym").onchange = () => S._push("Edit symbol");
+    $("#edName").oninput = (e) => re(false, { name: e.target.value });
+    $$("#typeDlg [data-n]").forEach((b) => (b.onclick = () => { re(true, { arity: +b.dataset.n }); $$("#typeDlg [data-n]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+    $$("#typeDlg [data-shape]").forEach((b) => (b.onclick = () => { re(true, { circle: b.dataset.shape === "circle" }); $$("#typeDlg [data-shape]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+    $$("#typeDlg [data-fill]").forEach((b) => (b.onclick = () => { re(true, { filled: b.dataset.fill === "1" }); $$("#typeDlg [data-fill]").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+    $$("#typeDlg .rl [data-k]").forEach((b) => (b.onclick = () => { closeEditor(); openRule(b.dataset.k); }));
+    $("#edX").onclick = closeEditor; $("#edDone").onclick = closeEditor;
+    $("#edDel").onclick = () => { const id = edId; closeEditor(); S.deleteType(id); buildSide(); toast("Deleted the agent type.", true); };
+  }
+
+  /* ---------- toolbar */
+  $$("[data-layout]").forEach((b) => (b.onclick = () => S.setLayout(b.dataset.layout)));
+  $("#tidy").onclick = () => S.tidy();
+  $("#fit").onclick = () => view.fit();
+  $("#zoomIn").onclick = () => view.zoomAt(1.25); $("#zoomOut").onclick = () => view.zoomAt(0.8); $("#zoomVal").onclick = () => view.zoomAt(1 / view.cam.z);
+  view.on("camera", (c) => ($("#zoomVal").textContent = Math.round(c.z * 100) + "%"));
+  $("#del").onclick = () => view.deleteSelection();
+  $("#flip").onclick = () => view.flip(view.selection().agents);
+  $("#mkComp").onclick = () => toast("Would bundle the selection into a component. Not part of this prototype.");
+  $("#clear").onclick = () => { S.clear(); toast("Cleared the net.", true); };
+  $("#undo").onclick = () => S.undo(); $("#redo").onclick = () => S.redo();
+
+  /* ---------- transport */
+  $("#step").onclick = () => S.step(); $("#stepAll").onclick = () => S.step();
+  $("#runBtn").onclick = () => (S.running ? S.stop() : S.run());
+  $$("#speedSeg button").forEach((b) => (b.onclick = () => { S.setSpeed(+b.dataset.v); $$("#speedSeg button").forEach((x) => x.setAttribute("aria-pressed", x === b)); }));
+  $("#onion").onchange = () => onion();
+  function onion() {
+    if (!$("#onion").checked || S.busy) { if (view.preview && view.preview.onion) view.setPreview(null); return; }
+    const next = S.ex.states[S.stepIndex + 1];
+    if (!next || !view.activePairs().length) { view.setPreview(null); return; }
+    view.setPreview({ onion: true, all: true, ghost: next, wires: view.activePairs().map((w) => w.id) });
+  }
+  S.on("stepstart", () => view.setPreview(null));
+
+  function buildTimeline() {
+    const h = S.stats.history, max = Math.max(1, ...h.map((x) => x.fired.length), view.activePairs().length);
+    const ht = (n) => 6 + Math.round((n / max) * 24);
+    let s = `<div class="tk past" style="height:6px" data-s="0" title="Start"></div>`;
+    s += h.map((x, i) => `<div class="tk past" style="height:${ht(x.fired.length)}px" data-s="${x.step}" title="Step ${x.step}: ${x.fired.length} interaction${x.fired.length === 1 ? "" : "s"}"></div>`).join("");
+    const pairs = view.activePairs().length;
+    if (pairs && S.hasNext()) s += `<div class="tk next" style="height:${ht(pairs)}px" title="Next: ${pairs} pair${pairs === 1 ? "" : "s"} ready"></div>`;
+    s += `<span class="lab">Step <b>${S.stepIndex}</b>${pairs ? `, ${pairs} pair${pairs === 1 ? "" : "s"} ready` : view.stuckPairs().length ? ", stuck" : ", done"}</span>`;
+    $("#timeline").innerHTML = s;
+    const ticks = $$("#timeline .tk.past"); if (ticks.length) ticks[ticks.length - 1].classList.add("now");
+    $$("#timeline .tk[data-s]").forEach((t) => (t.onclick = () => {
+      const target = +t.dataset.s; const i = S.undoStack.findIndex((sn) => sn.stepIndex === target);
+      if (i < 0 || target === S.stepIndex) return;
+      const sn = S.undoStack[i]; while (S.undoStack.length - 1 > i) S.redoStack.push(S.undoStack.pop()); S.restore(sn); toast(`Back to step ${target}. Redo goes forward again.`);
+    }));
+  }
+
+  function sync() {
+    if (!S.stats) return;
+    const pairs = view.activePairs().length, sel = view.selection(), n = sel.agents.length + sel.wires.length;
+    $("#step").disabled = $("#stepAll").disabled = !pairs;
+    $("#stepAll").title = pairs ? `Fire all ${pairs} active pair${pairs === 1 ? "" : "s"} at once` : "Nothing to fire";
+    $("#runBtn").className = "btn " + (S.running ? "halt" : "go");
+    $("#runBtn").innerHTML = S.running ? `<svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor"/></svg><span>Stop</span>` : `<svg viewBox="0 0 16 16"><path d="M4.5 3l8 5-8 5z" fill="currentColor"/></svg><span>Run</span>`;
+    $("#runBtn").disabled = !S.running && !pairs;
+    $("#undo").disabled = !S.canUndo(); $("#redo").disabled = !S.canRedo();
+    $("#undo").title = S.canUndo() ? "Undo " + (S.undoLabel() || "").toLowerCase() : "Nothing to undo";
+    $("#redo").title = S.canRedo() ? "Redo " + (S.redoLabel() || "").toLowerCase() : "Nothing to redo";
+    const lay = S.layout || "auto";
+    $$("[data-layout]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.layout === lay));
+    $("#tidy").disabled = lay !== "manual"; $("#tidy").title = lay === "manual" ? "Tidy up positions" : "Only needed in manual layout";
+    $("#selLabel").textContent = n ? (sel.agents.length ? `${sel.agents.length} agent${sel.agents.length === 1 ? "" : "s"}` : "") + (sel.agents.length && sel.wires.length ? ", " : "") + (sel.wires.length ? `${sel.wires.length} wire${sel.wires.length === 1 ? "" : "s"}` : "") : "Nothing selected";
+    $("#del").disabled = !n; $("#flip").disabled = !sel.agents.length; $("#mkComp").disabled = sel.agents.length < 2; $("#newComp").disabled = sel.agents.length < 2;
+    const st = view.state;
+    $("#stAgents").textContent = `${st.agents.length} agents`; $("#stWires").textContent = `${st.wires.length} wires`; $("#stPairs").textContent = `${pairs} active, ${view.stuckPairs().length} stuck`;
+    const pr = Object.entries(S.stats.perRule), mx = Math.max(1, ...pr.map((x) => x[1]));
+    $("#stats").innerHTML = `<tr><td>Steps</td><td>${S.stats.steps}</td></tr><tr><td>Interactions</td><td>${S.stats.interactions}</td></tr><tr><td>Agents now / peak</td><td>${st.agents.length} / ${S.stats.maxAgents}</td></tr>` +
+      (pr.length ? pr.sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td class="k">${ruleLabel(k)}<div class="bar" style="width:${(v / mx) * 100}%"></div></td><td>${v}</td></tr>`).join("") : `<tr><td colspan="2" style="color:var(--muted);text-align:left;font-weight:400">Per-rule counts show up once you step.</td></tr>`);
+    $("#typedBanner").classList.toggle("on", !!S.ex.typed);
+    buildTimeline(); renderTabs(); onion();
+  }
+  S.on("update", sync); view.on("select", sync); view.on("change", () => setTimeout(sync));
+  S.on("load", () => { tabs = []; curTab = "net"; buildSide(); });
+  S.on("types", buildSide); S.on("undo", buildSide); S.on("redo", buildSide);
+  S.on("message", (m) => toast(m));
+  view.on("fire", () => S.step());
+  view.on("stuck", (w, info) => openRule(info.a.type + "|" + info.b.type));
+
+  addEventListener("keydown", (e) => {
+    if (e.target.closest("input,textarea")) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? S.redo() : S.undo(); }
+    else if (e.key === "Backspace" || e.key === "Delete") view.deleteSelection();
+    else if (e.key === " ") { e.preventDefault(); S.step(); }
+    else if (e.key === "f") view.fit();
+    else if (e.key === "Escape") { closeEditor(); closeMenus(); view.select([]); }
+  });
+  setHint(null);
+  S.layout = "auto"; S.load(4);
+  window.__app = { S, view, openEditor, openRule };
+})();
+</script>
+</body>
+</html>

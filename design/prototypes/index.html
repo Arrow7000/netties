@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties prototypes</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<style>
+:root{--bg:#fff;--text:#1a1c20;--muted:#5d6570;--line:#dfe2e6;color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root{--bg:#111316;--text:#e7e9ec;--muted:#9aa1ab;--line:#2c3036}}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:40px 16px 60px}
+h1{font-size:22px;margin:0 0 6px}
+p{margin:0 0 12px;color:var(--muted)}
+section{border-top:1px solid var(--line);padding:20px 0}
+h2{font-size:17px;margin:0 0 6px}
+h2 a{color:inherit}
+.tr{font-size:14px}
+.tr b{color:var(--text);font-weight:600}
+ul{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:14px}
+code{font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<h1>netties: three directions</h1>
+<p>Throwaway, clickable prototypes. Every net is a real layout from the engine (<code>design/assets/nets.json</code>). Editing and stepping are mocked: stepping replays each example's recorded steps, and wires you draw are simple curves where the real tool would route them. All three share one drawing and gesture kit (<code>shared/netkit.js</code>), so they differ only in layout and interaction model.</p>
+
+<section>
+<h2><a href="a/">A. Canvas-first</a></h2>
+<p>The net fills the whole screen. Everything else floats in small islands: examples and file actions top left, the Net / Combinator translation switch top centre, undo and theme top right, running in the middle at the bottom, layout and view bottom right. Agents, components and rules sit in a floating panel on the right. Selecting something brings up a small toolbar above it. Pointing at an active pair shows "Click to fire" and, for rules that only reconnect wires, a light preview drawn right on the net.</p>
+<p class="tr"><b>Gains:</b> the most room for the net, and the fewest steps between doing something and seeing it. <b>Costs:</b> stats are reduced to a chip and the step preview is light, so it teaches less. The floating panel can cover a wide net, and editors cover part of the canvas.</p>
+</section>
+
+<section>
+<h2><a href="b/">B. Workbench</a></h2>
+<p>A docked desktop-tool layout. A menu bar at the top, a canvas toolbar grouped by kind (layout, view, selection, clear), and a right sidebar with agent types (list rows you drag from), components, rules and run stats. At the bottom are transport controls with speed presets, a "Show next step" switch that draws the next state faintly over the net (onion skin), and a bar chart of interactions per step that you can click to go back. A status bar says what each mouse button does on whatever you're pointing at. Rules open in document tabs next to the net.</p>
+<p class="tr"><b>Gains:</b> everything is visible and labelled; best for the second user, who designs systems and wants rules and stats on hand. <b>Costs:</b> the densest of the three, and the net gets the least space. The status bar is easy to overlook, and Shift means both "add to selection" and "select the wire instead of firing".</p>
+</section>
+
+<section>
+<h2><a href="c/">C. Step debugger</a></h2>
+<p>Stepping is treated like a debugger. A transport in the top bar (start, back, step, step all, run or pause, speed with slow motion), a "What happens next" inspector on the right, and a history panel at the bottom. The inspector always answers "what will this do": idle, it lists the pairs ready to fire with what each rule does. Pointing at a pair shows Now → After and draws the preview on the canvas: dashed joins, × on agents that go away, dashed outlines for agents that get created. Pointing at a port or wire end says what a drag will do. In the history you can drag the playhead through a step frame by frame, drag it onto the dashed next dot to fire the step by hand, or click an earlier step to go back. The palette and rules move to the <b>left</b> so that building is on one side and watching is on the other.</p>
+<p class="tr"><b>Gains:</b> teaches the most, and puts time in your hands most directly (scrubbing, going back). <b>Costs:</b> three panels at once, so the canvas is the narrowest. It breaks the "sidebar on the right" default. The previews of rules that create agents are drawn at the agents' future positions, which can overlap the current net.</p>
+</section>
+
+<section>
+<h2>Try in each</h2>
+<ul>
+<li>Drag an agent from the palette onto the canvas. Click a type to open its editor and switch it to a circle; agents on the canvas change live.</li>
+<li>Drag from an empty port to another one. Drag over a port that already has a wire to see it refused. Let go on empty canvas to leave a loose end, which auto layout moves to the edge.</li>
+<li>Drag from a wired port to unplug that end and carry the wire.</li>
+<li>Load "3 + 2 with typed ports" and drag from the loose S on the right: ports that don't fit turn grey and say why.</li>
+<li>Load "A pair with no rule" to see a stuck pair. Click it to open the rule.</li>
+<li>Left-drag on empty canvas to select. Right- or middle-drag to pan, scroll to zoom. Alt-click (Shift-click in B) selects an active wire instead of firing it.</li>
+<li>Set the speed to 0.1× and step to watch the rewiring in slow motion.</li>
+</ul>
+</section>
+</main>
+</body>
+</html>
