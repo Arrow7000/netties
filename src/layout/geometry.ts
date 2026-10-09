@@ -32,6 +32,8 @@ export const G = {
   unitGap: 28,
   /** Corner radius for wire bends. */
   radius: 9,
+  /** Height of every triangular agent. */
+  agentH: 30,
   /** Radius of nullary agents (drawn as circles). */
   circleR: 8,
   /** How far below the net free ports sit. */
@@ -47,7 +49,8 @@ export interface Shape {
 export function shape(arity: number): Shape {
   if (arity === 0) return { w: G.circleR * 2, h: G.circleR * 2, circle: true };
   const w = (arity + 1) * G.portGap;
-  return { w, h: Math.min(w * 0.62, 34), circle: false };
+  // Every triangle is the same height; more aux ports only make it wider.
+  return { w, h: G.agentH, circle: false };
 }
 
 export interface Terminal extends Pt {
