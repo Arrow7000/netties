@@ -799,3 +799,39 @@ details.missing .pair {
 .rule-body.single {
   grid-template-columns: 1fr;
 }
+
+/* Translation */
+
+.translate-body {
+  grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr);
+}
+
+.pane {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pane-caption {
+  position: absolute;
+  left: 12px;
+  bottom: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--graphite);
+  pointer-events: none;
+}
+
+.rule-palette .sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--rule);
+  margin: 4px 6px;
+}
+
+@media (max-width: 760px) {
+  .translate-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) 28px minmax(0, 1fr);
+  }
+}

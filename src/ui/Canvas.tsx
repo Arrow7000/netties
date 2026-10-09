@@ -27,6 +27,8 @@ export interface CanvasProps {
   freeLabel?: (name: string) => string;
   /** Read-only: no selecting, dragging or wiring. */
   readonly?: boolean;
+  /** Don't try to draw nets with more agents than this. */
+  limit?: number;
   class?: string;
 }
 
@@ -44,6 +46,8 @@ export function Canvas(props: CanvasProps) {
     return { x: (e.clientX - r.left - v.x) / v.k, y: (e.clientY - r.top - v.y) / v.k };
   };
 
+  const tooBig = () => ed.view().net.agents.size > (props.limit ?? Infinity);
+
   const contentBounds = () => {
     const { routed } = ed.layout();
     const b = { ...routed.bounds };
@@ -55,6 +59,7 @@ export function Canvas(props: CanvasProps) {
   };
 
   const fit = () => {
+    if (tooBig()) return;
     const b = contentBounds();
     const { w, h } = size();
     const bw = Math.max(b.x1 - b.x0, 60);
@@ -80,9 +85,9 @@ export function Canvas(props: CanvasProps) {
   // In automatic mode, keep the whole net in view as it changes shape.
   createEffect(
     on(
-      () => ed.layout(),
+      () => (tooBig() ? undefined : ed.layout()),
       () => {
-        if (ed.mode() !== "auto" || drag()) return;
+        if (ed.mode() !== "auto" || drag() || tooBig()) return;
         const b = contentBounds();
         const v = view();
         const { w, h } = size();
@@ -96,12 +101,15 @@ export function Canvas(props: CanvasProps) {
     ),
   );
 
-  const wireIds = createMemo(() => [...ed.layout().routed.wires.keys()]);
-  const agentIds = createMemo(() => [...ed.layout().placement.keys()].filter((id) => ed.view().net.agents.has(id)));
-  const freeNames = createMemo(() => [...ed.layout().routed.free.keys()]);
+  const wireIds = createMemo(() => (tooBig() ? [] : [...ed.layout().routed.wires.keys()]));
+  const agentIds = createMemo(() =>
+    tooBig() ? [] : [...ed.layout().placement.keys()].filter((id) => ed.view().net.agents.has(id)),
+  );
+  const freeNames = createMemo(() => (tooBig() ? [] : [...ed.layout().routed.free.keys()]));
 
   /** Outlines around expanded instances whose agents are on show. */
   const hulls = createMemo(() => {
+    if (tooBig()) return [];
     const l = ed.layout();
     const v = ed.view();
     const gs = ed.groups;
@@ -383,6 +391,11 @@ export function Canvas(props: CanvasProps) {
           </Show>
         </g>
       </svg>
+      <Show when={tooBig()}>
+        <div class="hint">
+          {ed.view().net.agents.size.toLocaleString()} agents: too many to draw. The counts still update as it runs.
+        </div>
+      </Show>
       <Show
         when={
           !ed.fixedInterface && drag()?.kind === "wire" && (drag() as Extract<Drag, { kind: "wire" }>).from.kind === "port"

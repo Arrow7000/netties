@@ -40,6 +40,7 @@ export function createEditor(initial: Doc | undefined) {
   const [ruleOpen, setRuleOpen] = createSignal<[string, string]>();
   /** The component open in the component editor. */
   const [componentOpen, setComponentOpen] = createSignal<string>();
+  const [translateOpen, setTranslateOpen] = createSignal(false);
 
   /** Changes to the net or to the system. */
   const rev = createMemo(() => model.rev() + sysRev() * 1e6);
@@ -401,6 +402,14 @@ export function createEditor(initial: Doc | undefined) {
       if (g !== undefined) model.bump();
     },
 
+    translateOpen,
+    /** Open the combinator translation, if the net is ready for it. */
+    openTranslate() {
+      if (model.net.unconnected().length) return setMessage("Wire up every port before translating.");
+      stop();
+      setTranslateOpen(true);
+    },
+    closeTranslate: () => setTranslateOpen(false),
     componentOpen,
     openComponent: (id: string) => setComponentOpen(id),
     closeComponent: () => setComponentOpen(undefined),

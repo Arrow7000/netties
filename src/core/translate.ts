@@ -112,6 +112,40 @@ export class Builder {
     return { net, ids };
   }
 
+  /** For each given junction, the cell ports reached by walking away from it along each of its links. */
+  innerEnds(junctions: Map<number, Ref>): Map<number, { c: number; s: number }[]> {
+    const key = (r: Ref) => ("c" in r ? `c${r.c}:${r.s}` : "h" in r ? `h${r.h}` : `f${r.f}`);
+    const touching = new Map<string, number[]>();
+    this.links.forEach(([a, b], i) => {
+      for (const r of [a, b]) {
+        const l = touching.get(key(r)) ?? [];
+        l.push(i);
+        touching.set(key(r), l);
+      }
+    });
+    const out = new Map<number, { c: number; s: number }[]>();
+    for (const [w, h] of junctions) {
+      const found: { c: number; s: number }[] = [];
+      for (const start of touching.get(key(h)) ?? []) {
+        let link = start;
+        let at = key(h);
+        let cur = this.links[link]![0];
+        if (key(cur) === at) cur = this.links[link]![1];
+        while ("h" in cur) {
+          const k = key(cur);
+          const both = touching.get(k)!;
+          link = both[0] === link ? both[1]! : both[0]!;
+          at = k;
+          const [x, y] = this.links[link]!;
+          cur = key(x) === at ? y : x;
+        }
+        if ("c" in cur) found.push(cur);
+      }
+      out.set(w, found);
+    }
+    return out;
+  }
+
   // Constructions. Each takes the refs its free ports should be linked to.
 
   /** M_n: a γ comb γ(x₁, γ(x₂, …)) (Fig. 4). */
@@ -326,8 +360,12 @@ export interface Translation {
   mode: Mode;
   /** The source system's agent types, in the order used for menus and selectors. */
   types: string[];
-  /** Build the translation of a net. Cells are tagged with the source agent they came from. */
-  net(source: Net): { net: Net; tagOf: Map<AgentId, AgentId> };
+  /**
+   * Build the translation of a net. Cells are tagged with the source agent
+   * they came from, and `ports` gives, for each source agent, the translated
+   * port standing for each of its ports.
+   */
+  net(source: Net): { net: Net; tagOf: Map<AgentId, AgentId>; ports: Map<AgentId, End[]> };
   /** Notes on pairs with no rule, which the translation handles arbitrarily. */
   missing: [string, string][];
 }
@@ -546,7 +584,21 @@ export function translation(sys: System, mode: Mode = "general"): Translation {
       const { net, ids } = b.toNet();
       const tagOf = new Map<AgentId, AgentId>();
       b.cells.forEach((c, i) => c.tag !== undefined && tagOf.set(ids[i]!, c.tag));
-      return { net, tagOf };
+      // Find the cell port inside each source agent's translation that each source wire reaches.
+      const ports = new Map<AgentId, End[]>();
+      const inner = b.innerEnds(wireHole);
+      for (const a of source.agents.values()) {
+        ports.set(
+          a.id,
+          a.wires.map((w, slot) => {
+            const options = inner.get(w)!.filter((r) => b.cells[r.c]!.tag === a.id);
+            // A wire joining two ports of the same agent reaches it twice.
+            const r = options.length > 1 && a.wires.indexOf(w) !== slot ? options[1]! : options[0]!;
+            return port(ids[r.c]!, r.s);
+          }),
+        );
+      }
+      return { net, tagOf, ports };
     },
   };
 }

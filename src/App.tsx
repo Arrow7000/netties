@@ -4,6 +4,7 @@ import { createEditor } from "./state/editor";
 import { Canvas } from "./ui/Canvas";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { RuleEditor } from "./ui/RuleEditor";
+import { TranslateView } from "./ui/TranslateView";
 import { Sidebar } from "./ui/Sidebar";
 
 const THEME_KEY = "netties:theme";
@@ -117,6 +118,10 @@ export function App(props: { initial?: Doc }) {
           <button class="btn" onClick={ed.clearNet} title="Remove every agent and wire">
             Clear
           </button>
+          <span class="sep" />
+          <button class="btn" onClick={ed.openTranslate} title="Translate the net into Lafont's interaction combinators">
+            To combinators
+          </button>
           <Show when={selectedItems() > 0}>
             <span class="sep" />
             <Show
@@ -176,6 +181,9 @@ export function App(props: { initial?: Doc }) {
         </div>
         <Show when={ed.rev() >= 0 && ed.net.agents.size === 0 && ed.net.free.size === 0}>
           <div class="hint">Add an agent from the list on the right, then drag between ports to wire them up.</div>
+        </Show>
+        <Show when={ed.translateOpen()}>
+          <TranslateView ed={ed} />
         </Show>
         <Show when={ed.componentOpen()} keyed>
           {(id) => <ComponentEditor ed={ed} id={id} />}
