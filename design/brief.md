@@ -136,8 +136,8 @@ going to happen:
 - Clicking an agent type should open its editor, not drop an agent at a
   random spot. Agents are placed by dragging them from the palette.
 - The new-type form is bleak: three text inputs and a checkbox. It should be
-  a proper editor, with a live preview, where you also choose the shape. Any
-  type can be a circle, not only built-in ones.
+  a proper editor, with a live preview. (The user first asked to choose the
+  shape there too, then noticed it's never a free choice; see Decisions.)
 - It isn't clear whether an agent's symbol and colour mean anything. They
   don't; they're drawing conventions. The interface should make that obvious
   (see below).
@@ -154,10 +154,12 @@ going to happen:
   together: an active pair.
 - **Rules.** For each pair of agent types there is at most one rule, saying
   what the pair is replaced by. A pair of agents with no rule is stuck.
-- **Symbols, fills and shapes are just names.** Lafont draws the constructor
-  γ filled and the duplicator δ hollow so you can tell them apart, and draws
-  the eraser ε, which has no aux ports, as a circle. Only the rules give an
-  agent its meaning.
+- **Symbols and fills are just names.** Lafont draws the constructor γ filled
+  and the duplicator δ hollow so you can tell them apart. Only the rules give
+  an agent its meaning.
+- **Shape follows from the ports.** Agents with no aux ports (ε, or 0 in
+  arithmetic) are circles; every agent with aux ports is a triangle, as wide
+  as its ports need and always the same height.
 - **Types (coming later).** In plain interaction nets any port can be wired to
   any other. Typed nets give each port a type and a direction, input or
   output. A wire must join an output to an input of the same type. This
@@ -183,6 +185,10 @@ going to happen:
 - **Rules stay visible in a list,** and it must be obvious that they can be
   edited, so nobody mistakes them for fixed. The current version gets this
   right.
+- **Shape is never chosen.** An agent is a circle exactly when it has no aux
+  ports, as in Lafont's and xxiivv's figures, so the type editor has no shape
+  control. Triangles all have the same height; more aux ports only make them
+  wider.
 - **Examples move to the top bar,** perhaps as a dropdown, not the sidebar.
   Loading one replaces the whole net, and the UI should say so rather than
   treating it as just another bit of functionality.
