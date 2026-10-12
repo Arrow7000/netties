@@ -11,8 +11,8 @@ npm test
 
 ## What it does
 
-- The net fills the window. Drag agent types in from the palette on the
-  right; click a type to edit it. The rule grid shows every pair of types,
+- The net fills the window. Drag agents in from the palette on the
+  right; click one to edit it. The rule grid shows every pair of types,
   whether it has a rule, and whether it's in the net now; click a cell to
   draw its rule.
 - Drag from an empty port to draw a wire, or from a wired port to unplug
@@ -25,6 +25,13 @@ npm test
   reconnects wires shows the joins it will make.
 - A hover panel says what's under the pointer and what a click or drag will
   do; a selection panel holds the actions for what's selected.
+- Directions and types on ports, set per system (each off, optional or
+  required). A port gives, takes or goes either way, and separately carries
+  a type such as number or list, or any type. Wires show their direction
+  with an arrowhead; drops that don't fit are refused with the reason; the
+  rule grid hatches the pairs that can never meet; rules that break the
+  types can't be saved, and won't fire. The examples include typed
+  arithmetic, a list with its length, and Lafont's directed combinators.
 - Auto layout in Lafont's style, or manual placement with automatic wires.
 - Components: make one from a selection; instances collapse to boxes, nest,
   update when the component is edited, and dissolve when anything inside
@@ -32,15 +39,17 @@ npm test
 - The combinator translation turns the net and its system into γ, δ, ε
   using Lafont's universality construction (general case, or the restricted
   code-free case where it applies), and follows the source step by step.
-- Text import/export in an Inpla-like syntax; SVG export; share links.
+- Text import/export in an Inpla-like syntax; SVG export; share links. In
+  text, ports are `+type` (gives), `-type` (takes), `type` (either way), or
+  `+`, `-`, `_`, with an optional label: `agent S 1 ports +number, -number`.
 
-The redesign started from clickable prototypes in `design/prototypes` and
-the brief in `design/brief.md`.
+The interface started from clickable prototypes in `design/prototypes`,
+from the briefs in `design/brief.md` and `design/brief-types.md`.
 
 ## Code
 
-- `src/core`: nets, systems, reduction, components, the combinator
-  translation, the text format. No UI code.
+- `src/core`: nets, systems, reduction, port directions and types,
+  components, the combinator translation, the text format. No UI code.
 - `src/layout`: automatic placement and wire routing. Nets are split into
   trees by following principal ports; trees and active pairs become units,
   stacked in levels so facing wires meet as S-curves. The router draws the
