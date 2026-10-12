@@ -39,6 +39,8 @@ export interface Example {
   name: string;
   /** One line on what it shows. */
   about: string;
+  /** A larger net with several interactions, shown after the introductory examples. */
+  showcase?: boolean;
   system: () => System;
   net: (sys: System) => Net;
 }
@@ -168,11 +170,43 @@ export const examples: Example[] = [
   {
     name: "Two lengths, one list",
     about: "A list is copied, then both copies are measured independently.",
+    showcase: true,
     system: lists,
     net: (sys) => {
       const net = new Net();
       const list = t("∷", num(1), t("∷", t("0"), t("[]")));
       link(net, build(net, sys, list), build(net, sys, t("δ", t("#", f("a")), t("#", f("b")))));
+      return net;
+    },
+  },
+  {
+    name: "Square of a sum",
+    about: "Add 2 and 1, copy the result, then multiply the copies: (2 + 1)².",
+    showcase: true,
+    system: arithmetic,
+    net: (sys) => {
+      const net = new Net();
+      const sum = new Hole();
+      const a = new Hole();
+      const b = new Hole();
+      const secondFactor = new Hole();
+      link(net, build(net, sys, num(2)), build(net, sys, t("+", sum, num(1))));
+      link(net, sum, build(net, sys, t("δ", a, b)));
+      link(net, a, build(net, sys, t("×", f("out"), secondFactor)));
+      link(net, b, secondFactor);
+      return net;
+    },
+  },
+  {
+    name: "Directed cascade",
+    about: "A branching γ–δ* clash exposes more directed interactions downstream.",
+    showcase: true,
+    system: directedCombinators,
+    net: (sys) => {
+      const net = new Net();
+      const plain = t("γ", t("γ", f("a"), f("b")), t("δ", f("c"), f("d")));
+      const starred = t("δ*", t("γ*", f("e"), f("f")), t("δ*", f("g"), f("h")));
+      link(net, build(net, sys, plain), build(net, sys, starred));
       return net;
     },
   },

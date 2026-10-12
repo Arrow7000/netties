@@ -44,4 +44,18 @@ describe("new examples", () => {
     expect(readNumber(lengths.net, "a")).toBe(2);
     expect(readNumber(lengths.net, "b")).toBe(2);
   });
+
+  it("runs the showcase nets through multiple interactions", () => {
+    const square = loaded("Square of a sum");
+    const squareResult = normalize(square.net, square.system, { limit: 1000 });
+    expect(squareResult.normal).toBe(true);
+    expect(squareResult.stats.interactions).toBeGreaterThan(5);
+    expect(readNumber(square.net, "out")).toBe(9);
+
+    const cascade = loaded("Directed cascade");
+    const cascadeResult = normalize(cascade.net, cascade.system, { limit: 1000 });
+    expect(cascadeResult.normal).toBe(true);
+    expect(cascadeResult.stats.interactions).toBeGreaterThan(1);
+    expect(cascade.net.activePairs()).toEqual([]);
+  });
 });

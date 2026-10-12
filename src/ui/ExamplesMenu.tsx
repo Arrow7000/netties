@@ -4,10 +4,11 @@ import { autoLayout } from "../layout/place";
 import { toSVG } from "../render/svg";
 import { Menu, MenuItem } from "./Menu";
 
-const GROUPS = ["Untyped", "Directions only", "Typed"] as const;
+const GROUPS = ["Untyped", "Directions only", "Typed", "Showcase"] as const;
 type Group = (typeof GROUPS)[number];
 
 function groupOf(ex: Example): Group {
+  if (ex.showcase) return "Showcase";
   const { dirs, types } = ex.system().typing;
   return types !== "off" ? "Typed" : dirs !== "off" ? "Directions only" : "Untyped";
 }
