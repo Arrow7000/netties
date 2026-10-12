@@ -39,16 +39,15 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
     many"): Haiku miscounted the brackets in a deeply nested S(S(...)) and
     resent the same document twice, because "line 17: expected ;" didn't
     say where. This would help people using the text view too.
-  - Step 2, built 2026-10-12, not live yet: `netlify/edge-functions/create.ts`
+  - Step 2, live since 2026-10-12: `netlify/edge-functions/create.ts`
     (POST /api/create) with the logic in `netlify/lib/create.ts`; the browser
     side is `create()` in `src/create/client.ts`. Haiku 5.5 at medium effort,
     30 calls per visitor per hour (10 creates of up to 3 tries), $1 a day for
     everyone, counters in Netlify Blobs (approximate under heavy concurrency).
     No Turnstile yet; add it if bots show up. Test locally with
     `netlify dev --command "npx vite --port 5299 --strictPort" --target-port 5299 --port 8899`.
-    To go live: a separate Anthropic key with a monthly spend limit in the
-    Console, set as ANTHROPIC_API_KEY in the Netlify site's environment, then
-    push. Nothing in the UI calls it until step 3.
+    The site's key is a separate Anthropic key with a monthly spend limit,
+    set as ANTHROPIC_API_KEY in Netlify. Nothing in the UI calls it until step 3.
   - Step 3: a design round for the create/explain UI, as before (brief,
     clickable prototypes, user picks).
   - Research summary (2026-10-09): the cheap models all cost about $1–3 a
