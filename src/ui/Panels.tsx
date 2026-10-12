@@ -56,7 +56,7 @@ function namer(ed: Editor) {
   };
   const sym = (id: AgentId) => <Sym s={typeOf(id)?.symbol ?? "?"} />;
   const end = (e: End): JSX.Element => {
-    if (e.kind === "free") return <>free port <Sym s={e.name} /></>;
+    if (e.kind === "free") return <>loose end <Sym s={e.name} /></>;
     const box = view().box.has(e.agent);
     if (box) return <>port {e.slot + 1} of {typeOf(e.agent)?.name ?? "the component"}</>;
     return e.slot === 0 ? <>the principal port of {sym(e.agent)}</> : <>aux port {e.slot} of {sym(e.agent)}</>;
@@ -208,7 +208,7 @@ export function HoverPanel(props: { ed: Editor }) {
             lines: [
               {
                 text: c.join ? (
-                  <>Let go to join it to the loose end {n.end(h.target)}.</>
+                  <>Let go to join it to {n.end(h.target)}.</>
                 ) : (
                   <>Let go to connect it to {n.end(h.target)}.</>
                 ),

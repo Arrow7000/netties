@@ -232,8 +232,8 @@ function TypingSummary(props: { ed: Editor }) {
           >
             Directions and types <b>{LEVEL_WORD[t().dirs]}</b>
           </Show>
+          <Chevron />
         </span>
-        <Chevron />
       </button>
       <Show when={t().types !== "off"}>
         <div class="type-chips">

@@ -2168,12 +2168,8 @@ kbd {
 }
 
 .typing-line {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  white-space: nowrap;
+  display: block;
   text-align: left;
-  gap: 4px;
   border: 0;
   background: none;
   padding: 2px 0;
@@ -2191,6 +2187,8 @@ kbd {
   width: 12px;
   height: 12px;
   transform: rotate(-90deg);
+  vertical-align: -2px;
+  margin-left: 2px;
 }
 
 .typing-line:hover b {
