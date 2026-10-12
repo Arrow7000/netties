@@ -52,7 +52,12 @@ export function App(props: { initial?: Doc }) {
     }),
   );
 
-  const overlayOpen = () => ed.screen().kind !== "net";
+  // The agent editor is a floating popover: canvas shortcuts remain useful
+  // while it is open. Full workspaces and sheets block those shortcuts.
+  const overlayOpen = () => {
+    const kind = ed.screen().kind;
+    return kind !== "net" && kind !== "agent";
+  };
 
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {

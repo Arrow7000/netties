@@ -10,8 +10,9 @@ materially simpler or faster.
 - `src/core/` owns interaction nets, systems, rules and reduction. Its mutable
   classes are the domain engine; UI code must not mutate them directly.
 - `src/state/` owns durable application changes, undo, revision signalling and
-  persistence snapshots. `EditorMsg` and `dispatch` are the application-level
-  update boundary. `createNetModel` is the update boundary for an individual
+  persistence snapshots. `EditorMsg` and `dispatch` are the shared application
+  shell boundary; named editor operations handle domain edits that validate or
+  return a result. `createNetModel` is the update boundary for an individual
   editable net, including the private nets in rule and component editors.
 - `src/layout/`, `src/render/` and memos in the state layer derive views from
   the domain state. Derived data is not copied into the application model.
@@ -34,8 +35,10 @@ imperative behind that boundary.
 
 1. Prefer a discriminated union when states are mutually exclusive. Do not add
    parallel booleans for screens, modes or asynchronous workflow phases.
-2. Add a semantic `EditorMsg` for a new durable action initiated by the main
-   application UI. Keep high-frequency transient events local.
+2. Add a semantic `EditorMsg` for a shared shell action initiated by the main
+   application UI. A domain edit needing validation or a return value may be a
+   named editor operation, but it must own the complete transaction. Keep
+   high-frequency transient events local.
 3. A durable edit is one transaction: one checkpoint, all related mutations,
    then the appropriate revision signal. Cross-system edits use
    `commitSystemEdit`; net-model operations own their own transaction.

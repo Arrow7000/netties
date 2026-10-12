@@ -29,4 +29,24 @@ describe("net model gesture boundary", () => {
       dispose();
     });
   });
+
+  it("flips several agents as one undoable action", () => {
+    createRoot((dispose) => {
+      const system = new System().addType({ id: "a", name: "Agent", symbol: "A", arity: 0 });
+      const model = createNetModel({ system: () => system });
+      const ids = [model.addAgent("a"), model.addAgent("a")];
+      model.setMode("manual");
+      model.clearHistory();
+      const before = ids.map((id) => model.positionOf(id)!.orient);
+
+      model.flipAgents(ids);
+
+      expect(ids.map((id) => model.positionOf(id)!.orient)).toEqual(before.map((o) => (o === "down" ? "up" : "down")));
+      expect(model.historySize()).toEqual({ undo: 1, redo: 0 });
+
+      model.undo();
+      expect(ids.map((id) => model.positionOf(id)!.orient)).toEqual(before);
+      dispose();
+    });
+  });
 });

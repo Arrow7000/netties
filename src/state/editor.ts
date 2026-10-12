@@ -226,8 +226,9 @@ export function createEditor(initial: Doc | undefined) {
   };
 
   /**
-   * The application boundary for durable user intentions. Pointer movement,
-   * camera motion and animation frames deliberately do not pass through it.
+   * The shared application-shell boundary. Domain edits that need a result
+   * use the named editor operations below and the same transaction rules.
+   * Pointer movement, camera motion and animation frames stay local.
    */
   const dispatch = (msg: EditorMsg): void => {
     switch (msg.kind) {
@@ -716,7 +717,9 @@ export function createEditor(initial: Doc | undefined) {
     },
     /** Open the combinator translation, if the net is ready for it. */
     openTranslate: () => dispatch({ kind: "screen/open", screen: { kind: "translation" } }),
-    closeTranslate: () => dispatch({ kind: "screen/close" }),
+    closeTranslate: () => {
+      if (screen().kind === "translation") dispatch({ kind: "screen/close" });
+    },
     openComponent: (id: string) => dispatch({ kind: "screen/open", screen: { kind: "component", id } }),
     closeComponent: () => dispatch({ kind: "screen/close" }),
 

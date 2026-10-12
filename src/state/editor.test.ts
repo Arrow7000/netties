@@ -1,6 +1,6 @@
 import { createRoot } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentType } from "../core/net";
+import { type AgentType, port } from "../core/net";
 import { createEditor } from "./editor";
 
 const unary: AgentType = { id: "u", name: "Unary", symbol: "U", arity: 1 };
@@ -23,6 +23,18 @@ describe("editor update boundary", () => {
 
       ed.closeRule();
       expect(ed.screen()).toEqual({ kind: "net" });
+      dispose();
+    });
+  });
+
+  it("does not let the Net tab close the floating agent editor", () => {
+    createRoot((dispose) => {
+      const ed = createEditor(undefined);
+      ed.openAgent("new");
+
+      ed.closeTranslate();
+
+      expect(ed.screen()).toEqual({ kind: "agent", id: "new" });
       dispose();
     });
   });
@@ -52,6 +64,29 @@ describe("editor update boundary", () => {
       ed.dispatch({ kind: "history/undo" });
       expect(ed.system.types.has(unary.id)).toBe(false);
       expect(ed.model.historySize()).toEqual({ undo: 0, redo: 1 });
+      dispose();
+    });
+  });
+
+  it("undoes a system edit and the net repairs it caused together", () => {
+    createRoot((dispose) => {
+      const ed = createEditor(undefined);
+      ed.addType({ id: "a", name: "A", symbol: "A", arity: 0, ports: [{ type: "x" }] });
+      ed.addType({ id: "b", name: "B", symbol: "B", arity: 0, ports: [{ type: "x" }] });
+      ed.setTyping({ types: "optional" });
+      const a = ed.model.addAgent("a");
+      const b = ed.model.addAgent("b");
+      ed.model.connect(port(a, 0), port(b, 0));
+      ed.model.clearHistory();
+
+      ed.updateType("b", { name: "B", symbol: "B", arity: 0, ports: [{ type: "y" }] });
+      expect(ed.net.free.size).toBe(2);
+      expect(ed.model.historySize()).toEqual({ undo: 1, redo: 0 });
+
+      ed.dispatch({ kind: "history/undo" });
+      expect(ed.system.type("b").ports?.[0]?.type).toBe("x");
+      expect(ed.net.free.size).toBe(0);
+      expect(ed.net.wires.size).toBe(1);
       dispose();
     });
   });
