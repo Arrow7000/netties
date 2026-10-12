@@ -121,6 +121,25 @@ export function createEditor(initial: Doc | undefined) {
     groups: model.groups.toJSON(),
   });
 
+  /** Only states reached by reducing the loaded example can reset to it. */
+  const [exampleStart, setExampleStart] = createSignal<{ name: string; doc: Doc; states: string[] }>();
+  const fingerprint = () => JSON.stringify(toDoc());
+  const inExampleRun = () => !!exampleStart()?.states.includes(fingerprint());
+  const canResetExample = createMemo(() => {
+    rev();
+    model.mode();
+    const start = exampleStart();
+    const here = fingerprint();
+    return !!start && here !== start.states[0] && start.states.includes(here);
+  });
+  const rememberReduction = (fromExample: boolean) => {
+    if (!fromExample) return;
+    const start = exampleStart();
+    if (!start) return;
+    const here = fingerprint();
+    if (!start.states.includes(here)) setExampleStart({ ...start, states: [...start.states.slice(-199), here] });
+  };
+
   const restore = (doc: Doc) => {
     const d = decode(doc);
     batch(() => {
@@ -157,6 +176,7 @@ export function createEditor(initial: Doc | undefined) {
   const fire = (w: WireId) => {
     const net = model.net;
     if (!net.wires.has(w) || !isActive(net, w)) return;
+    const fromExample = inExampleRun();
     const recs: StepRecord[] = [];
     model.checkpoint();
     const before = model.layout().placement;
@@ -175,7 +195,10 @@ export function createEditor(initial: Doc | undefined) {
     } catch (e) {
       setMessage((e as Error).message);
     }
-    if (recs.length) setSteps((n) => n + 1);
+    if (recs.length) {
+      setSteps((n) => n + 1);
+      rememberReduction(fromExample);
+    }
     model.clearSelection();
     model.bump();
     model.animate(snap, recs, false, stepDuration());
@@ -188,6 +211,7 @@ export function createEditor(initial: Doc | undefined) {
 
   const stepAll = (record = true): boolean => {
     if (model.activeWires().size === 0) return false;
+    const fromExample = inExampleRun();
     if (record) model.checkpoint();
     const before = model.layout().placement;
     const snap = model.animSnapshot();
@@ -198,7 +222,10 @@ export function createEditor(initial: Doc | undefined) {
       model.dissolveAround(r.removed);
     }
     setStats(s);
-    if (recs.length) setSteps((n) => n + 1);
+    if (recs.length) {
+      setSteps((n) => n + 1);
+      rememberReduction(fromExample);
+    }
     model.clearSelection();
     model.bump();
     model.animate(snap, recs, false, stepDuration());
@@ -402,6 +429,17 @@ export function createEditor(initial: Doc | undefined) {
     notify,
     speed,
     setSpeed,
+    canResetExample,
+    resetExample() {
+      const start = exampleStart();
+      if (!start || !canResetExample()) return;
+      stop();
+      model.checkpoint();
+      restore(start.doc);
+      resetRun();
+      model.requestFit();
+      notify(`Reset ${start.name}.`, true);
+    },
     missingRules,
     fire,
     stepOne,
@@ -415,6 +453,7 @@ export function createEditor(initial: Doc | undefined) {
 
     load(doc: Doc) {
       stop();
+      setExampleStart(undefined);
       model.checkpoint();
       restore(doc);
       const n = enforceTypes();
@@ -437,12 +476,15 @@ export function createEditor(initial: Doc | undefined) {
         model.restoreView("auto", new Map());
         resetRun();
       });
+      const doc = toDoc();
+      setExampleStart({ name: ex.name, doc, states: [JSON.stringify(doc)] });
       model.requestFit();
       if (!quiet) notify(`Loaded ${ex.name}.`, true);
     },
 
     clearNet() {
       stop();
+      setExampleStart(undefined);
       model.checkpoint();
       model.setNet(new Net());
       resetRun();
@@ -701,6 +743,7 @@ export function createEditor(initial: Doc | undefined) {
     /** Replace everything with a parsed system and net. */
     loadParsed(sys: System, net: Net) {
       stop();
+      setExampleStart(undefined);
       model.checkpoint();
       batch(() => {
         system = sys;

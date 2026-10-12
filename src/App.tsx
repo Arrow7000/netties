@@ -257,6 +257,11 @@ export function App(props: { initial?: Doc }) {
             </Show>
             {ed.running() ? "Stop" : "Run"}
           </button>
+          <Show when={ed.canResetExample()}>
+            <button class="btn outline" onClick={ed.resetExample} title="Restore the loaded example to its starting net. You can undo this.">
+              Reset example
+            </button>
+          </Show>
           <span class="sep" />
           <div class="speed">
             <button class="btn icon" aria-pressed={slow()} classList={{ on: slow() }} onClick={toggleSlow} title="Slow motion">

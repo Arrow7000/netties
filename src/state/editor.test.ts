@@ -1,6 +1,7 @@
 import { createRoot } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type AgentType, port } from "../core/net";
+import { examples } from "../core/examples";
 import { createEditor } from "./editor";
 
 const unary: AgentType = { id: "u", name: "Unary", symbol: "U", arity: 1 };
@@ -89,5 +90,50 @@ describe("editor update boundary", () => {
       expect(ed.net.wires.size).toBe(1);
       dispose();
     });
+  });
+
+  it("resets an unchanged example after stepping, but not after editing it", () => {
+    createRoot((dispose) => {
+      const ed = createEditor(undefined);
+      const ex = examples.find((e) => e.name === "3 + 2")!;
+      ed.loadExample(ex);
+      const start = ed.toDoc().net;
+      expect(ed.canResetExample()).toBe(false);
+
+      ed.stepAll();
+      expect(ed.canResetExample()).toBe(true);
+      ed.resetExample();
+      expect(ed.toDoc().net).toEqual(start);
+      expect(ed.steps()).toBe(0);
+      expect(ed.canResetExample()).toBe(false);
+
+      ed.stepAll();
+      ed.model.addAgent("0");
+      expect(ed.canResetExample()).toBe(false);
+      ed.model.undo();
+      expect(ed.canResetExample()).toBe(true);
+      dispose();
+    });
+  });
+
+  it("offers a one-click reset after Run finishes", () => {
+    vi.useFakeTimers();
+    try {
+      createRoot((dispose) => {
+        const ed = createEditor(undefined);
+        ed.loadExample(examples.find((e) => e.name === "3 + 2")!);
+        const start = ed.toDoc().net;
+        ed.run();
+        vi.runAllTimers();
+        expect(ed.running()).toBe(false);
+        expect(ed.steps()).toBeGreaterThan(0);
+        expect(ed.canResetExample()).toBe(true);
+        ed.resetExample();
+        expect(ed.toDoc().net).toEqual(start);
+        dispose();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
