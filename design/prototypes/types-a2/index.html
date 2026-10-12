@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties types: arrows, revised</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=STIX+Two+Text:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/types-chrome.css">
+<style>
+/* ---- direction A2: arrows on wires, direction and type set independently ---- */
+.ta-arrow{fill:var(--ink);stroke:var(--paper);stroke-width:1.1;stroke-linejoin:round;paint-order:stroke;pointer-events:none}
+.ta-arrow.bad{fill:var(--stuck)}
+.ta-arrow.drag{fill:var(--accent)}
+.ta-tag{font:500 6px 'Geist',system-ui,sans-serif;fill:var(--muted);stroke:var(--paper);stroke-width:2.4px;paint-order:stroke;stroke-linejoin:round;dominant-baseline:central;pointer-events:none}
+.ta-tag.x{fill:var(--accent);font-weight:600}
+.ta-pmark{fill:var(--ink);pointer-events:none}
+.ta-pmark.dim{fill:var(--faint)}
+.ta-pmark.ok{fill:var(--accent)}
+.ta-pbad{fill:var(--paper);stroke:var(--faint);stroke-width:1.1;stroke-dasharray:1.6 1.2}
+.ta-miss{fill:var(--paper);stroke:var(--stuck);stroke-width:.9;stroke-dasharray:1.4 1}
+.ta-misst{font:700 5.4px var(--ui-font);fill:var(--stuck);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.ta-conf{fill:none;stroke:var(--stuck);stroke-width:2.2;stroke-dasharray:3 2.4;pointer-events:none}
+.ta-confx{stroke:var(--stuck);stroke-width:1.8;stroke-linecap:round;pointer-events:none}
+.xw{fill:none;stroke:var(--accent);stroke-width:4;opacity:.28;stroke-linecap:round;pointer-events:none}
+.xp{fill:none;stroke:var(--accent);stroke-width:1.4;pointer-events:none}
+.ep-hl{fill:none;stroke:var(--accent);stroke-width:1.1}
+.ep-type{font:500 5.6px var(--ui-font);fill:var(--muted)}
+/* palette: summary + type chips */
+.sumbtn{border:0;background:transparent;padding:0;margin:-4px 0 8px;font:500 11.5px var(--ui-font);color:var(--muted);cursor:pointer;display:inline-flex;gap:4px;align-items:center;text-align:left}
+.sumbtn b{font-weight:500;color:var(--text)}
+.sumbtn:hover{color:var(--text)}
+.sumbtn svg{width:10px;height:10px}
+.sumbtn .cnt{background:var(--stuck);color:#fff;border-radius:999px;padding:0 5px;font-size:10.5px;line-height:15px}
+.sys{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:-2px 0 10px}
+.chipbtn{height:22px;border:1px solid transparent;border-radius:999px;background:var(--chrome-2);display:inline-flex;align-items:center;padding:0 9px;font:500 11.5px var(--ui-font);cursor:pointer;color:var(--text)}
+.chipbtn:hover,.chipbtn.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.chipbtn.add{border:1px dashed var(--line-2);background:transparent;color:var(--muted);padding:0 7px}
+/* hover panel bits */
+.tchip{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;background:var(--chrome-3);color:var(--text);font:500 11px var(--ui-font);white-space:nowrap}
+.tchip.any{background:transparent;border:1px dashed var(--line-2);color:var(--muted)}
+.ptag{display:inline-flex;align-items:center;height:17px;padding:0 6px;border-radius:5px;border:1px solid var(--line-2);font:500 10.5px var(--ui-font);color:var(--muted);white-space:nowrap}
+.plab{font-weight:400;color:var(--text)}
+.bits{display:inline-flex;align-items:center;gap:6px;color:var(--text)}
+.dg{color:var(--ink);flex:none}
+.dg circle{fill:var(--paper);stroke:currentColor;stroke-width:1.2}
+.dg line{stroke:currentColor;stroke-width:1.3}
+.dg path{fill:currentColor}
+.dg.either line{stroke-dasharray:2 1.6}
+.dw{font-size:11px;color:var(--muted);margin-left:-3px}
+.nt{font-size:11px;color:var(--muted);margin-right:4px}
+.prow-mini{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:5px}
+.pm{display:inline-flex;align-items:center;gap:5px}
+.pm .dw{display:none}
+.panel .t .n{display:inline-flex;align-items:center;gap:6px}
+#hovp{min-width:0}
+/* port rows: one per port, every setter visible (agent editor and the sheet) */
+.prows{display:flex;flex-direction:column;gap:5px}
+.prow{display:grid;grid-template-columns:24px minmax(80px,1fr) auto auto;gap:6px;align-items:center;border-radius:8px;padding:1px 2px}
+.prow.hl{background:var(--accent-soft)}
+.ptag2{height:22px;border-radius:6px;border:1px solid var(--line-2);display:flex;align-items:center;justify-content:center;font:600 11px var(--ui-font);color:var(--muted)}
+.plabel{height:28px;border:1px solid var(--line);border-radius:7px;background:var(--chrome);color:var(--text);padding:0 8px;font:400 12px var(--ui-font);min-width:0;width:100%}
+.plabel::placeholder{color:var(--faint)}
+.plabel:hover{border-color:var(--line-2)}
+.plabel:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.dseg button{height:24px;padding:0 8px;font-size:12px}
+.dseg button[disabled]{opacity:.35;cursor:not-allowed}
+.dseg.miss{box-shadow:0 0 0 1px var(--stuck)}
+.tbtn{height:28px;border:1px solid var(--line-2);border-radius:7px;background:var(--chrome);padding:0 7px 0 9px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;font:500 12px var(--ui-font);color:var(--text);min-width:92px;justify-content:space-between}
+.tbtn:hover{background:var(--chrome-2)}
+.tbtn.any{color:var(--muted)}
+.tbtn.miss{border:1px dashed var(--stuck);color:var(--stuck)}
+.tbtn svg{width:11px;height:11px;flex:none}
+.prow-head{display:grid;grid-template-columns:24px minmax(80px,1fr) auto auto;gap:6px;font-size:11px;color:var(--faint);padding:0 2px}
+#typeEd{width:780px}
+#typeEd .ed-grid{grid-template-columns:200px 1fr}
+#typeEd .ed-prev .stage{width:180px;height:200px}
+.conf{border:1px solid color-mix(in srgb,var(--stuck) 55%,var(--line));background:color-mix(in srgb,var(--stuck) 6%,var(--chrome));border-radius:10px;padding:8px 11px;font-size:12px;color:var(--text)}
+.conf b{color:var(--stuck)}
+.conf .ws{color:var(--muted);margin-top:3px}
+.walk{background:var(--chrome-2);border-radius:10px;padding:8px 10px;font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.walk .sp{flex:1}
+.linkbtn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2)}
+.linkbtn:hover{color:var(--text)}
+.ed-note.small{padding:8px 11px}
+/* the sheet: directions and types for the whole system */
+#sheet{right:262px;top:64px;width:640px;max-height:calc(100vh - 150px);overflow:auto;padding:16px 18px 18px}
+#sheet h3{margin:0;font-size:14px}
+#sheet h4{margin:18px 0 8px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px}
+#sheet h4 span{font-weight:400;color:var(--muted)}
+#sheet .sub{font-size:12px;color:var(--muted);margin:2px 0 12px}
+.dim{display:grid;grid-template-columns:1fr auto;gap:2px 16px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.dim:first-of-type{border-top:0}
+.dim .dl b{display:block;font-size:12.5px;font-weight:600}
+.dim .dl span{font-size:11.5px;color:var(--muted)}
+.dim .seg button{height:26px;font-size:12px}
+.dim .cap{grid-column:1 / -1;font-size:11.5px;color:var(--muted);min-height:16px}
+.dim .cap.bad{color:var(--stuck)}
+.dim .cap b{color:var(--text);font-weight:600}
+.dim .cap .linkbtn{font-size:11.5px}
+.trow{display:grid;grid-template-columns:150px 1fr 28px;gap:8px;align-items:center;margin-bottom:4px}
+.trow .inp{height:28px;font-size:12px}
+.trow .u{font-size:11.5px;color:var(--muted)}
+.trow.x .inp{border-color:var(--accent);background:var(--accent-soft)}
+.agrp{margin:0 0 10px}
+.agh{display:flex;align-items:center;gap:6px;margin:0 0 4px;color:var(--ink)}
+.agh .sym{font-size:16px;color:var(--text)}
+.agh small{color:var(--muted);font-size:11.5px}
+.agh .btn{height:24px;font-size:11.5px;margin-left:auto;padding:0 8px}
+.menu .mi[disabled]{opacity:.45;cursor:not-allowed}
+.menu .mi .ck{width:14px;flex:none;color:var(--accent);font-weight:600}
+</style>
+</head>
+<body>
+<div id="canvas"></div>
+
+<div class="island" id="top-left" data-chrome>
+  <div class="brand"><svg viewBox="-12 -14 24 28" aria-hidden="true"><polygon points="-9,-13 9,-13 0,-2" class="brand-filled"/><polygon points="-9,13 9,13 0,2" class="brand-hollow"/></svg>netties</div>
+  <div class="sep"></div>
+  <button class="btn" id="exBtn" aria-haspopup="menu">Examples <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn" id="fileBtn" aria-haspopup="menu">Net <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+</div>
+<div class="island" id="top-mid" data-chrome>
+  <div class="seg" role="tablist" aria-label="Screen">
+    <button role="tab" aria-pressed="true" data-screen="net">Net</button>
+    <button role="tab" aria-pressed="false" data-screen="comb">Combinator translation</button>
+  </div>
+</div>
+<div class="island" id="top-right" data-chrome>
+  <button class="btn icon" id="undo" title="Undo"><svg viewBox="0 0 16 16"><path d="M6 4L3 7l3 3M3.5 7H10a3 3 0 010 6H8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <button class="btn icon" id="redo" title="Redo"><svg viewBox="0 0 16 16"><path d="M10 4l3 3-3 3M12.5 7H6a3 3 0 000 6h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <div class="sep"></div>
+  <button class="btn icon" id="theme" title="Switch theme"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 2.5a5.5 5.5 0 010 11z" fill="currentColor"/></svg></button>
+</div>
+
+<div class="island banner" id="banner" data-chrome></div>
+
+<aside class="island" id="panel" data-chrome aria-label="Palette">
+  <section>
+    <div class="sec-h"><h2>Agents</h2><button class="btn ghost" id="newType"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5"/></svg>New agent</button></div>
+    <div id="sysStrip"></div>
+    <div class="tiles" id="typeTiles"></div>
+    <div class="sec-h" style="margin-top:12px"><h2>Components</h2><button class="btn ghost" id="newComp" title="Select some agents first"><svg viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.5"/><path d="M8 6v4M6 8h4" stroke="currentColor" stroke-width="1.3"/></svg>From selection</button></div>
+    <div id="compHint">Select some agents and make them a component to reuse them.</div>
+    <div class="tiles" id="compTiles"></div>
+    <div class="hintline">Drag onto the canvas to add. Click to edit.</div>
+  </section>
+  <section id="rulesSec">
+    <div class="sec-h"><h2>Rules</h2><button class="btn ghost" id="gridExpand" title="Open a bigger rule grid"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5L9 7M6.5 13.5h-4v-4M2.5 13.5L7 9" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Expand</button></div>
+    <div id="gridHost"></div>
+  </section>
+</aside>
+
+<div class="island panel" id="hovp" aria-live="polite"></div>
+<div class="island panel" id="selp" data-chrome></div>
+<div id="altBadge" data-chrome><kbd>Alt</kbd> held: clicking an active pair selects its wire instead of firing it</div>
+<div class="pop" id="gridPop" data-chrome role="dialog" aria-label="Rule grid"></div>
+<div class="menu" id="typeMenu" data-chrome></div>
+<div class="menu" id="levelMenu" data-chrome></div>
+<div class="menu" id="nameMenu" data-chrome></div>
+<div class="island" id="stats" data-chrome title="Stats for this run">
+  <div class="chip"><b id="stSteps">0</b><span>steps</span></div>
+  <div class="chip"><b id="stInter">0</b><span>interactions</span></div>
+  <div class="chip"><b id="stAgents">0</b><span>agents</span></div>
+</div>
+
+<div class="island" id="run" data-chrome aria-label="Run">
+  <button class="btn ghost" id="step" title="Fire one active pair (Space)"><svg viewBox="0 0 16 16"><path d="M4 3.5l6 4.5-6 4.5z" fill="currentColor"/><path d="M12 3.5v9" stroke="currentColor" stroke-width="1.6"/></svg>Step</button>
+  <button class="btn ghost" id="stepAll" title="Fire every active pair at once"><svg viewBox="0 0 16 16"><path d="M2 3.5l5 4.5-5 4.5zM8 3.5l5 4.5-5 4.5z" fill="currentColor"/></svg>Step all</button>
+  <button class="btn run" id="runBtn"><svg viewBox="0 0 16 16"><path d="M4.5 3l8 5-8 5z" fill="currentColor"/></svg><span>Run</span></button>
+  <div class="sep"></div>
+  <div class="speed" title="Animation speed">
+    <button class="btn icon" id="slowmo" title="Slow motion (0.2×)" aria-pressed="false"><svg viewBox="0 0 16 16"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.5v3l2 1.5M6.5 1.8h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+    <input type="range" id="speed" min="0" max="100" value="50" aria-label="Speed">
+    <output id="speedOut">1×</output>
+  </div>
+</div>
+
+<div class="island" id="viewctl" data-chrome>
+  <div class="seg" aria-label="Layout mode">
+    <button aria-pressed="true" data-layout="auto" title="The engine places agents">Auto layout</button>
+    <button aria-pressed="false" data-layout="manual" title="You place agents">Manual</button>
+  </div>
+  <button class="btn" id="tidy" title="Tidy up positions (manual layout)">Tidy</button>
+  <div class="sep"></div>
+  <button class="btn icon" id="zoomOut" title="Zoom out"><svg viewBox="0 0 16 16"><path d="M3.5 8h9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn zoomval" id="zoomVal" title="Reset to 100%">100%</button>
+  <button class="btn icon" id="zoomIn" title="Zoom in"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9" stroke="currentColor" stroke-width="1.5"/></svg></button>
+  <button class="btn" id="fit" title="Fit net to view (F)"><svg viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>Fit</button>
+</div>
+
+<div class="menu" id="exMenu" role="menu" data-chrome></div>
+<div class="menu" id="fileMenu" role="menu" data-chrome>
+  <button class="mi" data-act="text"><div class="mt">Text view<span class="ms">Edit the net as text</span></div></button>
+  <button class="mi" data-act="open"><div class="mt">Open file…<span class="ms">Opens sum.inet, which doesn't type-check</span></div></button>
+  <button class="mi" data-act="save"><div class="mt">Save file</div></button>
+  <hr>
+  <button class="mi" data-act="share"><div class="mt">Copy share link</div></button>
+  <button class="mi" data-act="svg"><div class="mt">Export SVG</div></button>
+  <hr>
+  <button class="mi danger" data-act="clear"><div class="mt">Clear net<span class="ms">Removes everything. You can undo it.</span></div></button>
+</div>
+
+<div class="pop" id="typeEd" data-chrome role="dialog" aria-label="Agent"></div>
+<div class="pop" id="sheet" data-chrome role="dialog" aria-label="Directions and types"></div>
+<div class="scrim" id="ruleScrim"><div class="sheet" id="ruleSheet" data-chrome></div></div>
+<div id="comb"><div class="box"><h2>Combinator translation</h2>Translates each agent type and rule into the three Lafont combinators. This screen isn't part of the prototype.<br><br><button class="btn ghost" id="combBack">Back to the net</button></div></div>
+<div id="toast" role="status"><span id="toastText"></span><button id="toastUndo">Undo</button></div>
+
+<script src="../shared/netkit.js"></script>
+<script src="typekit2.js"></script>
+<script src="chrome2.js"></script>
+<script>
+(async function () {
+  const TK = TypeKit, NK = NetKit, esc = NK.esc;
+  const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)];
+
+  /* =====================================================================
+     Direction A2: A's arrows, with direction and type set independently.
+     Direction (gives / takes / either) is the arrow on each wire; type
+     (number, list, or any type) is the small label beside it. Every port
+     row shows both setters at once, in the agent editor and in the
+     system-wide sheet.
+     ===================================================================== */
+  let S = null, edConf = new Set(), xray = null, hlSlot = -1;
+  const typed = () => S && TK.level(S) !== "untyped";
+  const dOn = () => S && TK.dirsOn(S), tOn = () => S && TK.typesOn(S);
+
+  /* ---------------------------------------------------------------- drawing */
+  function arrowLegend() { return `<svg width="16" height="10" viewBox="-8 -5 16 10" style="vertical-align:-1px"><line x1="-7" y1="0" x2="7" y2="0" class="nk-gstub"/>${arrowAt([0.5, 0], [1, 0], "", 1)}</svg>`; }
+  function midOf(path) {
+    let L = 0; const seg = [];
+    for (let i = 1; i < path.length; i++) { const l = Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]); seg.push(l); L += l; }
+    let h = L / 2;
+    for (let i = 0; i < seg.length; i++) { if (h <= seg[i] || i === seg.length - 1) { const a = path[i], b = path[i + 1], k = seg[i] ? h / seg[i] : 0; const d = [(b[0] - a[0]) / (seg[i] || 1), (b[1] - a[1]) / (seg[i] || 1)]; return { p: [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k], d, L }; } h -= seg[i]; }
+    return { p: path[0], d: [0, 1], L: 0 };
+  }
+  function arrowAt(p, d, cls = "", s = 1) {
+    const l = 3.1 * s, w = 2.5 * s, n = [-d[1], d[0]];
+    const tip = [p[0] + d[0] * l, p[1] + d[1] * l], b = [p[0] - d[0] * l, p[1] - d[1] * l];
+    const f = (q) => q[0].toFixed(2) + "," + q[1].toFixed(2);
+    return `<polygon class="ta-arrow ${cls}" points="${f(tip)} ${f([b[0] + n[0] * w, b[1] + n[1] * w])} ${f([b[0] + d[0] * 1.1, b[1] + d[1] * 1.1])} ${f([b[0] - n[0] * w, b[1] - n[1] * w])}"/>`;
+  }
+  function wireArrow(path, f, cls) { const m = midOf(path); if (m.L < 8) return ""; return arrowAt(m.p, f > 0 ? m.d : [-m.d[0], -m.d[1]], cls); }
+  function portArrow(p, d, pol, cls = "") { const c = [p[0] + d[0] * 7.2, p[1] + d[1] * 7.2]; return arrowAt(c, pol === "give" ? d : [-d[0], -d[1]], "ta-pmark " + cls, 0.82); }
+
+  // Type labels sit beside the wire's middle, on whichever side is free; a label
+  // that would overlap an agent, another wire or another label is left out.
+  let tagQueue = [];
+  function tagsSVG(v) {
+    if (!tagQueue.length) return "";
+    const boxes = v.state.agents.map((a) => { const b = NK.agentBox(a); return [b.x0 - 1, b.y0 - 1, b.x1 + 1, b.y1 + 1]; });
+    const pts = v.state.wires.map((w) => w.path);
+    const hit = (r, own) => boxes.some((b) => r[0] < b[2] && r[2] > b[0] && r[1] < b[3] && r[3] > b[1]) ||
+      pts.some((path) => path !== own && path.some((p) => p[0] > r[0] - 2 && p[0] < r[2] + 2 && p[1] > r[1] - 1 && p[1] < r[3] + 1));
+    let s = "";
+    for (const q of tagQueue) {
+      const m = midOf(q.p); if (m.L < 26) continue;
+      const w = q.label.length * 3.4 + 2, h = 7.5, vertical = Math.abs(m.d[1]) > 0.6;
+      // beside the arrow, nudged off it
+      const c = [m.p[0], m.p[1] + (vertical ? 0 : 0)];
+      const cands = vertical ? [[c[0] + 5.5, c[1], "start"], [c[0] - 5.5, c[1], "end"]] : [[c[0], c[1] - 7, "middle"], [c[0], c[1] + 7, "middle"]];
+      for (const [x, y, anc] of cands) {
+        const x0 = anc === "start" ? x : anc === "end" ? x - w : x - w / 2, r = [x0, y - h / 2, x0 + w, y + h / 2];
+        if (hit(r, q.w)) continue;
+        boxes.push(r);
+        s += `<text class="ta-tag${q.x ? " x" : ""}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" style="text-anchor:${anc}">${esc(q.label)}</text>`;
+        break;
+      }
+    }
+    return s;
+  }
+  const missKeys = () => { const m = new Map(); if (!S || !S.sys) return m; for (const x of TK.missing(S)) m.set(x.type + ":" + x.slot, true); return m; };
+
+  const hooks = {
+    freeOwnsDrag: true,
+    wire(w, p, v) {
+      if (!typed()) return "";
+      const f = TK.flow(S, v, w), nm = tOn() ? TK.wireName(S, v, w) : null;
+      if (nm) tagQueue.push({ p, w: w.path, label: TK.nameOf(S, nm), x: xray === nm });
+      return (xray && nm === xray ? `<polyline class="xw" points="${p.map((q) => q.join(",")).join(" ")}"/>` : "") + (f ? wireArrow(p, f, edConf.has(w.id) ? "bad" : "") : "");
+    },
+    port(c) {
+      if (!typed()) return null;
+      const pt = TK.portOf(S, c.a.type, c.i), d = NK.portDir(c.a, c.i), [x, y] = c.p;
+      if (c.dragging) {
+        if (c.isOrigin) return `<circle cx="${x}" cy="${y}" r="4.2" class="nk-port-origin"/>`;
+        if (c.target) return c.def;
+        if (!c.empty) return "";
+        if (c.bad) return `<circle cx="${x}" cy="${y}" r="3.4" class="ta-pbad"/>` + (pt && pt.pol ? portArrow(c.p, d, pt.pol, "dim") : "");
+        return c.def + (pt && pt.pol ? portArrow(c.p, d, pt.pol, "ok") : "");
+      }
+      let s = c.def;
+      if (c.empty && pt && pt.pol) s += portArrow(c.p, d, pt.pol);
+      if (xray && pt && pt.name === xray) s += `<circle cx="${x}" cy="${y}" r="4.6" class="xp"/>`;
+      if (MK.has(c.a.type + ":" + c.i)) { const q = [x + d[0] * 9, y + d[1] * 9]; s += `<circle cx="${q[0]}" cy="${q[1]}" r="3.6" class="ta-miss"/><text x="${q[0]}" y="${q[1] + 0.2}" class="ta-misst">?</text>`; }
+      return s;
+    },
+    free(f, x, y, v, c) {
+      const ly = f.dir === "up" ? y - 9 : y + 10;
+      const lab = `<circle cx="${x}" cy="${y}" r="2.4" class="nk-free"/><text x="${x}" y="${ly}" class="nk-free-label">${esc(f.name)}</text>`;
+      if (f.cut && !c.dragging) return lab + `<circle cx="${x}" cy="${y}" r="5.2" class="tk-cut"/>`;
+      if (!typed() || !c.dragging || c.target) return null;
+      const D = v.drag; if (D.carryFree === f.name) return null;
+      if (v._typeClash(D, { free: f.name })) return lab + `<circle cx="${x}" cy="${y}" r="4.6" class="ta-pbad" style="fill:none"/>`;
+      return null;
+    },
+    drag(D, path, v) {
+      if (!typed() || !D.originEnd || D.originEnd.free != null) return "";
+      const t = TK.endType(S, v, D.originEnd); if (!t || !t.pol) return "";
+      const m = midOf(path); if (m.L < 14) return "";
+      return arrowAt(m.p, t.pol === "give" ? m.d : [-m.d[0], -m.d[1]], D.kind === "new" ? "drag" : "");
+    },
+    overlay(v) {
+      let s = tagsSVG(v); tagQueue = [];
+      for (const id of edConf) {
+        const w = v.state.wires.find((x) => x.id === id); if (!w) continue;
+        const m = midOf(w.path);
+        s += `<polyline class="ta-conf" points="${w.path.map((q) => q.join(",")).join(" ")}"/><line class="ta-confx" x1="${m.p[0] - 3.2}" y1="${m.p[1] - 3.2}" x2="${m.p[0] + 3.2}" y2="${m.p[1] + 3.2}"/><line class="ta-confx" x1="${m.p[0] - 3.2}" y1="${m.p[1] + 3.2}" x2="${m.p[0] + 3.2}" y2="${m.p[1] - 3.2}"/>`;
+      }
+      return s;
+    },
+  };
+  let MK = new Map();
+
+  // An agent with wire stubs, port arrows and type labels: palette, editor, rules.
+  function typedGlyph(type, o = {}) {
+    const a = NK.makeAgent(type, 0, 0, 0, o.orient || "down"), b = NK.agentBox(a);
+    const stub = o.stub || 9, pad = o.labels ? 22 : stub + 2;
+    let s = `<svg class="nk-glyph" viewBox="${b.x0 - pad} ${b.y0 - pad} ${b.x1 - b.x0 + 2 * pad} ${b.y1 - b.y0 + 2 * pad}" width="${o.w || o.size || 40}" height="${o.h || o.size || 40}" aria-hidden="true" style="overflow:visible">`;
+    const ports = o.ports || type.ports, on = o.typed !== false && typed();
+    a.ports.forEach((p, i) => {
+      const d = NK.portDir(a, i), q = [p[0] + d[0] * stub, p[1] + d[1] * stub];
+      if (o.hl === i) s += `<circle cx="${p[0] + d[0] * stub * 0.55}" cy="${p[1] + d[1] * stub * 0.55}" r="6.4" class="ep-hl" style="fill:var(--accent-soft)"/>`;
+      s += `<line x1="${p[0]}" y1="${p[1]}" x2="${q[0]}" y2="${q[1]}" class="nk-gstub"/>`;
+      const pt = on && ports && ports[i] ? { pol: dOn() ? ports[i].pol : null, name: tOn() ? ports[i].name : null } : null;
+      if (pt && pt.pol) s += arrowAt([p[0] + d[0] * stub * 0.55, p[1] + d[1] * stub * 0.55], pt.pol === "give" ? d : [-d[0], -d[1]], "", o.arrow || 0.85);
+      if (o.labels) {
+        const t = [p[0] + d[0] * (stub + 5), p[1] + d[1] * (stub + 5)];
+        s += `<text x="${t[0]}" y="${t[1]}" class="nk-gnum">${i === 0 ? "P" : i}</text>`;
+      }
+    });
+    s += NK.agentShapeSVG(a, type);
+    return s + "</svg>";
+  }
+  function miniTyped(st, types, o = {}) {
+    const T = Object.fromEntries(types.map((t) => [t.id, t]));
+    const b = NK.stateBounds({ agents: st.agents, wires: st.wires, free: st.iface || [] }), pad = o.pad || 14;
+    const endT = (e) => (e.free != null ? (st.iface.find((f) => f.name === e.free) || {}).type : TK.portOf(S, st.agents.find((a) => a.id === e.agent).type, e.slot));
+    let s = `<svg viewBox="${b.x0 - pad} ${b.y0 - pad} ${b.x1 - b.x0 + 2 * pad} ${b.y1 - b.y0 + 2 * pad}" width="${o.w || 160}" height="${o.h || 180}" style="overflow:visible">`;
+    for (const w of st.wires) {
+      const P = w.path.map((q) => q.join(",")).join(" ");
+      s += `<polyline class="nk-halo" points="${P}"/>${w.active ? `<polyline class="nk-activeb" points="${P}"/>` : ""}${w.bad ? `<polyline class="ta-conf" points="${P}"/>` : ""}<polyline class="nk-wire" points="${P}"/>`;
+      const t0 = endT(w.ends[0]), t1 = endT(w.ends[1]);
+      const f = t0 && t0.pol ? (t0.pol === "give" ? 1 : -1) : t1 && t1.pol ? (t1.pol === "take" ? 1 : -1) : 0;
+      if (f && !w.bad && typed()) s += wireArrow(w.path, f, "");
+    }
+    for (const a of st.agents) s += NK.agentShapeSVG(a, T[a.type]);
+    for (const f of st.iface || []) s += `<circle cx="${f.x}" cy="${f.y}" r="2.4" class="nk-free"/><text x="${f.x}" y="${f.y + (f.dir === "up" ? -9 : 10)}" class="nk-free-label">${esc(f.name)}</text>`;
+    return s + "</svg>";
+  }
+
+  const app = await TypesChrome.start({ key: "types-a2", hooks, glyph: (t, o) => typedGlyph(t, o), miniTyped, onSession: (s) => (S = s) });
+  const { view, toast, ui } = app;
+  const rerender = () => { MK = missKeys(); view.render(); };
+  const _commit = app.commit; app.commit = (l) => { MK = missKeys(); _commit(l); renderStrip(); if (sheetOn()) renderSheet(); };
+  const CAR = `<svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`;
+
+  /* ---------------------------------------------------------------- palette: summary line + type chips (point to light them up) */
+  const LV = { off: "off", optional: "optional", required: "required" };
+  function summary() {
+    const parts = [];
+    const md = TK.missing(S, "dir").length, mt = TK.missing(S, "type").length;
+    if (TK.dirsOn(S)) parts.push(S.sys.pendDirs ? `Directions <span class="cnt">${md} to go</span>` : `Directions <b>${LV[TK.DL(S)]}</b>`);
+    if (TK.typesOn(S)) parts.push(S.sys.pendTypes ? `types <span class="cnt">${mt} to go</span>` : `types <b>${LV[TK.TL(S)]}</b>`);
+    else parts.push("no types");
+    return parts.join(" · ");
+  }
+  function renderStrip() {
+    const host = $("#sysStrip");
+    if (!typed()) { host.innerHTML = ""; return; }
+    host.innerHTML = `<button class="sumbtn" id="sysBtn" title="Directions and types for every agent">${summary()} <svg viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>` +
+      (tOn() ? `<div class="sys">${S.sys.names.map((n) => `<button class="chipbtn" data-x="${n.id}" title="Point to light up every port of this type. Click to open the sheet.">${esc(n.label)}</button>`).join("")}<button class="chipbtn add" id="addType" title="Add a type, like list or bool">+</button></div>` : "");
+    $("#sysBtn").onclick = (e) => { e.stopPropagation(); openSheet(); };
+    if ($("#addType")) $("#addType").onclick = (e) => { e.stopPropagation(); openSheet("addType"); };
+    bindXray(host);
+  }
+  ui.renderSysStrip = renderStrip;
+  function bindXray(root) {
+    root.querySelectorAll("[data-x]").forEach((b) => {
+      b.onpointerenter = () => { xray = b.dataset.x; rerender(); let n = 0; for (const t of S.types) for (const p of t.ports || []) if (p && p.name === xray) n++; ui.setHover({ xray: { id: xray, n, on: view.state.agents.some((a) => (S.typeById(a.type).ports || []).some((p) => p && p.name === xray)) } }); };
+      b.onpointerleave = () => { xray = null; rerender(); ui.clearHover(); };
+      if (b.classList.contains("chipbtn")) b.onclick = (e) => { e.stopPropagation(); openSheet(); };
+    });
+  }
+
+  /* ---------------------------------------------------------------- one port row: label, direction, type, all at once */
+  const DIRS = [["give", "Gives"], ["take", "Takes"], [null, "Either"]];
+  function portRowHTML(t, i, p, key) {
+    p = p || {};
+    const miss = new Set(TK.missing({ ...S, types: [t], typeById: S.typeById }).filter((m) => m.slot === i).map((m) => m.what));
+    const req = { dir: TK.needDirs(S), type: TK.needTypes(S) };
+    return `<div class="prow" data-slot="${i}" data-key="${key}">
+      <span class="ptag2" title="${i === 0 ? "Principal port: agents interact through it" : "Aux port " + i}">${i === 0 ? "P" : i}</span>
+      <input class="plabel" data-role="${i}" value="${esc((t.roles && t.roles[i]) || "")}" placeholder="What this port is for" aria-label="Label for ${i === 0 ? "the principal port" : "aux port " + i}">
+      ${dOn() ? `<div class="seg dseg${miss.has("dir") ? " miss" : ""}" role="group" aria-label="Direction">${DIRS.map(([pol, l]) => `<button data-pol="${pol || ""}" aria-pressed="${(p.pol || null) === pol && !miss.has("dir")}"${pol === null && req.dir ? ` disabled title="Directions are required in this system"` : ""}>${l}</button>`).join("")}</div>` : "<span></span>"}
+      ${tOn() ? `<button class="tbtn${miss.has("type") ? " miss" : p.name ? "" : " any"}" data-tsel="${i}">${miss.has("type") ? "Pick a type" : p.name ? esc(TK.nameOf(S, p.name)) : "any type"}${CAR}</button>` : "<span></span>"}
+    </div>`;
+  }
+  function rowsHead() { return `<div class="prow-head"><span></span><span>Label</span><span>${dOn() ? "Direction" : ""}</span><span style="min-width:92px">${tOn() ? "Type" : ""}</span></div>`; }
+  // wire up rows: getPorts(t) -> ports array to edit; onChange(t, slot) after a change; onRole(t, slot, value)
+  function bindRows(root, getType, onChange, onRole) {
+    root.querySelectorAll(".prow").forEach((r) => {
+      const t = getType(r), i = +r.dataset.slot;
+      r.querySelectorAll("[data-pol]").forEach((b) => (b.onclick = () => { TK.ensurePorts(t); t.ports[i].pol = b.dataset.pol || null; onChange(t, i); }));
+      const tb = r.querySelector("[data-tsel]");
+      if (tb) tb.onclick = (e) => { e.stopPropagation(); openTypeMenu(tb, t.ports[i].name, (name) => { TK.ensurePorts(t); t.ports[i].name = name; onChange(t, i); }); };
+      const inp = r.querySelector(".plabel");
+      inp.oninput = () => { t.roles = t.roles || []; t.roles[i] = inp.value; };
+      inp.onchange = () => onRole && onRole(t, i, inp.value);
+      r.onpointerenter = () => { hlSlot = i; root.dispatchEvent(new CustomEvent("rowhover", { detail: { t, i } })); };
+      r.onpointerleave = () => { hlSlot = -1; root.dispatchEvent(new CustomEvent("rowhover", { detail: { t, i: -1 } })); };
+    });
+  }
+  function openTypeMenu(anchor, cur, onPick) {
+    const m = $("#nameMenu"), req = TK.needTypes(S);
+    m.innerHTML = `<div class="mh">Type</div>` + S.sys.names.map((n) => `<button class="mi" data-n="${n.id}"><span class="ck">${cur === n.id ? "✓" : ""}</span><span class="mt">${esc(n.label)}</span></button>`).join("") +
+      `<button class="mi" data-n=""${req ? " disabled" : ""}><span class="ck">${!cur ? "✓" : ""}</span><span class="mt">any type<span class="ms">${req ? "Types are required in this system" : "Fits a port of any type"}</span></span></button><hr><button class="mi" id="tmNew"><span class="ck"></span><span class="mt">New type…</span></button>`;
+    ui.placeMenu(m, anchor);
+    m.querySelectorAll("[data-n]").forEach((b) => (b.onclick = () => { if (b.disabled) return; ui.closeMenus(); onPick(b.dataset.n || null); }));
+    $("#tmNew").onclick = (e) => {
+      e.stopPropagation();
+      m.innerHTML = `<div class="mh">New type</div><div style="padding:2px 8px 8px"><input class="inp" id="tmIn" placeholder="e.g. list, bool, tree"></div><div class="mh" style="padding-top:0">Enter adds it.</div>`;
+      const i = $("#tmIn"); setTimeout(() => i.focus(), 0);
+      i.onkeydown = (ev) => { if (ev.key === "Escape") return ui.closeMenus(); if (ev.key !== "Enter" || !i.value.trim()) return; const id = "n" + Date.now().toString(36); S.sys.names.push({ id, label: i.value.trim() }); ui.closeMenus(); onPick(id); };
+    };
+  }
+
+  /* ---------------------------------------------------------------- the agent editor: every port in a list */
+  let ed = null;
+  function openEditor(id) {
+    const t = S.typeById(id); if (!t || t.component) return ui.openComponent(t);
+    closeSheet();
+    ed = { id, draft: NK.clone(t), names0: NK.clone(S.sys.names) }; TK.ensurePorts(ed.draft);
+    renderEditor(); $("#typeEd").classList.add("on");
+    const el = $(`.tile[data-id="${CSS.escape(id)}"]`), r = el ? el.getBoundingClientRect() : { top: 80 };
+    const p = $("#typeEd"); p.style.top = Math.min(Math.max(64, r.top - 40), innerHeight - p.offsetHeight - 16) + "px";
+  }
+  function closeEditor(cancel) { if (ed && cancel !== false) S.sys.names = ed.names0; $("#typeEd").classList.remove("on"); ed = null; edConf = new Set(); hlSlot = -1; rerender(); renderStrip(); }
+  ui.openEditor = openEditor; ui.closeEditor = () => closeEditor(true); ui.isEditing = () => !!ed;
+  function draftConflicts() { return ed && typed() ? TK.conflicts(S, view, ed.id, ed.draft.ports) : []; }
+  function renderEditor() {
+    const t = ed.draft;
+    const conf = draftConflicts(); edConf = new Set(conf.map((c) => c.wire.id)); rerender();
+    const rules = S.rulesFor(t.id);
+    const miss = TK.missing({ ...S, types: [t], typeById: S.typeById });
+    const pend = S.sys.pendDirs || S.sys.pendTypes;
+    const allMiss = pend ? TK.missing({ ...S, types: S.types.map((x) => (x.id === ed.id ? t : x)), typeById: S.typeById }).length : 0;
+    $("#typeEd").innerHTML = `<div class="ed-grid">
+      <div class="ed-prev"><div class="stage" id="stage">${typedGlyph(t, { size: 180, labels: true, stub: 13, arrow: 1.1, hl: hlSlot })}</div>
+        <div class="legend"><span><i class="d"></i>P, the principal port</span></div>
+        ${dOn() ? `<div class="legend" style="margin-top:2px"><span>${arrowLegend()} the way it flows</span></div>` : ""}</div>
+      <div class="ed-form">
+        <div class="ed-head"><h3>Agent</h3><button class="btn icon" id="edClose" title="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5"/></svg></button></div>
+        ${pend ? `<div class="walk"><span><b>Filling in:</b> ${allMiss ? `${allMiss} to go in this system` : "all done once you save"}</span><span class="sp"></span><button class="linkbtn" id="toSheet">See them all</button></div>` : ""}
+        <div class="two"><div class="row"><label for="edSym">Symbol</label><input class="inp symbol" id="edSym" maxlength="3" value="${esc(t.symbol)}"></div>
+        <div class="row"><label for="edName">Name</label><input class="inp" id="edName" placeholder="e.g. duplicator" value="${esc(t.name)}"></div></div>
+        <div style="display:flex;gap:18px"><div class="row"><span class="lab">Aux ports</span><div><span class="stepper"><button id="arM" aria-label="Fewer">−</button><output>${t.arity}</output><button id="arP" aria-label="More">+</button></span></div></div>
+        <div class="row"><span class="lab">Fill</span><div class="seg"><button aria-pressed="${!t.filled}" data-fill="0">Hollow</button><button aria-pressed="${!!t.filled}" data-fill="1">Filled</button></div></div></div>
+        <div class="row"><span class="lab">Ports</span>${rowsHead()}<div class="prows" id="edRows">${t.ports.map((p, i) => portRowHTML(t, i, p, "ed")).join("")}</div></div>
+        ${conf.length ? `<div class="conf"><b>${conf.length} wire${conf.length === 1 ? "" : "s"} on the canvas won't fit.</b> Saving cuts ${conf.length === 1 ? "it" : "them"} into loose ends, marked in red.<div class="ws">${conf.slice(0, 2).map((c) => esc(c.why)).join("<br>")}</div></div>` : `<div class="ed-note small"><b>Symbol and fill are only labels.</b> What <span class="sym">${esc(t.symbol)}</span> does comes from its rules${rules.length ? ":" : ". It has none yet."}${rules.length ? ` <span class="rl" style="display:inline-flex;margin:0">${rules.map((k) => `<button data-k="${esc(k)}">${ui.ruleLabel(k)}</button>`).join("")}</span>` : ""}</div>`}
+        <div class="ed-foot"><span style="display:flex;gap:12px;align-items:center"><button class="btn danger" id="edDel">Delete agent</button><button class="linkbtn" id="edSheet">${typed() ? "All agents' ports…" : "Add directions or types…"}</button></span>
+          <span><button class="btn" id="edCancel">Cancel</button> <button class="btn primary" id="edSave"${miss.length ? ` aria-disabled="true" title="Fill in the marked ports first"` : ""}>${conf.length ? `Save and cut ${conf.length} wire${conf.length === 1 ? "" : "s"}` : "Save"}</button></span></div>
+      </div></div>`;
+    const R = () => renderEditor();
+    $("#edSym").oninput = (e) => { t.symbol = e.target.value || "?"; $("#stage").innerHTML = typedGlyph(t, { size: 180, labels: true, stub: 13, arrow: 1.1, hl: hlSlot }); };
+    $("#edName").oninput = (e) => (t.name = e.target.value);
+    $("#arM").onclick = () => { if (t.arity > 0) { t.arity--; t.circle = t.arity === 0; TK.ensurePorts(t); R(); } };
+    $("#arP").onclick = () => { if (t.arity < 5) { t.arity++; t.circle = false; TK.ensurePorts(t); R(); } };
+    $$("#typeEd [data-fill]").forEach((b) => (b.onclick = () => { t.filled = b.dataset.fill === "1"; R(); }));
+    bindRows($("#edRows"), () => t, () => R(), null);
+    $("#edRows").addEventListener("rowhover", () => { $("#stage").innerHTML = typedGlyph(t, { size: 180, labels: true, stub: 13, arrow: 1.1, hl: hlSlot }); $$("#edRows .prow").forEach((r) => r.classList.toggle("hl", +r.dataset.slot === hlSlot)); });
+    $$("#typeEd .rl button").forEach((b) => (b.onclick = () => ui.openRule(b.dataset.k)));
+    $("#edClose").onclick = $("#edCancel").onclick = () => closeEditor(true);
+    $("#edSheet").onclick = (e) => { e.stopPropagation(); closeEditor(true); openSheet(); };
+    if ($("#toSheet")) $("#toSheet").onclick = (e) => { e.stopPropagation(); closeEditor(true); openSheet(); };
+    $("#edDel").onclick = () => { const id = ed.id; closeEditor(true); S.deleteType(id); app.refresh(); toast("Deleted the agent.", true); };
+    $("#edSave").onclick = () => { if ($("#edSave").getAttribute("aria-disabled")) { toast("Fill in the marked ports first: this system requires them."); return; } save(); };
+    if (conf.length) ui.reveal(conf.map((c) => c.wire.id));
+  }
+  function save() {
+    const t = S.typeById(ed.id), d = ed.draft, conf = draftConflicts();
+    Object.assign(t, { symbol: d.symbol, name: d.name, arity: d.arity, filled: d.filled, circle: d.arity === 0, ports: NK.clone(d.ports), roles: NK.clone(d.roles || []) });
+    S._ctx(); view.regenType(t.id);
+    if (conf.length) TK.cut(view, conf.map((c) => c.wire.id), Object.fromEntries(conf.map((c) => [c.wire.id, c.why])));
+    closeEditor(false); checkPending(); app.commit("Edit " + t.symbol);
+    if (conf.length) toast(`Saved ${t.symbol}. Cut ${conf.length} wire${conf.length === 1 ? "" : "s"} that didn't fit.`, true);
+  }
+
+  /* ---------------------------------------------------------------- the sheet: directions and types for the whole system */
+  const sheet = $("#sheet");
+  const sheetOn = () => sheet.classList.contains("on");
+  function openSheet(focus) { if (ed) closeEditor(true); ui.closeGridPop(); renderSheet(); sheet.classList.add("on"); if (focus === "addType") setTimeout(() => $("#newTypeIn") && $("#newTypeIn").focus(), 0); }
+  function closeSheet() { sheet.classList.remove("on"); xray = null; rerender(); }
+  document.addEventListener("pointerdown", (e) => { if (sheetOn() && !e.target.closest("#sheet,#sysStrip,.menu,#toast,#typeEd")) closeSheet(); });
+  const DIMS = [
+    ["dirs", "Directions", "Does each port give or take?", { off: "Ports have no direction. Any port can join any other.", optional: "Ports can give, take, or go either way.", required: "Every port gives or takes." }],
+    ["types", "Types", "What does each port carry?", { off: "No types.", optional: "Ports can have a type. The rest take any type.", required: "Every port has a type." }],
+  ];
+  function capRest(dim) {
+    const pend = dim === "dirs" ? S.sys.pendDirs : S.sys.pendTypes, lv = dim === "dirs" ? TK.DL(S) : TK.TL(S);
+    if (pend) { const n = TK.missing(S, dim === "dirs" ? "dir" : "type").length; return `<b>${n} port${n === 1 ? "" : "s"} still need${n === 1 ? "s" : ""} ${dim === "dirs" ? "a direction" : "a type"}</b>, marked below and on the canvas. <button class="linkbtn" data-guess="${dim}">Guess from the canvas</button> · <button class="linkbtn" data-stay="${dim}">Stay optional</button>`; }
+    return DIMS.find((d) => d[0] === dim)[3][lv];
+  }
+  function capHover(dim, lv) {
+    const c = TK.counts(S), cur = dim === "dirs" ? TK.DL(S) : TK.TL(S);
+    if (lv === cur) return null;
+    if (lv === "off") { const n = dim === "dirs" ? c.dirs : c.types; return n ? [`Removes the ${dim === "dirs" ? "directions" : "types"} of ${n} ports. You can undo it.`, true] : ["Nothing to remove.", false]; }
+    if (lv === "required") { const S2 = { ...S, sys: { ...S.sys, [dim === "dirs" ? "pendDirs" : "pendTypes"]: true } }; const n = TK.missing(S2, dim === "dirs" ? "dir" : "type").length; return [n ? `${n} port${n === 1 ? "" : "s"} would need ${dim === "dirs" ? "a direction" : "a type"} first. They'd be marked so you can fill them in.` : "Every port already has one.", false]; }
+    return [DIMS.find((d) => d[0] === dim)[3].optional, false];
+  }
+  function renderSheet() {
+    const usage = (id) => { let k = 0; for (const t of S.types) for (const p of t.ports || []) if (p && p.name === id) k++; return k; };
+    sheet.innerHTML = `<div class="ed-head"><h3>Directions and types</h3><button class="btn icon" id="shClose" title="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5"/></svg></button></div>
+      <div class="sub">For every agent in this system. Saved with the system, like its agents and rules.</div>
+      ${DIMS.map(([dim, title, desc]) => { const pend = dim === "dirs" ? S.sys.pendDirs : S.sys.pendTypes, lv = pend ? "required" : dim === "dirs" ? TK.DL(S) : TK.TL(S); return `<div class="dim"><div class="dl"><b>${title}</b><span>${desc}</span></div>
+        <div class="seg" data-dim="${dim}">${["off", "optional", "required"].map((l) => `<button data-lv="${l}" aria-pressed="${lv === l}">${l[0].toUpperCase() + l.slice(1)}${pend && l === "required" ? "…" : ""}</button>`).join("")}</div>
+        <div class="cap" data-cap="${dim}">${capRest(dim)}</div></div>`; }).join("")}
+      ${tOn() ? `<h4>Types <span>Point at one to light up its ports on the canvas.</span></h4>
+        ${S.sys.names.map((n) => `<div class="trow" data-x="${n.id}"><input class="inp" value="${esc(n.label)}" data-rename="${n.id}" aria-label="Type name"><span class="u">${usage(n.id)} port${usage(n.id) === 1 ? "" : "s"}</span><button class="btn icon" data-del="${n.id}" title="Delete this type. Its ports keep their direction and take any type."><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.4"/></svg></button></div>`).join("")}
+        <div class="trow"><input class="inp" id="newTypeIn" placeholder="${S.sys.names.length ? "Add a type, like bool" : "Add a type, like number"}"><span class="u">Enter to add</span><span></span></div>` : ""}
+      <h4>Ports <span>${typed() ? "Every agent's ports. Changes apply right away; undo to go back." : "Turn on directions or types to set them."}</span></h4>
+      ${rowsHead()}
+      ${S.types.map((t) => { TK.ensurePorts(t); return `<div class="agrp" data-agent="${esc(t.id)}"><div class="agh">${typedGlyph(t, { size: 22, stub: 6 })}<span class="sym">${esc(t.symbol)}</span><small>${esc(t.name || "")}</small><button class="btn ghost" data-edit="${esc(t.id)}">Edit agent</button></div><div class="prows">${t.ports.map((p, i) => portRowHTML(t, i, p, t.id)).join("")}</div></div>`; }).join("")}`;
+    $("#shClose").onclick = closeSheet;
+    sheet.querySelectorAll(".seg[data-dim] [data-lv]").forEach((b) => {
+      const dim = b.parentElement.dataset.dim, cap = sheet.querySelector(`[data-cap="${dim}"]`);
+      b.onpointerenter = () => { const h = capHover(dim, b.dataset.lv); if (h) { cap.innerHTML = esc(h[0]); cap.classList.toggle("bad", h[1]); } };
+      b.onpointerleave = () => { cap.innerHTML = capRest(dim); cap.classList.remove("bad"); bindCaps(); };
+      b.onclick = () => setDim(dim, b.dataset.lv);
+    });
+    bindCaps();
+    sheet.querySelectorAll("[data-rename]").forEach((i) => (i.onchange = () => { const n = S.sys.names.find((x) => x.id === i.dataset.rename); if (n && i.value.trim()) { n.label = i.value.trim(); app.commit("Rename type"); } }));
+    sheet.querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => { const id = b.dataset.del, n = S.sys.names.find((x) => x.id === id); for (const t of S.types) for (const p of t.ports || []) if (p && p.name === id) p.name = null; S.sys.names = S.sys.names.filter((x) => x.id !== id); xray = null; app.commit("Delete type"); toast(`Deleted the type "${n.label}". Its ports now take any type.`, true); }));
+    if ($("#newTypeIn")) $("#newTypeIn").onkeydown = (e) => { if (e.key === "Enter" && e.target.value.trim()) { S.sys.names.push({ id: "n" + Date.now().toString(36), label: e.target.value.trim() }); app.commit("Add type"); setTimeout(() => $("#newTypeIn") && $("#newTypeIn").focus(), 0); } };
+    bindXray(sheet);
+    sheet.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openEditor(b.dataset.edit); }));
+    sheet.querySelectorAll(".agrp").forEach((g) => {
+      const t = S.typeById(g.dataset.agent);
+      bindRows(g, () => t, (t2, i) => applyLive(t2, i), (t2, i, v) => { t2.roles[i] = v; app.commit("Label port"); });
+    });
+  }
+  function bindCaps() {
+    sheet.querySelectorAll("[data-guess]").forEach((b) => (b.onclick = () => guessAll(b.dataset.guess)));
+    sheet.querySelectorAll("[data-stay]").forEach((b) => (b.onclick = () => { delete S.sys[b.dataset.stay === "dirs" ? "pendDirs" : "pendTypes"]; app.commit("Stay optional"); toast(`${b.dataset.stay === "dirs" ? "Directions" : "Types"} stay optional.`, true); }));
+  }
+  // a change made in the sheet applies straight away; wires that no longer fit get cut (and undo brings them back)
+  function applyLive(t, i) {
+    const c = TK.conflicts(S, view, t.id, t.ports);
+    if (c.length) TK.cut(view, c.map((x) => x.wire.id), Object.fromEntries(c.map((x) => [x.wire.id, x.why])));
+    checkPending(); app.commit("Set port");
+    if (c.length) { toast(`Cut ${c.length} wire${c.length === 1 ? "" : "s"} that didn't fit, marked in red.`, true); ui.reveal(c.map((x) => x.wire.id), sheet); }
+  }
+
+  /* ---------------------------------------------------------------- strictness transitions */
+  function setDim(dim, lv) {
+    const isD = dim === "dirs", pendK = isD ? "pendDirs" : "pendTypes", cur = S.sys[pendK] ? "required" : isD ? TK.DL(S) : TK.TL(S);
+    if (lv === cur) return;
+    const word = isD ? "directions" : "types";
+    if (lv === "off") { const n = TK.counts(S)[isD ? "dirs" : "types"]; (isD ? TK.setDirs : TK.setTypes)(S, "off"); app.commit("Turn off " + word); if (n) toast(`Removed the ${word} of ${n} ports.`, true); return; }
+    if (lv === "optional") { const was = cur; (isD ? TK.setDirs : TK.setTypes)(S, "optional"); app.commit(TK.cap(word) + " optional"); toast(was === "off" ? `Ports can have ${word} now. Set them below.` : `${TK.cap(word)} are optional now.`, true); return; }
+    if (cur === "off") (isD ? TK.setDirs : TK.setTypes)(S, "optional");
+    S.sys[pendK] = true;
+    if (!TK.missing(S, isD ? "dir" : "type").length) { delete S.sys[pendK]; (isD ? TK.setDirs : TK.setTypes)(S, "required"); app.commit(TK.cap(word) + " required"); toast(`Every port already has ${isD ? "a direction" : "a type"}. ${TK.cap(word)} are required now.`, true); return; }
+    app.commit("Start requiring " + word);
+    setTimeout(() => {
+      const r = sheet.querySelector(".tbtn.miss, .dseg.miss"); r && r.scrollIntoView({ block: "center", behavior: "smooth" });
+      const ts = new Set(TK.missing(S).map((m) => m.type));
+      ui.reveal(view.state.wires.filter((w) => w.ends.some((e) => e.agent != null && ts.has((view.agent(e.agent) || {}).type))).map((w) => w.id), sheet);
+    }, 50);
+  }
+  function checkPending() {
+    for (const [pk, what, set, word] of [["pendDirs", "dir", TK.setDirs, "Directions"], ["pendTypes", "type", TK.setTypes, "Types"]]) {
+      if (S.sys[pk] && !TK.missing(S, what).length) { set(S, "required"); toast(`Every port has ${what === "dir" ? "a direction" : "a type"} now. ${word} are required.`, true); }
+    }
+  }
+  function guessAll(dim) {
+    const what = dim === "dirs" ? "dir" : "type"; let k = 0;
+    for (const m of TK.missing(S, what)) { const g = TK.guess(S, view, m.type, m.slot, what); if (g) { const p = S.typeById(m.type).ports[m.slot]; if (what === "dir") p.pol = g; else p.name = g; k++; } }
+    checkPending(); app.commit("Guess " + (what === "dir" ? "directions" : "types"));
+    toast(k ? `Guessed ${k} from the wiring: ${what === "dir" ? "the opposite of" : "the same as"} what each port is wired to.${TK.missing(S, what).length ? " The rest aren't wired to anything that says." : ""}` : "Nothing to guess from: those ports aren't wired to anything that says.", !!k);
+  }
+
+  /* ---------------------------------------------------------------- a file that doesn't fit its types */
+  app.openBadFile = function () {
+    app.loadBad();
+    const bad = view.state.wires.filter((w) => !w.ends.some((e) => e.free != null) && TK.compare(S, TK.endType(S, view, w.ends[0]), TK.endType(S, view, w.ends[1])));
+    const whys = Object.fromEntries(bad.map((w) => [w.id, `${TK.endLabel(S, view, w.ends[0])} and ${TK.endLabel(S, view, w.ends[1])} both give`]));
+    TK.cut(view, bad.map((w) => w.id), whys); app.commit("Open sum.inet");
+    view.fit(true, { t: 140, r: 290, b: 90, l: 60 });
+    ui.banner(`<b>Opened sum.inet, but one wire didn't fit.</b> ${esc(TK.cap(Object.values(whys)[0]))}, so it was cut into two loose ends, marked in red. <button class="btn ghost" data-b="untyped">Open without directions and types</button><button class="btn ghost" data-b="undo">Undo</button>`, {
+      untyped: () => { S.undo(); app.loadBad(); TK.setLevel(S, "untyped"); app.commit("Open sum.inet plain"); toast("Opened sum.inet without its directions and types.", true); },
+      undo: () => S.undo(),
+    });
+  };
+
+  app.afterLoad = () => { MK = missKeys(); renderStrip(); if (sheetOn()) renderSheet(); };
+  S.on("update", () => { MK = missKeys(); });
+  S.on("undo", () => { if (sheetOn()) renderSheet(); }); S.on("redo", () => { if (sheetOn()) renderSheet(); });
+  app.init();
+})();
+</script>
+</body>
+</html>

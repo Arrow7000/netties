@@ -613,7 +613,7 @@
         const isT = D && D.target && D.target.kind === "free" && D.target.name === f.name;
         const fh = HK.free ? HK.free(f, x, y, this, { target: isT ? D.target : null, dragging: !!(D && (D.kind === "carry" || D.kind === "new")), hover: !D && H && H.kind === "free" && H.name === f.name }) : null;
         out += fh != null ? fh : `<circle cx="${x}" cy="${y}" r="2.4" class="nk-free"/><text x="${x}" y="${ly}" class="nk-free-label">${esc(f.name)}</text>`;
-        if (D && (D.kind === "carry" || D.kind === "new") && !(D.carryFree === f.name)) out += `<circle cx="${x}" cy="${y}" r="${isT ? 6.5 : 5}" class="${isT ? (D.target.ok ? "nk-port-target" : "nk-port-refuse") : "nk-port-cand"}"/>`;
+        if (D && (D.kind === "carry" || D.kind === "new") && !(D.carryFree === f.name) && !(fh != null && HK.freeOwnsDrag && !isT)) out += `<circle cx="${x}" cy="${y}" r="${isT ? 6.5 : 5}" class="${isT ? (D.target.ok ? "nk-port-target" : "nk-port-refuse") : "nk-port-cand"}"/>`;
         if (!D && H && H.kind === "free" && H.name === f.name) out += `<circle cx="${x}" cy="${y}" r="5.2" class="nk-port-hover"/>`;
         if (!an) out += `<circle cx="${x}" cy="${y}" r="7" class="nk-free-hit" data-k="free" data-name="${esc(f.name)}"/>`;
       }
