@@ -1,5 +1,5 @@
 import { type End, Net, free, port } from "./net";
-import { arithmetic, combinators, directedCombinators } from "./presets";
+import { arithmetic, combinators, directedCombinators, lists } from "./presets";
 import type { System } from "./system";
 
 /**
@@ -131,6 +131,17 @@ export const examples: Example[] = [
     net: (sys) => {
       const net = new Net();
       link(net, build(net, sys, num(3)), build(net, sys, t("+", f("out"), num(2))));
+      return net;
+    },
+  },
+  {
+    name: "Length of a list",
+    about: "Numbers and lists are different types; # counts the items in a list.",
+    system: lists,
+    net: (sys) => {
+      const net = new Net();
+      const list = t("∷", t("0"), t("∷", t("S", t("0")), t("∷", t("0"), t("[]"))));
+      link(net, build(net, sys, t("#", f("out"))), build(net, sys, list));
       return net;
     },
   },

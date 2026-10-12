@@ -1,4 +1,14 @@
 import { A, L, R, System } from "./system";
+import type { Polarity, PortSpec } from "./types";
+
+/** A port that gives or takes, optionally of a type, with a label. */
+const P = (pol: Polarity | undefined, type: string | undefined, label?: string): PortSpec => ({
+  ...(pol && { pol }),
+  ...(type && { type }),
+  ...(label && { label }),
+});
+const give = (type?: string, label?: string) => P("give", type, label);
+const take = (type?: string, label?: string) => P("take", type, label);
 
 /**
  * Lafont's interaction combinators (1997, Fig. 2). With the clockwise port
@@ -39,13 +49,15 @@ export function combinators(): System {
  * argument (clockwise from the tip, so drawn △ they read y, x+y left to right).
  */
 export function arithmetic(): System {
+  const n = "number";
   const sys = new System()
-    .addType({ id: "0", name: "zero", symbol: "0", arity: 0 })
-    .addType({ id: "S", name: "successor", symbol: "S", arity: 1 })
-    .addType({ id: "+", name: "add", symbol: "+", arity: 2 })
-    .addType({ id: "×", name: "multiply", symbol: "×", arity: 2 })
-    .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2 })
-    .addType({ id: "ε", name: "eraser", symbol: "ε", arity: 0 });
+    .addType({ id: "0", name: "zero", symbol: "0", arity: 0, ports: [give(n, "zero")] })
+    .addType({ id: "S", name: "successor", symbol: "S", arity: 1, ports: [give(n, "the number"), take(n, "the number before it")] })
+    .addType({ id: "+", name: "add", symbol: "+", arity: 2, ports: [take(n, "first number"), give(n, "the sum"), take(n, "second number")] })
+    .addType({ id: "×", name: "multiply", symbol: "×", arity: 2, ports: [take(n, "first number"), give(n, "the product"), take(n, "second number")] })
+    .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2, ports: [take(n, "what gets copied"), give(n, "first copy"), give(n, "second copy")] })
+    .addType({ id: "ε", name: "eraser", symbol: "ε", arity: 0, ports: [take(n, "what gets erased")] });
+  sys.typing = { dirs: "required", types: "required", names: [n] };
 
   // 0 + y = y
   sys.addRule({ left: "+", right: "0", agents: [], wires: [[L(1), L(2)]] });
@@ -92,13 +104,17 @@ export function arithmetic(): System {
  * straight, as in the paper ("just a matter of taste").
  */
 export function directedCombinators(): System {
+  // Unstarred agents give on their principal port and take on their aux ports; starred ones the reverse.
+  const plain = [give(), take(), take()];
+  const star = [take(), give(), give()];
   const sys = new System()
-    .addType({ id: "γ", name: "constructor", symbol: "γ", arity: 2, filled: true })
-    .addType({ id: "γ*", name: "co-constructor", symbol: "γ*", arity: 2, filled: true })
-    .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2 })
-    .addType({ id: "δ*", name: "co-duplicator", symbol: "δ*", arity: 2 })
-    .addType({ id: "ε", name: "eraser", symbol: "ε", arity: 0 })
-    .addType({ id: "ε*", name: "co-eraser", symbol: "ε*", arity: 0 });
+    .addType({ id: "γ", name: "constructor", symbol: "γ", arity: 2, filled: true, ports: plain })
+    .addType({ id: "γ*", name: "co-constructor", symbol: "γ*", arity: 2, filled: true, ports: star })
+    .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2, ports: plain })
+    .addType({ id: "δ*", name: "co-duplicator", symbol: "δ*", arity: 2, ports: star })
+    .addType({ id: "ε", name: "eraser", symbol: "ε", arity: 0, ports: [give()] })
+    .addType({ id: "ε*", name: "co-eraser", symbol: "ε*", arity: 0, ports: [take()] });
+  sys.typing = { dirs: "required", types: "off", names: [] };
 
   for (const t of ["γ", "δ"]) sys.addRule({ left: t, right: `${t}*`, agents: [], wires: [[L(1), R(2)], [L(2), R(1)]] });
   sys.addRule({ left: "ε", right: "ε*", agents: [], wires: [] });
@@ -114,5 +130,69 @@ export function directedCombinators(): System {
     for (const k of [1, 2]) for (const j of [1, 2]) wires.push([A(k - 1, j), A(j + 1, k)]);
     sys.addRule({ left: x, right: y, agents: [y, y, x, x], wires });
   }
+  return sys;
+}
+
+/**
+ * Lists of numbers and their length. Numbers and lists are separate types;
+ * the duplicator and eraser have directions but take any type, so they copy
+ * and erase numbers and lists alike.
+ */
+export function lists(): System {
+  const n = "number";
+  const l = "list";
+  const sys = new System()
+    .addType({ id: "0", name: "zero", symbol: "0", arity: 0, ports: [give(n, "zero")] })
+    .addType({ id: "S", name: "successor", symbol: "S", arity: 1, ports: [give(n, "the number"), take(n, "the number before it")] })
+    .addType({ id: "[]", name: "empty list", symbol: "[]", arity: 0, ports: [give(l, "the empty list")] })
+    .addType({
+      id: "∷",
+      name: "list item",
+      symbol: "∷",
+      arity: 2,
+      ports: [give(l, "the list"), take(n, "first item"), take(l, "rest of the list")],
+    })
+    .addType({ id: "#", name: "length", symbol: "#", arity: 1, ports: [take(l, "the list"), give(n, "its length")] })
+    .addType({ id: "δ", name: "duplicator", symbol: "δ", arity: 2, ports: [take(undefined, "what gets copied"), give(undefined, "first copy"), give(undefined, "second copy")] })
+    .addType({ id: "ε", name: "eraser", symbol: "ε", arity: 0, ports: [take(undefined, "what gets erased")] });
+  sys.typing = { dirs: "required", types: "optional", names: [n, l] };
+
+  // len [] = 0
+  sys.addRule({ left: "#", right: "[]", agents: ["0"], wires: [[A(0, 0), L(1)]] });
+  // len (x ∷ xs) = S (len xs), erasing x
+  sys.addRule({
+    left: "#",
+    right: "∷",
+    agents: ["S", "#", "ε"],
+    wires: [[A(0, 0), L(1)], [A(0, 1), A(1, 1)], [A(1, 0), R(2)], [A(2, 0), R(1)]],
+  });
+  // δ copies numbers and lists, ε erases them.
+  sys.addRule({ left: "δ", right: "0", agents: ["0", "0"], wires: [[A(0, 0), L(1)], [A(1, 0), L(2)]] });
+  sys.addRule({
+    left: "δ",
+    right: "S",
+    agents: ["S", "S", "δ"],
+    wires: [[A(0, 0), L(1)], [A(1, 0), L(2)], [A(2, 0), R(1)], [A(2, 1), A(0, 1)], [A(2, 2), A(1, 1)]],
+  });
+  sys.addRule({ left: "δ", right: "[]", agents: ["[]", "[]"], wires: [[A(0, 0), L(1)], [A(1, 0), L(2)]] });
+  sys.addRule({
+    left: "δ",
+    right: "∷",
+    agents: ["∷", "∷", "δ", "δ"],
+    wires: [
+      [A(0, 0), L(1)],
+      [A(1, 0), L(2)],
+      [A(2, 0), R(1)],
+      [A(3, 0), R(2)],
+      [A(2, 1), A(0, 1)],
+      [A(2, 2), A(1, 1)],
+      [A(3, 1), A(0, 2)],
+      [A(3, 2), A(1, 2)],
+    ],
+  });
+  sys.addRule({ left: "ε", right: "0", agents: [], wires: [] });
+  sys.addRule({ left: "ε", right: "S", agents: ["ε"], wires: [[A(0, 0), R(1)]] });
+  sys.addRule({ left: "ε", right: "[]", agents: [], wires: [] });
+  sys.addRule({ left: "ε", right: "∷", agents: ["ε", "ε"], wires: [[A(0, 0), R(1)], [A(1, 0), R(2)]] });
   return sys;
 }

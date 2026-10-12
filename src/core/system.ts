@@ -1,4 +1,5 @@
 import type { AgentType } from "./net";
+import { type Typing, ruleClashes, untyped } from "./types";
 
 /**
  * An end inside a rule's right-hand side: a port of one of the agents the
@@ -28,6 +29,7 @@ const ruleEndKey = (e: RuleEnd): string =>
 export interface SystemJSON {
   types: AgentType[];
   rules: Rule[];
+  typing?: Typing;
 }
 
 export const pairKey = (a: string, b: string): string => `${a}|${b}`;
@@ -35,6 +37,8 @@ export const pairKey = (a: string, b: string): string => `${a}|${b}`;
 export class System {
   readonly types = new Map<string, AgentType>();
   readonly rules = new Map<string, Rule>();
+  /** How strict the system is about ports' directions and types. */
+  typing: Typing = untyped();
 
   addType(t: AgentType): this {
     if (this.types.has(t.id)) throw new Error(`duplicate agent type ${t.id}`);
@@ -43,13 +47,14 @@ export class System {
   }
 
   toJSON(): SystemJSON {
-    return { types: [...this.types.values()], rules: [...this.rules.values()] };
+    return { types: [...this.types.values()], rules: [...this.rules.values()], typing: this.typing };
   }
 
   static fromJSON(j: SystemJSON): System {
     const sys = new System();
     j.types.forEach((t) => sys.addType(t));
     j.rules.forEach((r) => sys.addRule(r));
+    if (j.typing) sys.typing = { ...j.typing, names: [...j.typing.names] };
     return sys;
   }
 
@@ -77,6 +82,11 @@ export class System {
     const flipped = this.rules.get(pairKey(b, a));
     if (flipped) return { rule: flipped, swapped: true };
     return undefined;
+  }
+
+  /** Whether a rule breaks the types, so it can't fire until it's fixed. */
+  broken(r: Rule): boolean {
+    return ruleClashes(this, r).length > 0;
   }
 
   /** Every port of the right-hand side, created agents and interface alike, must be used exactly once. */

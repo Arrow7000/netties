@@ -1,11 +1,15 @@
 import { type AgentId, type End, Net, NONE, endKey, free, port } from "./net";
 import { ifaceName, netToRule } from "./ruleNet";
 import { type Rule, System } from "./system";
+import { type Level, type PortSpec, typingOn } from "./types";
 
 /**
  * A text format in the style of Inpla:
  *
  *     agent γ 2 filled "constructor"     -- optional declarations
+ *     directions required                -- optional: ports give (+) or take (-)
+ *     types optional number list         -- optional: the types ports can carry
+ *     agent S 1 ports +number "the number", -number "the one before"
  *     γ(a, b) >< δ(c, d) => a ~ δ(e, f), b ~ δ(g, h), c ~ γ(e, g), d ~ γ(f, h);
  *     γ(x, y) ~ δ(z, w);                 -- a net
  *
@@ -17,6 +21,10 @@ import { type Rule, System } from "./system";
  *
  * Agents are names that are declared, written with parentheses, or start
  * with an upper-case letter (Inpla's convention).
+ *
+ * A port is written `+type` (gives), `-type` (takes) or `type` (either way);
+ * `+` or `-` alone has a direction but any type, and `_` neither. A quoted
+ * label can follow.
  */
 
 type Term = { kind: "agent"; name: string; args: Term[]; line: number } | { kind: "var"; name: string; line: number };
@@ -66,8 +74,29 @@ function tokenize(src: string): Tok[] {
   return out;
 }
 
+const LEVELS = ["off", "optional", "required"];
+
+function parsePort(tok: string, line: number): PortSpec {
+  if (tok === "_") return {};
+  const m = /^([+-]?)(.*)$/.exec(tok)!;
+  const spec: PortSpec = {};
+  if (m[1]) spec.pol = m[1] === "+" ? "give" : "take";
+  if (m[2]) {
+    if (/[^\p{L}\p{N}_'-]/u.test(m[2])) throw new ParseError(`"${tok}" isn't a port: write +type, -type, type, + or -`, line);
+    spec.type = m[2];
+  }
+  return spec;
+}
+
+function printPort(p: PortSpec): string {
+  const head = (p.pol === "give" ? "+" : p.pol === "take" ? "-" : "") + (p.type ?? "") || "_";
+  return p.label ? `${head} "${p.label}"` : head;
+}
+
 interface Parsed {
-  decls: { symbol: string; arity: number; filled: boolean; name?: string; line: number }[];
+  decls: { symbol: string; arity: number; filled: boolean; name?: string; ports?: PortSpec[]; line: number }[];
+  dirs?: Level;
+  types?: { level: Level; names: string[] };
   rules: { lhs: [Term, Term]; rhs: Eq[]; line: number }[];
   net: Eq[];
 }
@@ -123,6 +152,17 @@ function parseStatements(src: string): Parsed {
       next();
       continue;
     }
+    if ((t.t === "directions" || t.t === "types") && LEVELS.includes(toks[p + 1]?.t ?? "") && toks[p + 1]!.line === t.line) {
+      next();
+      const level = next().t as Level;
+      const names: string[] = [];
+      while (peek() && peek()!.line === t.line && peek()!.t !== ";") names.push(next().t);
+      if (t.t === "directions") {
+        if (names.length) throw new ParseError(`unexpected "${names[0]}" after directions ${level}`, t.line);
+        parsed.dirs = level;
+      } else parsed.types = { level, names };
+      continue;
+    }
     if (t.t === "agent") {
       next();
       const sym = next();
@@ -131,13 +171,26 @@ function parseStatements(src: string): Parsed {
       if (!Number.isInteger(arity) || arity < 0) throw new ParseError(`"${ar.t}" isn't a number of ports`, ar.line);
       let filled = false;
       let name: string | undefined;
+      let ports: PortSpec[] | undefined;
       while (peek() && peek()!.line === t.line && peek()!.t !== ";") {
         const x = next();
         if (x.t === "filled") filled = true;
         else if (x.t.startsWith('"')) name = x.t.slice(1, -1);
-        else throw new ParseError(`unexpected "${x.t}" in agent declaration`, x.line);
+        else if (x.t === "ports") {
+          ports = [];
+          for (;;) {
+            const pt = next();
+            const spec = parsePort(pt.t, pt.line);
+            if (peek()?.t.startsWith('"') && peek()!.line === t.line) spec.label = next().t.slice(1, -1);
+            ports.push(spec);
+            if (peek()?.t !== "," || peek()!.line !== t.line) break;
+            next();
+          }
+          if (ports.length !== arity + 1)
+            throw new ParseError(`${sym.t} has ${arity + 1} ports but ${ports.length} are described`, t.line);
+        } else throw new ParseError(`unexpected "${x.t}" in agent declaration`, x.line);
       }
-      parsed.decls.push({ symbol: sym.t, arity, filled, name, line: t.line });
+      parsed.decls.push({ symbol: sym.t, arity, filled, name, ports, line: t.line });
       continue;
     }
     const start = p;
@@ -163,11 +216,20 @@ export function parse(src: string): { system: System; net: Net } {
   const parsed = parseStatements(src);
   const sys = new System();
   const arity = new Map<string, number>();
-  const meta = new Map<string, { filled: boolean; name?: string }>();
+  const meta = new Map<string, { filled: boolean; name?: string; ports?: PortSpec[] }>();
   for (const d of parsed.decls) {
     arity.set(d.symbol, d.arity);
-    meta.set(d.symbol, { filled: d.filled, name: d.name });
+    meta.set(d.symbol, { filled: d.filled, name: d.name, ports: d.ports });
   }
+  // Ports with directions or types switch those on, as optional, unless the text says otherwise.
+  const specs = parsed.decls.flatMap((d) => d.ports ?? []);
+  const names = [...(parsed.types?.names ?? [])];
+  for (const p of specs) if (p.type && !names.includes(p.type)) names.push(p.type);
+  sys.typing = {
+    dirs: parsed.dirs ?? (specs.some((p) => p.pol) ? "optional" : "off"),
+    types: parsed.types?.level ?? (names.length ? "optional" : "off"),
+    names,
+  };
   // Names written with parentheses are agents too; so are capitalised names.
   const visitTerm = (t: Term) => {
     if (t.kind === "agent") {
@@ -186,7 +248,7 @@ export function parse(src: string): { system: System; net: Net } {
   }
   for (const [symbol, n] of arity) {
     const m = meta.get(symbol);
-    sys.addType({ id: symbol, symbol, name: m?.name ?? symbol, arity: n, filled: m?.filled });
+    sys.addType({ id: symbol, symbol, name: m?.name ?? symbol, arity: n, filled: m?.filled, ...(m?.ports && { ports: m.ports }) });
   }
 
   /** Build equations into a net. `bound` names ends that already exist (a rule's interface). */
@@ -349,8 +411,14 @@ function equations(net: Net, sys: System, names: (e: End) => string | undefined)
 export function print(sys: System, net: Net, title?: string): string {
   const lines: string[] = [];
   if (title) lines.push(`-- ${title}`, "");
+  const typing = sys.typing;
+  if (typing.dirs !== "off") lines.push(`directions ${typing.dirs}`);
+  if (typing.types !== "off") lines.push(`types ${typing.types}${typing.names.map((n) => " " + n).join("")}`);
+  if (typingOn(typing)) lines.push("");
   for (const t of sys.types.values()) {
-    lines.push(`agent ${t.symbol} ${t.arity}${t.filled ? " filled" : ""}${t.name !== t.symbol ? ` "${t.name}"` : ""}`);
+    const described = t.ports?.some((p) => p.pol || p.type || p.label);
+    const ports = described ? ` ports ${t.ports!.map(printPort).join(", ")}` : "";
+    lines.push(`agent ${t.symbol} ${t.arity}${t.filled ? " filled" : ""}${t.name !== t.symbol ? ` "${t.name}"` : ""}${ports}`);
   }
   lines.push("");
   const sym = (id: string) => sys.types.get(id)?.symbol ?? id;

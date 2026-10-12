@@ -4,6 +4,7 @@ import { type Defs, type GroupId, Groups, type GroupsJSON, collapse, instantiate
 import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, port, sameEnd } from "../core/net";
 import { type StepRecord, redexes } from "../core/reduce";
 import type { System } from "../core/system";
+import { type Clash, type Effective, clash, clashText, endSpec } from "../core/types";
 import { G, type Placed, type Placement, type Pt, portPos } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
 import { type Pins, type Routed, route } from "../layout/route";
@@ -31,6 +32,8 @@ export interface NetModelOptions {
   fixedInterface?: boolean;
   /** Extra state to capture alongside the net in undo history. */
   extra?: { save(): unknown; load(x: unknown): void };
+  /** What free ports carry, when they stand for something fixed (a rule's interface). */
+  freeSpec?: (name: string) => Effective | undefined;
 }
 
 interface Snapshot {
@@ -54,7 +57,7 @@ export type WireGesture =
 export type DropCheck =
   | { kind: "ok"; join: boolean }
   | { kind: "back" }
-  | { kind: "refuse"; why: string };
+  | { kind: "refuse"; why: string; clash?: Clash };
 
 /** What the pointer is over, for the hover panel and for highlighting. */
 export type Hover =
@@ -325,10 +328,18 @@ export function createNetModel(opts: NetModelOptions) {
       return { kind: "refuse", why: g.kind === "new" ? "That's where this wire starts." : "That's the other end of this wire." };
     }
     const w = v.wireAt(to);
-    if (w === NONE) return { kind: "ok", join: false };
-    if (to.kind === "port") return { kind: "refuse", why: "This port already has a wire. Each port takes exactly one." };
-    if (opts.fixedInterface) return { kind: "refuse", why: "This interface port already has a wire." };
-    return { kind: "ok", join: true };
+    if (w !== NONE && to.kind === "port") return { kind: "refuse", why: "This port already has a wire. Each port takes exactly one." };
+    if (w !== NONE && opts.fixedInterface) return { kind: "refuse", why: "This interface port already has a wire." };
+    // Joining a loose end connects to whatever is at its far side.
+    const other = w === NONE ? to : v.partner(to)!;
+    const c = !sameEnd(other, anchor) ? clash(specAt(anchor), specAt(other)) : undefined;
+    if (c) return { kind: "refuse", why: clashText(c), clash: c };
+    return { kind: "ok", join: w !== NONE };
+  }
+
+  /** What a view end carries. */
+  function specAt(e: End): Effective {
+    return endSpec(view().net, view().sys, e, opts.freeSpec);
   }
 
   /** Where the wire would run if the held end were let go over `to`, or at `pt` over empty canvas. */
@@ -377,6 +388,26 @@ export function createNetModel(opts: NetModelOptions) {
     setHover,
     checkDrop,
     previewWire,
+    specAt,
+    freeSpec: opts.freeSpec,
+
+    /** Cut wires into two loose ends each, as when a wire stops fitting. Part of an edit already under way. */
+    cutWires(ids: WireId[]) {
+      for (const id of ids) {
+        if (!net.wires.has(id)) continue;
+        const ends = net.wire(id).ends;
+        net.disconnect(id);
+        for (const e of ends) {
+          if (e.kind === "free") {
+            if (!opts.fixedInterface) net.free.delete(e.name);
+            continue;
+          }
+          const name = nextFreeName();
+          net.free.set(name, NONE);
+          net.connect(e, free(name));
+        }
+      }
+    },
 
     /** What dragging from a view end would do. */
     gestureAt(e: End): WireGesture {

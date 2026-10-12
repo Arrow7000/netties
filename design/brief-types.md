@@ -185,3 +185,35 @@ make the idea clear; a full rule editor redesign is not this round.
 - Do components need anything? A component's free ports have types too.
 - How does the combinator translation screen behave for a typed system? (Not
   a design ask; just flag it if it gets in the way.)
+
+## Outcome (2026-10-12)
+
+The user chose **A2** (`prototypes/types-a2/`). Decisions, superseding the
+brief above where they differ:
+
+- **Direction and type are orthogonal.** A port gives, takes, or goes either
+  way; separately it has a named type or any type. A wire is refused only if
+  both ends are directed the same way, or both have types that differ.
+  Ports without a direction or type are wildcards, like TypeScript's `any`.
+- **Two strictness settings per system,** Directions and Types, each Off /
+  Optional / Required. Off hides that dimension entirely. Required disables
+  Either / any type for that dimension.
+- **Words:** "type" means only port types (number, list). Agent types are
+  "agents" in the UI ("New agent", "Edit agent").
+- **Canvas:** an arrowhead on each wire from the giving end to the taking
+  end, and a small arrow on empty directed ports. Wire type labels are off by
+  default and show on hover; a per-viewer view option shows them on every
+  wire.
+- **Agent editor:** one row per port with an editable label, Gives / Takes /
+  Either and a type dropdown. Changes that would break wires on the canvas
+  mark them and offer "Save and cut N wires".
+- **Directions and types sheet:** one table for the whole system. The two
+  settings head the Direction and Type columns they govern; the type list
+  sits under the Types header as chips. No label fields; a pencil opens the
+  agent editor.
+- **Port hover:** one compact row (principal/aux tag, label, direction glyph,
+  type chip) and at most one hint line.
+- **Rule grid:** stays a triangle; pairs that can never meet are hatched.
+- **Not decided yet:** handling of nets loaded from text that don't
+  type-check, and the translation screen for typed systems.
+

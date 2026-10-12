@@ -4,6 +4,7 @@ import { type ComponentDef, type GroupId, Groups, extract, refresh, uses } from 
 import { type AgentId, type AgentType, Net, type WireId } from "../core/net";
 import { type Stats, type StepRecord, emptyStats, interact, isActive, parallelStep } from "../core/reduce";
 import { type Rule, System, type SystemJSON, pairKey } from "../core/system";
+import { type PortSpec, type Typing, badWires, canMeet, flip, specOf } from "../core/types";
 import type { Placed, Placement } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
 import { createNetModel } from "./model";
@@ -94,7 +95,9 @@ export function createEditor(initial: Doc | undefined) {
     rev();
     const types = [...system.types.keys()];
     const missing: [string, string][] = [];
-    types.forEach((a, i) => types.slice(i).forEach((b) => !system.ruleFor(a, b) && missing.push([a, b])));
+    types.forEach((a, i) =>
+      types.slice(i).forEach((b) => !system.ruleFor(a, b) && !canMeet(system, a, b) && missing.push([a, b])),
+    );
     return missing;
   });
 
@@ -239,6 +242,24 @@ export function createEditor(initial: Doc | undefined) {
     return id;
   };
 
+  /**
+   * Wires that no longer fit, after the system's types changed or a net was
+   * loaded, are cut into loose ends: an ill-typed wire never stays on the
+   * canvas. Part of an edit already under way. Returns how many were cut.
+   */
+  const enforceTypes = (): number => {
+    const bad = badWires(model.net, system);
+    if (bad.size) model.cutWires([...bad.keys()]);
+    return bad.size;
+  };
+  const cutMessage = (n: number) => (n === 1 ? "Cut 1 wire that didn't fit the types." : `Cut ${n} wires that didn't fit the types.`);
+
+  /** Replace an agent type's ports, keeping everything else about it. */
+  const withPorts = (id: string, ports: PortSpec[]) => {
+    const t = system.type(id);
+    system.types.set(id, { ...t, ports });
+  };
+
   /** Remove agents of a type from the net, and every rule that mentions it. */
   const dropType = (id: string) => {
     model.removeAgentsWhere((t) => t === id);
@@ -282,6 +303,11 @@ export function createEditor(initial: Doc | undefined) {
       stop();
       model.checkpoint();
       restore(doc);
+      const n = enforceTypes();
+      if (n) {
+        model.bump();
+        notify(cutMessage(n), true);
+      }
       resetRun();
       model.requestFit();
     },
@@ -315,13 +341,126 @@ export function createEditor(initial: Doc | undefined) {
       touchSystem();
     },
 
-    /** Change an agent type. Changing its arity removes agents of that type from the net, and their rules. */
+    /**
+     * Change an agent type. Changing its arity removes agents of that type
+     * from the net, and their rules; wires that stop fitting are cut.
+     */
     updateType(id: string, t: Omit<AgentType, "id">) {
       model.checkpoint();
       if (system.type(id).arity !== t.arity) dropType(id);
       system.types.set(id, { ...t, id });
+      const n = enforceTypes();
       touchSystem();
       model.bump();
+      if (n) notify(cutMessage(n), true);
+    },
+
+    /** Wires that would stop fitting if an agent type's ports changed like this. */
+    conflicts(id: string, ports: PortSpec[], typing = system.typing): WireId[] {
+      const trial = System.fromJSON(system.toJSON());
+      trial.typing = typing;
+      if (trial.types.has(id)) trial.types.set(id, { ...trial.type(id), ports });
+      return [...badWires(model.net, trial).keys()];
+    },
+
+    /** Set one port's direction or type (or label), from the directions and types sheet. */
+    setPort(id: string, slot: number, patch: Partial<PortSpec>) {
+      model.checkpoint();
+      const t = system.type(id);
+      const ports = Array.from({ length: t.arity + 1 }, (_, s) => ({ ...(t.ports?.[s] ?? {}) }));
+      ports[slot] = { ...ports[slot], ...patch };
+      for (const k of ["pol", "type", "label"] as const) if (ports[slot]![k] === undefined) delete ports[slot]![k];
+      withPorts(id, ports);
+      const n = enforceTypes();
+      touchSystem();
+      model.bump();
+      if (n) notify(cutMessage(n), true);
+    },
+
+    /** Change how strict the system is. Turning a dimension off forgets it on every port. */
+    setTyping(next: Partial<Typing>) {
+      model.checkpoint();
+      const typing = { ...system.typing, ...next };
+      for (const t of [...system.types.values()]) {
+        if (!t.ports) continue;
+        const ports = t.ports.map((p) => {
+          const q = { ...p };
+          if (typing.dirs === "off") delete q.pol;
+          if (typing.types === "off") delete q.type;
+          return q;
+        });
+        system.types.set(t.id, { ...t, ports });
+      }
+      if (typing.types === "off") typing.names = [];
+      system.typing = typing;
+      const n = enforceTypes();
+      touchSystem();
+      model.bump();
+      if (n) notify(cutMessage(n), true);
+    },
+
+    addTypeName(name: string) {
+      const n = name.trim();
+      if (!n || system.typing.names.includes(n)) return;
+      model.checkpoint();
+      system.typing = { ...system.typing, names: [...system.typing.names, n] };
+      touchSystem();
+    },
+
+    renameTypeName(from: string, to: string): string | undefined {
+      const n = to.trim();
+      if (!n || n === from) return;
+      if (system.typing.names.includes(n)) return `There's already a type called ${n}.`;
+      model.checkpoint();
+      system.typing = { ...system.typing, names: system.typing.names.map((x) => (x === from ? n : x)) };
+      for (const t of [...system.types.values()]) {
+        if (t.ports?.some((p) => p.type === from)) withPorts(t.id, t.ports.map((p) => (p.type === from ? { ...p, type: n } : p)));
+      }
+      touchSystem();
+      model.bump();
+    },
+
+    /** Forget a type: its ports fit anything again, so no wire breaks. */
+    deleteTypeName(name: string) {
+      model.checkpoint();
+      system.typing = { ...system.typing, names: system.typing.names.filter((x) => x !== name) };
+      for (const t of [...system.types.values()]) {
+        if (!t.ports?.some((p) => p.type === name)) continue;
+        withPorts(t.id, t.ports.map((p) => { if (p.type !== name) return p; const { type: _, ...rest } = p; return rest; }));
+      }
+      touchSystem();
+      model.bump();
+    },
+
+    /** Fill in missing directions and types from what the ports are wired to on the canvas. Returns how many it filled. */
+    guessPorts(what: "dir" | "type" | "both" = "both"): number {
+      const net = model.net;
+      // For each agent type, a guess per slot from the first wired port that says something.
+      const guesses = new Map<string, PortSpec[]>();
+      for (const a of net.agents.values()) {
+        const t = system.types.get(a.type);
+        if (!t) continue;
+        const gs = guesses.get(a.type) ?? Array.from({ length: t.arity + 1 }, () => ({}) as PortSpec);
+        guesses.set(a.type, gs);
+        a.wires.forEach((_, slot) => {
+          const p = net.partner({ kind: "port", agent: a.id, slot });
+          if (p?.kind !== "port") return;
+          const there = flip(specOf(system, net.agent(p.agent).type, p.slot));
+          if (what !== "type" && there.pol && !t.ports?.[slot]?.pol) gs[slot]!.pol ??= there.pol;
+          if (what !== "dir" && there.type && !t.ports?.[slot]?.type) gs[slot]!.type ??= there.type;
+        });
+      }
+      const n = [...guesses.values()].flat().reduce((k, g) => k + (g.pol ? 1 : 0) + (g.type ? 1 : 0), 0);
+      if (!n) return 0;
+      model.checkpoint();
+      for (const [id, gs] of guesses) {
+        const t = system.type(id);
+        withPorts(id, Array.from({ length: t.arity + 1 }, (_, s) => ({ ...gs[s], ...(t.ports?.[s] ?? {}) })));
+      }
+      enforceTypes();
+      touchSystem();
+      model.bump();
+      return n;
     },
 
     removeType(id: string) {
@@ -456,7 +595,10 @@ export function createEditor(initial: Doc | undefined) {
         model.restoreView("auto", new Map());
         resetRun();
       });
+      const n = enforceTypes();
+      if (n) model.bump();
       model.requestFit();
+      return n;
     },
     translateOpen,
     /** Open the combinator translation, if the net is ready for it. */

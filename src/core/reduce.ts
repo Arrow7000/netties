@@ -129,10 +129,19 @@ function count(stats: Stats, rec: StepRecord) {
 
 /** Active pairs that have a rule. Pairs without one are stuck. */
 export function redexes(net: Net, sys: System): WireId[] {
+  // A rule that breaks the types can't fire: the pair is stuck until the rule is fixed.
+  const ok = new Map<string, boolean>();
   return net.activePairs().filter((w) => {
     const [a, b] = net.wire(w).ends;
     if (a.kind !== "port" || b.kind !== "port") return false;
-    return sys.ruleFor(net.agent(a.agent).type, net.agent(b.agent).type) !== undefined;
+    const ta = net.agent(a.agent).type;
+    const tb = net.agent(b.agent).type;
+    const key = pairKey(ta, tb);
+    if (!ok.has(key)) {
+      const found = sys.ruleFor(ta, tb);
+      ok.set(key, !!found && !sys.broken(found.rule));
+    }
+    return ok.get(key)!;
   });
 }
 

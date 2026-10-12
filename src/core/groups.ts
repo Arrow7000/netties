@@ -277,6 +277,7 @@ export function collapse(net: Net, groups: Groups, sys: System, defs: Defs) {
   const vsys = new System();
   for (const t of sys.types.values()) vsys.types.set(t.id, t);
   for (const [k, r] of sys.rules) vsys.rules.set(k, r);
+  vsys.typing = sys.typing;
 
   const box = new Map<AgentId, GroupId>();
   const hiddenIn = new Map<AgentId, GroupId>();
@@ -293,6 +294,8 @@ export function collapse(net: Net, groups: Groups, sys: System, defs: Defs) {
       symbol: def?.symbol ?? "?",
       arity: Math.max(0, ports.length - 1),
       box: true,
+      // Each box port carries whatever the inner port it stands for carries.
+      ports: ports.map(([, e]) => (e.kind === "port" ? (sys.types.get(net.agent(e.agent).type)?.ports?.[e.slot] ?? {}) : {})),
     };
     vsys.types.set(t.id, t);
     const id = -g.id;

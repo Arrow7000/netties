@@ -15,6 +15,8 @@ describe("text format", () => {
       const back = parse(text);
       expect(canonical(back.net)).toBe(canonical(net));
       expect([...back.system.types.keys()]).toEqual([...sys.types.keys()]);
+      expect(back.system.typing).toEqual(sys.typing);
+      for (const t of sys.types.values()) expect(back.system.type(t.id).ports ?? []).toEqual(t.ports ?? []);
       for (const r of sys.rules.values()) {
         const found = back.system.ruleFor(r.left, r.right);
         expect(found?.swapped).toBe(false);
@@ -35,6 +37,19 @@ describe("text format", () => {
     let n = 0;
     for (let p = net.partner(free("r")); p?.kind === "port" && net.agent(p.agent).type === "S"; p = net.partner(port(p.agent, 1))) n++;
     expect(n).toBe(3);
+  });
+
+  it("reads directions and types", () => {
+    const { system } = parse(`
+      types required number
+      agent Z 0 ports +number "zero"
+      agent S 1 ports +number, -number "the one before"
+      agent E 0 ports -
+    `);
+    expect(system.typing).toEqual({ dirs: "optional", types: "required", names: ["number"] });
+    expect(system.type("S").ports).toEqual([{ pol: "give", type: "number" }, { pol: "take", type: "number", label: "the one before" }]);
+    expect(system.type("E").ports).toEqual([{ pol: "take" }]);
+    expect(() => parse("agent S 1 ports +number")).toThrow(/2 ports/);
   });
 
   it("wires names joined to each other", () => {

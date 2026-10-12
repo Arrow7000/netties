@@ -7,6 +7,8 @@
  * order, mirroring it would not (so we never mirror).
  */
 
+import type { PortSpec } from "./types";
+
 export type AgentId = number;
 export type WireId = number;
 
@@ -20,6 +22,8 @@ export interface AgentType {
   filled?: boolean;
   /** Drawn as a box: a collapsed component standing in for its agents. */
   box?: boolean;
+  /** Each port's direction, type and label, by slot. */
+  ports?: PortSpec[];
 }
 
 /** Where a wire ends: an agent's port, or one of the net's free ports. */
