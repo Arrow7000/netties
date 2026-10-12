@@ -12,11 +12,23 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
   (agents, directions and types, rules, net) in the text format; the engine
   parses, type-checks, runs and checks the result, feeding errors back for
   a few retries. "Describe/create" first, "explain this" second.
-  - Step 1: an eval of about a dozen engine-checked tasks (3 × 4, a list of
-    ints, length, append, booleans and not, ...) against Haiku 5.5,
-    MiMo-V2.6-Flash, DeepSeek V4.1 Flash and MiMo-V2.6-Pro. Measure success
-    within 3 tries, real token use, time, cost per success. Keys are in
-    `.env` (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`; gitignored).
+  - Step 1, done 2026-10-12: `eval/` (run with `npx vite-node eval/run.ts`;
+    options in the file). 13 engine-checked tasks, 3 runs each, up to 3
+    tries with netties' error messages fed back:
+
+    | model | pass@3 | first try | median time | worst | $/success |
+    |---|---|---|---|---|---|
+    | Haiku 5.5 | 38/39 | 37 | 27 s | 1.7 min | $0.0037 |
+    | DeepSeek V4.1 Flash | 38/39 | 29 | 59 s | 19 min | $0.012 |
+    | MiMo-V2.6-Pro | 39/39 | 23 | 3.7 min | 27 min | $0.013 |
+    | MiMo-V2.6-Flash | 18/23 (stopped) | 9 | 5 min | 35 min | $0.012 |
+
+    Haiku 5.5 is the pick: as accurate, 2–8× faster, about a third of the
+    cost per success. MiMo-V2.6-Flash often reasons until it runs out of
+    tokens and writes nothing. The tasks are too easy to separate the top
+    three on accuracy; add harder ones (fib, map, sorting, two-type systems)
+    before relying on accuracy differences. Attempts now fail after 5 minutes
+    and are saved as they finish.
   - Step 2: a capped proxy. Netlify regular functions bill wall-clock time,
     and running out of free credits pauses every project, so use a Netlify
     Edge Function (stream the response) or a Cloudflare Worker with
