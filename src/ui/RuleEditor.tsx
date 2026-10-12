@@ -1,5 +1,6 @@
-import { For, Show, createMemo, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, onCleanup, onMount } from "solid-js";
 import { interfaceNet, interfacePins, isSymmetric, netToRule, pairNet, parseIface, ruleToNet } from "../core/ruleNet";
+import { badWires, flip, ruleClashes, specOf } from "../core/types";
 import { createNetModel } from "../state/model";
 import type { Editor } from "../state/editor";
 import { Canvas } from "./Canvas";
@@ -27,10 +28,22 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
   const [left, right] = existing?.swapped ? [props.right, props.left] : [props.left, props.right];
   const pins = interfacePins(sys(), left, right);
 
-  const lhs = createNetModel({ system: sys, pins: () => pins, fixedInterface: true });
+  // An interface end stands for whatever was plugged into that aux port of the pair,
+  // so it carries the far side of that port: wires in the result have to fit it.
+  const freeSpec = (name: string) => {
+    const i = parseIface(name);
+    return i ? flip(specOf(sys(), i.side === 0 ? left : right, i.slot)) : undefined;
+  };
+  const lhs = createNetModel({ system: sys, pins: () => pins, fixedInterface: true, freeSpec });
   lhs.setNet(pairNet(sys(), left, right).net);
-  const rhs = createNetModel({ system: sys, pins: () => pins, fixedInterface: true });
+  const rhs = createNetModel({ system: sys, pins: () => pins, fixedInterface: true, freeSpec });
   rhs.setNet(existing ? ruleToNet(sys(), existing.rule) : interfaceNet(sys(), left, right));
+
+  // Wires of a rule that broke when the types changed are drawn red until they're rewired.
+  createEffect(() => {
+    rhs.rev();
+    rhs.setDoomed(new Set(badWires(rhs.net, sys(), freeSpec).keys()));
+  });
 
   const types = () => {
     ed.rev();
@@ -41,14 +54,15 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     rhs.rev();
     const { rule, open } = netToRule(left, right, rhs.net);
     const symmetric = left !== right || isSymmetric(rhs.net);
-    return { rule, open, symmetric };
+    const clashes = open ? 0 : ruleClashes(sys(), rule).length;
+    return { rule, open, symmetric, clashes };
   });
 
   const sym = (id: string) => sys().types.get(id)?.symbol ?? id;
 
   const save = () => {
-    const { rule, open } = status();
-    if (open) return;
+    const { rule, open, clashes } = status();
+    if (open || clashes) return;
     ed.saveRule(rule);
     ed.closeRule();
   };
@@ -102,7 +116,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
           <button class="btn" onClick={ed.closeRule}>
             Cancel
           </button>
-          <button class="btn on" onClick={save} disabled={status().open > 0} title="Save rule (⌘↵)">
+          <button class="btn on" onClick={save} disabled={status().open > 0 || status().clashes > 0} title="Save rule (⌘↵)">
             Save rule
           </button>
         </div>
@@ -116,12 +130,14 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
             </button>
           )}
         </For>
-        <span class="rule-status" classList={{ warn: status().open > 0 || !status().symmetric }}>
+        <span class="rule-status" classList={{ warn: status().open > 0 || status().clashes > 0 || !status().symmetric }}>
           {status().open > 0
             ? status().open === 1
               ? "1 port still needs a wire."
               : `${status().open} ports still need a wire.`
-            : !status().symmetric
+            : status().clashes > 0
+              ? `${status().clashes === 1 ? "1 wire joins" : `${status().clashes} wires join`} ports that don't fit the types. Rewire ${status().clashes === 1 ? "it" : "them"} to save.`
+              : !status().symmetric
               ? "Not symmetric: the result depends on which one is on top."
               : "Every port is wired."}
         </span>

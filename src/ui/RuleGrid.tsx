@@ -1,11 +1,12 @@
 import { For, Show, createMemo, createSignal } from "solid-js";
 import { pairKey } from "../core/system";
+import { canMeet, specOf, typingOn } from "../core/types";
 import type { Editor } from "../state/editor";
 
 /** Up to this many types, the grid fits in the side panel. */
 export const GRID_FITS = 8;
 
-type CellState = "has" | "live" | "none" | "stuck";
+type CellState = "has" | "live" | "none" | "stuck" | "never" | "broken";
 
 /**
  * Every pair of agent types, as half of a square: each cell is one pair,
@@ -17,7 +18,20 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
   const m = ed.model;
   const [hot, setHot] = createSignal<[number, number]>();
 
-  const types = () => (ed.rev(), [...ed.system.types.values()]);
+  /**
+   * With directions, types whose principal ports give come first, then those
+   * that take, so the pairs that can never meet gather into two blocks.
+   */
+  const types = () => {
+    ed.rev();
+    const all = [...ed.system.types.values()];
+    if (ed.system.typing.dirs === "off") return all;
+    const rank = (id: string) => {
+      const pol = specOf(ed.system, id, 0).pol;
+      return pol === "give" ? 0 : pol === "take" ? 1 : 2;
+    };
+    return all.map((t, i) => ({ t, i })).sort((x, y) => rank(x.t.id) - rank(y.t.id) || x.i - y.i).map((x) => x.t);
+  };
 
   /** Pairs in the net now, by pair key: whether they can fire. */
   const present = createMemo(() => {
@@ -37,9 +51,12 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
   });
 
   const state = (a: string, b: string): CellState => {
+    if (canMeet(ed.system, a, b)) return "never";
     const p = present().get(pairKey(a, b));
+    const found = ed.system.ruleFor(a, b);
+    if (found && ed.system.broken(found.rule)) return "broken";
     if (p === "stuck") return "stuck";
-    if (!ed.system.ruleFor(a, b)) return "none";
+    if (!found) return "none";
     return p === "live" ? "live" : "has";
   };
 
@@ -87,7 +104,7 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
                   <button
                     class={`cell ${state(a.id, b.id)}`}
                     classList={{ hl: !!hot() && (hot()![0] === i() || hot()![1] === j()) }}
-                    tabIndex={props.thumb ? -1 : 0}
+                    tabIndex={props.thumb || state(a.id, b.id) === "never" ? -1 : 0}
                     aria-label={`${a.name} with ${b.name}`}
                     onPointerEnter={() => {
                       if (props.thumb) return;
@@ -99,11 +116,12 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
                     onClick={(e) => {
                       if (props.thumb) return;
                       e.stopPropagation();
+                      if (state(a.id, b.id) === "never") return;
                       m.setHover(undefined);
                       ed.openRule(a.id, b.id);
                     }}
                   >
-                    <Show when={props.big}>
+                    <Show when={props.big && state(a.id, b.id) !== "never"}>
                       {a.symbol}
                       {b.symbol}
                     </Show>
@@ -118,7 +136,58 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
   );
 }
 
-export function GridLegend() {
+/**
+ * One line over the grid of a typed system: whether every pair that can
+ * meet has a rule, which is what makes a typed net unable to get stuck.
+ */
+export function GridSummary(props: { ed: Editor }) {
+  const ed = props.ed;
+  const counts = createMemo(() => {
+    ed.rev();
+    const types = [...ed.system.types.keys()];
+    let never = 0;
+    let missing = 0;
+    let broken = 0;
+    types.forEach((a, i) =>
+      types.slice(i).forEach((b) => {
+        if (canMeet(ed.system, a, b)) return void never++;
+        const f = ed.system.ruleFor(a, b);
+        if (!f) missing++;
+        else if (ed.system.broken(f.rule)) broken++;
+      }),
+    );
+    return { never, missing, broken };
+  });
+  const pairs = (n: number) => (n === 1 ? "1 pair" : `${n} pairs`);
+  return (
+    <Show when={(ed.rev(), typingOn(ed.system.typing)) && counts().never > 0}>
+      <div class="grid-summary" classList={{ done: !counts().missing && !counts().broken }}>
+        <Show
+          when={!counts().missing && !counts().broken}
+          fallback={
+            <span>
+              <Show when={counts().broken}>{pairs(counts().broken)} with a rule that breaks the types. </Show>
+              <Show when={counts().missing}>{pairs(counts().missing)} that can meet have no rule yet. </Show>
+              <small>{pairs(counts().never)} can never meet.</small>
+            </span>
+          }
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" />
+            <path d="M4.8 8.2l2.2 2.2 4.2-4.6" />
+          </svg>
+          <span>
+            Every pair that can meet has a rule.
+            <small>The other {counts().never} can never meet, so nothing can get stuck.</small>
+          </span>
+        </Show>
+      </div>
+    </Show>
+  );
+}
+
+export function GridLegend(props: { ed?: Editor }) {
+  const typed = () => !!props.ed && (props.ed.rev(), typingOn(props.ed.system.typing));
   return (
     <div class="grid-legend">
       <span>
@@ -137,6 +206,12 @@ export function GridLegend() {
         <i class="stuck" />
         Stuck here
       </span>
+      <Show when={typed()}>
+        <span>
+          <i class="never" />
+          Can never meet
+        </span>
+      </Show>
     </div>
   );
 }

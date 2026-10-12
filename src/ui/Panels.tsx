@@ -2,6 +2,7 @@ import { For, type JSX, Show, createMemo, createSignal } from "solid-js";
 import type { GroupId } from "../core/groups";
 import { type AgentId, type End, NONE, type WireId } from "../core/net";
 import { pairKey } from "../core/system";
+import { type Effective, canMeet, clash, clashText, endSpec, looseSpec, specOf } from "../core/types";
 import type { Editor } from "../state/editor";
 import { Menu, MenuItem } from "./Menu";
 import { held } from "./keys";
@@ -10,6 +11,33 @@ import { Trash } from "./icons";
 
 /** A symbol set the way the nets set it. */
 const Sym = (props: { s: string }) => <i class="sym">{props.s}</i>;
+
+/** A port's direction as a little arrow (out of the port if it gives, into it if it takes), and its type as a chip. */
+export function PortBadge(props: { spec: Effective }) {
+  return (
+    <span class="port-badge">
+      <Show when={props.spec.pol}>
+        {(pol) => (
+          <span class="dir" classList={{ give: pol() === "give", take: pol() === "take" }}>
+            <svg viewBox="0 0 22 10" aria-hidden="true">
+              <circle cx={pol() === "give" ? 3 : 19} cy={5} r={2.2} />
+              <path d="M5 5h12" />
+              <path d={pol() === "give" ? "M14 2l4 3-4 3z" : "M8 2l-4 3 4 3z"} class="head" />
+            </svg>
+            {pol() === "give" ? "gives" : "takes"}
+          </span>
+        )}
+      </Show>
+      <Show when={props.spec.type}>{(t) => <span class="type-chip">{t()}</span>}</Show>
+      <Show when={!props.spec.pol && !props.spec.type}>
+        <span class="dir">fits anything</span>
+      </Show>
+    </span>
+  );
+}
+
+/** Principal or aux, as a small tag. */
+const SlotTag = (props: { slot: number }) => <span class="slot-tag">{props.slot === 0 ? "principal" : `aux ${props.slot}`}</span>;
 
 interface Info {
   title: JSX.Element;
@@ -49,6 +77,7 @@ export function HoverPanel(props: { ed: Editor }) {
   const m = ed.model;
   const n = namer(ed);
 
+  const typed = () => (ed.rev(), ed.system.typing.dirs !== "off" || ed.system.typing.types !== "off");
   const info = createMemo((): Info | undefined => {
     const h = m.hover();
     if (!h) return undefined;
@@ -81,12 +110,18 @@ export function HoverPanel(props: { ed: Editor }) {
       }
       case "port": {
         const e = h.end;
+        if (e.kind !== "port") return undefined;
+        const t = n.typeOf(e.agent);
         const other = v.net.partner(e);
+        const label = t?.box ? undefined : t?.ports?.[e.slot]?.label;
         return {
-          title: <>{capitalise(n.end(e))}</>,
-          lines: other
-            ? [{ text: <>Wired to {n.end(other)}.</> }, { text: "Drag to unplug this end and move it." }]
-            : [{ text: "Empty." }, { text: "Drag to draw a wire from it." }],
+          title: (
+            <>
+              <SlotTag slot={e.slot} /> <Sym s={t?.symbol ?? "?"} /> {label ?? t?.name}
+            </>
+          ),
+          aside: typed() ? <PortBadge spec={m.specAt(e)} /> : undefined,
+          lines: [{ text: other ? "Drag to unplug it." : "Drag to draw a wire." }],
         };
       }
       case "free": {
@@ -94,13 +129,11 @@ export function HoverPanel(props: { ed: Editor }) {
         return {
           title: (
             <>
-              Free port <Sym s={h.name} />
+              Loose end <Sym s={h.name} />
             </>
           ),
-          lines: [
-            { text: "A loose end: the net's connection to the outside." },
-            { text: other ? "Drag it onto an empty port to plug it in." : "Drag from it to wire it up." },
-          ],
+          aside: typed() && other ? <PortBadge spec={looseSpec(v.net, v.sys, h.name)} /> : undefined,
+          lines: [{ text: other ? "The net's connection to the outside. Drag it onto a port to plug it in." : "Drag from it to wire it up." }],
         };
       }
       case "wire": {
@@ -126,6 +159,14 @@ export function HoverPanel(props: { ed: Editor }) {
               lines: [{ text: what }, { text: "Click to fire. Alt-click selects the wire." }],
             };
           }
+          const broken = v.sys.ruleFor(n.typeOf(pair[0])!.id, n.typeOf(pair[1])!.id);
+          if (broken) {
+            return {
+              title,
+              aside: "rule breaks the types",
+              lines: [{ text: "Its rule joins ports that don't fit, so it can't fire. Click to fix it.", tone: "bad" }],
+            };
+          }
           return {
             title,
             aside: "no rule",
@@ -137,9 +178,14 @@ export function HoverPanel(props: { ed: Editor }) {
         }
         const w = v.net.wires.get(h.id);
         if (!w) return undefined;
+        const [a, b] = w.ends;
+        const sa = m.specAt(a);
+        const sb = m.specAt(b);
+        const carried: Effective = { type: sa.type ?? sb.type };
         return {
           title: "Wire",
-          lines: [{ text: <>From {n.end(w.ends[0])} to {n.end(w.ends[1])}.</> }, { text: "Click to select." }],
+          aside: typed() && carried.type ? <PortBadge spec={carried} /> : undefined,
+          lines: [{ text: <>From {n.end(a)} to {n.end(b)}.</> }],
         };
       }
       case "group": {
@@ -208,10 +254,43 @@ export function HoverPanel(props: { ed: Editor }) {
           lines: [{ text: "Drag onto the canvas to add one. Click to edit it; every copy changes with it." }],
         };
       }
+      case "porttype": {
+        let count = 0;
+        for (const t of ed.system.types.values()) for (let s = 0; s <= t.arity; s++) if (specOf(ed.system, t.id, s).type === h.name) count++;
+        return {
+          title: <span class="type-chip">{h.name}</span>,
+          aside: count === 1 ? "1 port" : `${count} ports`,
+          lines: [{ text: "Its ports and wires are lit up on the canvas." }],
+        };
+      }
       case "pair": {
         const sa = ed.system.types.get(h.a)?.symbol ?? h.a;
         const sb = ed.system.types.get(h.b)?.symbol ?? h.b;
         const has = !!ed.system.ruleFor(h.a, h.b);
+        const never = canMeet(ed.system, h.a, h.b);
+        if (never) {
+          return {
+            title: (
+              <>
+                <Sym s={sa} /> with <Sym s={sb} />
+              </>
+            ),
+            aside: "can never meet",
+            lines: [{ text: `Their principal ports don't fit. ${clashText(never).split(". ")[0]}.` }],
+          };
+        }
+        const brokenRule = has && ed.system.broken(ed.system.ruleFor(h.a, h.b)!.rule);
+        if (brokenRule) {
+          return {
+            title: (
+              <>
+                <Sym s={sa} /> with <Sym s={sb} />
+              </>
+            ),
+            aside: "rule breaks the types",
+            lines: [{ text: "It joins ports that don't fit, so it can't fire.", tone: "bad" }, { text: "Click to fix it." }],
+          };
+        }
         const here = [...m.activeWires(), ...m.stuckWires()].filter((w) => {
           const p = n.pairOf(w);
           if (!p) return false;
@@ -293,16 +372,29 @@ export function SelectionPanel(props: { ed: Editor }) {
     const current = new Set(agents.map((a) => m.net.agent(a).type));
     const alike = arities.length === 1 ? [...sys.types.values()].filter((t) => t.arity === arities[0] && !(current.size === 1 && current.has(t.id))) : [];
     const typeWhy = groups.length
-      ? "Components can't change type."
+      ? "Components can't be swapped for another agent."
       : arities.length > 1
-        ? `Their numbers of aux ports differ (${arities.sort().join(" and ")}), so no one type fits them all.`
+        ? `Their numbers of aux ports differ (${arities.sort().join(" and ")}), so no one agent fits them all.`
         : !alike.length
-          ? "No other agent type has the same number of aux ports."
+          ? "No other agent has the same number of aux ports."
           : undefined;
+    /** How many wires would stop fitting if these agents became another agent. */
+    const breaks = (type: string) => {
+      let n = 0;
+      for (const a of agents) {
+        m.net.agent(a).wires.forEach((_, slot) => {
+          const p = m.net.partner({ kind: "port", agent: a, slot });
+          if (!p) return;
+          const there = p.kind === "port" && agents.includes(p.agent) ? specOf(sys, type, p.slot) : endSpec(m.net, sys, p);
+          if (clash(specOf(sys, type, slot), there)) n++;
+        });
+      }
+      return n;
+    };
     const allCollapsed = groups.every((g) => m.groups.groups.get(g)?.collapsed);
     return [
       {
-        label: "Change type",
+        label: "Change agent",
         why: typeWhy,
         menu: (close) => (
           <For each={alike}>
@@ -314,6 +406,8 @@ export function SelectionPanel(props: { ed: Editor }) {
                     <Sym s={t.symbol} /> {t.name}
                   </>
                 }
+                disabled={breaks(t.id) > 0}
+                note={breaks(t.id) ? `Its ports wouldn't fit ${breaks(t.id) === 1 ? "1 wire" : `${breaks(t.id)} wires`}` : undefined}
                 onClick={() => {
                   m.changeType(agents, t.id);
                   close();
@@ -495,6 +589,3 @@ export function Counters(props: { ed: Editor }) {
   );
 }
 
-function capitalise(x: JSX.Element): JSX.Element {
-  return <span class="cap">{x}</span>;
-}

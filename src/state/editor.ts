@@ -66,6 +66,10 @@ export function createEditor(initial: Doc | undefined) {
   const [componentOpen, setComponentOpen] = createSignal<string>();
   const [translateOpen, setTranslateOpen] = createSignal(false);
   const [textOpen, setTextOpen] = createSignal(false);
+  /** The directions and types sheet. */
+  const [typesOpen, setTypesOpen] = createSignal(false);
+  /** The agent open in the agent editor, or "new" for one being made. */
+  const [agentOpen, setAgentOpen] = createSignal<string>();
 
   /** Changes to the net or to the system. */
   const rev = createMemo(() => model.rev() + sysRev() * 1e6);
@@ -580,6 +584,12 @@ export function createEditor(initial: Doc | undefined) {
       if (g !== undefined) model.bump();
     },
 
+    agentOpen,
+    openAgent: (id: string) => setAgentOpen(id),
+    closeAgent: () => setAgentOpen(undefined),
+    typesOpen,
+    openTypes: () => setTypesOpen(true),
+    closeTypes: () => setTypesOpen(false),
     textOpen,
     openText: () => setTextOpen(true),
     closeText: () => setTextOpen(false),

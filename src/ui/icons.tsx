@@ -46,3 +46,10 @@ export const Component = icon(() =>
     <path d="M8 6v4M6 8h4" {...line} stroke-width={1.3} />
   </>,
 );
+export const Eye = icon(() =>
+  <>
+    <path d="M1.8 8s2.3-4.3 6.2-4.3S14.2 8 14.2 8s-2.3 4.3-6.2 4.3S1.8 8 1.8 8z" {...line} stroke-width={1.3} />
+    <circle cx="8" cy="8" r="1.9" {...line} stroke-width={1.3} />
+  </>,
+);
+export const Check = icon(() => <path d="M3.5 8.5l3 3 6-7" {...line} />);

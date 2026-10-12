@@ -13,8 +13,9 @@ export function TextView(props: { ed: Editor }) {
   const load = () => {
     try {
       const { system, net } = parse(text());
-      ed.loadParsed(system, net);
+      const cut = ed.loadParsed(system, net);
       ed.closeText();
+      if (cut) ed.notify(`Loaded. Cut ${cut === 1 ? "1 wire" : `${cut} wires`} that didn't fit the types into loose ends.`, true);
     } catch (e) {
       setError(e instanceof ParseError || e instanceof Error ? e.message : String(e));
     }

@@ -3,9 +3,10 @@ import { Portal } from "solid-js/web";
 import type { Editor } from "../state/editor";
 import type { Camera } from "./Canvas";
 import { ComponentGlyph, Glyph } from "./Glyph";
-import { GRID_FITS, GridLegend, RuleGrid } from "./RuleGrid";
+import { GRID_FITS, GridLegend, GridSummary, RuleGrid } from "./RuleGrid";
+import { typingOn } from "../core/types";
 import { TypeEditor } from "./TypeEditor";
-import { Close, Component, Expand, Plus } from "./icons";
+import { Chevron, Close, Component, Expand, Plus } from "./icons";
 
 interface Carry {
   what: { kind: "type" | "component"; id: string };
@@ -21,7 +22,8 @@ interface Carry {
 export function Palette(props: { ed: Editor; camera: Camera }) {
   const ed = props.ed;
   const m = ed.model;
-  const [editing, setEditing] = createSignal<string | "new">();
+  const editing = ed.agentOpen;
+  const setEditing = (id: string | undefined) => (id ? ed.openAgent(id) : ed.closeAgent());
   const [carry, setCarry] = createSignal<Carry>();
   const [gridOpen, setGridOpen] = createSignal(false);
 
@@ -78,9 +80,12 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
             <h2>Agents</h2>
             <button class="btn small outline" onClick={() => setEditing("new")}>
               <Plus />
-              New type
+              New agent
             </button>
           </div>
+          <Show when={(ed.rev(), typingOn(ed.system.typing))}>
+            <TypingSummary ed={ed} />
+          </Show>
           <div class="tiles">
             <For each={types()}>
               {(t) => (
@@ -155,8 +160,9 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
               </>
             }
           >
+            <GridSummary ed={ed} />
             <RuleGrid ed={ed} />
-            <GridLegend />
+            <GridLegend ed={ed} />
             <p class="palette-hint">Each cell is a pair of types. Click one to see its rule, or to write one.</p>
           </Show>
         </section>
@@ -172,8 +178,9 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
           <p class="palette-hint">
             Each cell is one pair of types; γ with δ is the same rule as δ with γ, so only half the grid is used.
           </p>
+          <GridSummary ed={ed} />
           <RuleGrid ed={ed} big />
-          <GridLegend />
+          <GridLegend ed={ed} />
         </div>
       </Show>
       <Show when={editing()} keyed>
@@ -189,6 +196,65 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
         )}
       </Show>
     </>
+  );
+}
+
+const LEVEL_WORD = { off: "off", optional: "optional", required: "required" } as const;
+
+/**
+ * How strict the system is, in one line that opens the directions and types
+ * sheet, and its types as chips: pointing at one lights up its ports.
+ */
+function TypingSummary(props: { ed: Editor }) {
+  const ed = props.ed;
+  const t = () => (ed.rev(), ed.system.typing);
+  const part = (what: string, level: keyof typeof LEVEL_WORD) =>
+    level === "off" ? undefined : (
+      <span>
+        {what} <b>{LEVEL_WORD[level]}</b>
+      </span>
+    );
+  return (
+    <div class="typing-summary">
+      <button class="typing-line" onClick={ed.openTypes} title="Directions and types for every agent">
+        <span>
+          <Show
+            when={t().dirs === t().types}
+            fallback={
+              <>
+                {part("Directions", t().dirs)}
+                <Show when={t().dirs !== "off" && t().types !== "off"}>
+                  <span class="dot"> · </span>
+                </Show>
+                {part(t().dirs === "off" ? "Types" : "types", t().types)}
+              </>
+            }
+          >
+            Directions and types <b>{LEVEL_WORD[t().dirs]}</b>
+          </Show>
+        </span>
+        <Chevron />
+      </button>
+      <Show when={t().types !== "off"}>
+        <div class="type-chips">
+          <For each={t().names}>
+            {(n) => (
+              <button
+                class="type-chip"
+                onPointerEnter={() => ed.model.setHover({ kind: "porttype", name: n })}
+                onPointerLeave={() => ed.model.setHover(undefined)}
+                onClick={ed.openTypes}
+              >
+                {n}
+              </button>
+            )}
+          </For>
+          <button class="type-chip add" title="Add a type" onClick={ed.openTypes}>
+            <Plus />
+          </button>
+        </div>
+      </Show>
+    </div>
   );
 }
 

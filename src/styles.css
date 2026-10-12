@@ -765,6 +765,69 @@ kbd {
   pointer-events: none;
 }
 
+.port-blocked {
+  fill: var(--paper);
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 1.6 1.4;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.port-xray {
+  fill: color-mix(in srgb, var(--accent) 18%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  pointer-events: none;
+}
+
+.arrowhead {
+  fill: var(--ink);
+  stroke: var(--paper);
+  stroke-width: 0.6;
+  pointer-events: none;
+}
+
+.port-arrow {
+  opacity: 0.7;
+}
+
+.wire-type {
+  font: 500 7px var(--ui-font);
+  fill: var(--muted);
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.wire.doomed .line {
+  stroke: var(--stuck);
+  stroke-dasharray: 3 2.5;
+}
+
+.wire.doomed .mark {
+  stroke: var(--stuck);
+  stroke-width: 6;
+  opacity: 0.25;
+}
+
+.wire.xray .mark {
+  stroke: var(--accent);
+  stroke-width: 6;
+  opacity: 0.45;
+}
+
+.wire.xray .wire-type {
+  fill: var(--accent);
+}
+
+.canvas.wiring .agent .body {
+  transition: opacity 0.1s;
+}
+
 .port-target {
   fill: color-mix(in srgb, var(--accent) 22%, transparent);
   stroke: var(--accent);
@@ -1066,6 +1129,63 @@ kbd {
   font: 700 11px var(--ui-font);
 }
 
+.rule-grid .cell.never,
+.grid-legend i.never {
+  border: 1px solid var(--line);
+  background: repeating-linear-gradient(135deg, transparent 0 3px, var(--line) 3px 4px);
+  cursor: default;
+}
+
+.rule-grid .cell.never:hover {
+  outline: 1.5px solid var(--line-2);
+}
+
+.rule-grid .cell.broken {
+  border: 1.5px solid var(--stuck);
+  background: color-mix(in srgb, var(--stuck) 12%, transparent);
+}
+
+.rule-grid .cell.broken::after {
+  content: "!";
+  color: var(--stuck);
+  font: 700 11px var(--ui-font);
+}
+
+.grid-summary {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  line-height: 1.4;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+
+.grid-summary small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.grid-summary svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.grid-summary svg circle {
+  fill: var(--ink);
+}
+
+.grid-summary svg path {
+  fill: none;
+  stroke: var(--paper);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .rule-grid .cell.hl {
   outline: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
 }
@@ -1241,9 +1361,135 @@ kbd {
 .type-editor {
   top: 64px;
   right: 262px;
-  width: 540px;
+  width: 620px;
+  max-height: calc(100vh - 150px);
+  overflow: auto;
   display: grid;
   grid-template-columns: 210px 1fr;
+}
+
+.te-ports,
+.te-bottom {
+  grid-column: 1 / -1;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.te-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.te-ports-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.te-ports-head h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.link-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: 500 12px var(--ui-font);
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.port-rows {
+  display: grid;
+  grid-template-columns: 28px minmax(120px, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+}
+
+.port-rows.dirs {
+  grid-template-columns: 28px minmax(120px, 1fr) auto;
+}
+
+.port-rows.types {
+  grid-template-columns: 28px minmax(120px, 1fr) 128px;
+}
+
+.port-rows.dirs.types {
+  grid-template-columns: 28px minmax(120px, 1fr) auto 128px;
+}
+
+.port-row {
+  display: contents;
+}
+
+.port-row .input {
+  height: 30px;
+  font-size: 12.5px;
+}
+
+.port-row .slot-tag {
+  justify-self: center;
+  min-width: 18px;
+  text-align: center;
+}
+
+.dir-seg button {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12.5px;
+}
+
+.dir-seg button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dir-seg.missing {
+  box-shadow: inset 0 0 0 1px var(--stuck);
+}
+
+.select {
+  height: 30px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-ctl);
+  background: var(--chrome);
+  color: var(--text);
+  padding: 0 8px;
+  font: 400 12.5px var(--ui-font);
+  min-width: 0;
+  width: 100%;
+}
+
+.select.any {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.select.missing {
+  border-color: var(--stuck);
+}
+
+.type-input {
+  height: 30px;
+  font-size: 12.5px;
+}
+
+.te-agent .arrow {
+  fill: var(--ink);
+}
+
+.te-agent .hot-port {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 0.8;
 }
 
 .te-preview {
@@ -1856,4 +2102,350 @@ kbd {
   stroke-width: 1.6;
   stroke-dasharray: 3 2.4;
   pointer-events: none;
+}
+
+/* Port directions and types, in panels */
+
+.port-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+}
+
+.port-badge .dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.port-badge .dir svg {
+  width: 22px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+}
+
+.port-badge .dir svg circle {
+  fill: var(--chrome);
+}
+
+.port-badge .dir svg .head {
+  fill: currentColor;
+  stroke: none;
+}
+
+.type-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--chip, color-mix(in srgb, var(--ink) 8%, transparent));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.slot-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  vertical-align: 1px;
+}
+
+/* The typing line and type chips in the palette */
+
+.typing-summary {
+  margin: -2px 0 10px;
+}
+
+.typing-line {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  white-space: nowrap;
+  text-align: left;
+  gap: 4px;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  font: 400 12.5px var(--ui-font);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.typing-line b {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.typing-line .icon {
+  width: 12px;
+  height: 12px;
+  transform: rotate(-90deg);
+}
+
+.typing-line:hover b {
+  color: var(--accent);
+}
+
+.type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+button.type-chip {
+  border: 0;
+  cursor: pointer;
+  font-family: var(--ui-font);
+}
+
+button.type-chip:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.type-chip.add {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  background: transparent;
+  border: 1px dashed var(--line-2);
+  color: var(--muted);
+}
+
+.type-chip.add .icon {
+  width: 11px;
+  height: 11px;
+}
+
+/* The directions and types sheet */
+
+.types-sheet {
+  top: 64px;
+  right: 262px;
+  width: min(720px, calc(100vw - 290px));
+  max-height: calc(100vh - 150px);
+  overflow: auto;
+  padding: 0 0 8px;
+}
+
+.ts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 10px;
+}
+
+.ts-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ts-head small {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.ts-table {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) 214px 190px;
+  margin: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ts-row {
+  display: contents;
+}
+
+.ts-cell {
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ts-cell.dir-col,
+.ts-cell.type-col {
+  border-left: 1px solid var(--line);
+}
+
+.ts-top .ts-cell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--chrome);
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 10px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.ts-top .port-col {
+  justify-content: flex-start;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 10px 0 0 0;
+}
+
+.col-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.col-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+  min-height: 2.7em;
+}
+
+.col-note .preview {
+  color: var(--accent);
+}
+
+.col-note .pending {
+  color: var(--stuck);
+}
+
+.level-seg button {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.ts-agent .ts-cell {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.ts-agent .sym {
+  font-size: 14px;
+}
+
+.ts-glyph {
+  display: inline-flex;
+  width: 22px;
+  justify-content: center;
+}
+
+.ts-glyph svg {
+  max-width: 22px;
+  max-height: 18px;
+}
+
+.btn.icon.tiny {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+  color: var(--muted);
+}
+
+.btn.icon.tiny .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.ts-label {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ts-cell.off {
+  background: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--line) 60%, transparent) 5px 6px);
+}
+
+.ts-top .ts-cell.off {
+  background: var(--chrome);
+}
+
+.ts-cell.shade:not(.ts-top *) {
+  background: var(--accent-soft);
+}
+
+.ts-cell.gap {
+  box-shadow: inset 2px 0 0 var(--stuck);
+}
+
+.ts-cell .select {
+  height: 26px;
+}
+
+.type-chip.editable {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 3px;
+}
+
+.type-chip .chip-name {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+}
+
+.type-chip .chip-x {
+  border: 0;
+  background: none;
+  padding: 0;
+  display: inline-flex;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.type-chip .chip-x .icon {
+  width: 10px;
+  height: 10px;
+}
+
+.type-chip .chip-x:hover {
+  color: var(--stuck);
+}
+
+.chip-input {
+  height: 22px;
+  width: 90px;
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 0 8px;
+}
+
+/* The view options menu opens upwards, from the bottom bar */
+
+.view-controls .menu {
+  top: auto;
+  bottom: calc(100% + 12px);
+  left: auto;
+  right: -6px;
+}
+
+.mi-blank {
+  display: inline-block;
+  width: 16px;
 }

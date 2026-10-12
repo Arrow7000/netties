@@ -69,7 +69,9 @@ export type Hover =
   | { kind: "drag"; gesture: WireGesture; target?: End; check?: DropCheck }
   | { kind: "type"; id: string }
   | { kind: "component"; id: string }
-  | { kind: "pair"; a: string; b: string };
+  | { kind: "pair"; a: string; b: string }
+  /** A port type, from the palette or the types sheet: light up every port of it. */
+  | { kind: "porttype"; name: string };
 
 const HISTORY_LIMIT = 200;
 const noDefs: Defs = new Map();
@@ -94,6 +96,8 @@ export function createNetModel(opts: NetModelOptions) {
   const [armed, setArmed] = createSignal<string>();
   const [fitTick, setFitTick] = createSignal(0);
   const [hover, setHover] = createSignal<Hover>();
+  /** Wires an edit being prepared would cut, marked on the canvas until it's saved or dropped. */
+  const [doomed, setDoomed] = createSignal<ReadonlySet<WireId>>(new Set());
   /** Where agents just dropped from the palette were let go, to animate them from there. */
   const spawnAt = new Map<AgentId, Pt>();
   const undoStack: string[] = [];
@@ -386,6 +390,8 @@ export function createNetModel(opts: NetModelOptions) {
     bump,
     hover,
     setHover,
+    doomed,
+    setDoomed,
     checkDrop,
     previewWire,
     specAt,

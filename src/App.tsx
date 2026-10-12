@@ -9,8 +9,11 @@ import { Counters, HoverPanel, SelectionPanel } from "./ui/Panels";
 import { RuleEditor } from "./ui/RuleEditor";
 import { TextView } from "./ui/TextView";
 import { TranslateView } from "./ui/TranslateView";
+import { TypesSheet } from "./ui/TypesSheet";
 import * as I from "./ui/icons";
 import { held } from "./ui/keys";
+import { prefs } from "./ui/prefs";
+import { typingOn } from "./core/types";
 
 const THEME_KEY = "netties:theme";
 
@@ -49,7 +52,7 @@ export function App(props: { initial?: Doc }) {
     }),
   );
 
-  const overlayOpen = () => !!(ed.ruleOpen() || ed.componentOpen() || ed.translateOpen() || ed.textOpen());
+  const overlayOpen = () => !!(ed.ruleOpen() || ed.componentOpen() || ed.translateOpen() || ed.textOpen() || ed.typesOpen());
 
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -308,6 +311,27 @@ export function App(props: { initial?: Doc }) {
             <I.Fit />
             Fit
           </button>
+          <span class="sep" />
+          <Menu label={<I.Eye />} title="View options" class="icon up">
+            {(close) => (
+              <>
+                <div class="menu-head">Just for you, in this browser</div>
+                <MenuItem
+                  lead={prefs.wireTypes() ? <I.Check /> : <span class="mi-blank" />}
+                  title="Type labels on every wire"
+                  note={
+                    (ed.rev(), typingOn(ed.system.typing))
+                      ? "Otherwise a wire shows its type when you point at it"
+                      : "This system has no types"
+                  }
+                  onClick={() => {
+                    prefs.setWireTypes(!prefs.wireTypes());
+                    close();
+                  }}
+                />
+              </>
+            )}
+          </Menu>
         </div>
       </div>
 
@@ -318,6 +342,9 @@ export function App(props: { initial?: Doc }) {
         </div>
       </Show>
 
+      <Show when={ed.typesOpen()}>
+        <TypesSheet ed={ed} />
+      </Show>
       <Show when={ed.textOpen()}>
         <TextView ed={ed} />
       </Show>
