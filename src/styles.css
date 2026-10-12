@@ -487,6 +487,44 @@ kbd {
   margin: 6px 4px;
 }
 
+.examples-menu {
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(680px, calc(100vh - 110px));
+  overflow-y: auto;
+}
+
+.examples-menu .example-group {
+  padding-top: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.examples-menu .mi-text {
+  min-width: 0;
+}
+
+.example-thumb {
+  width: 44px;
+  height: 34px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.example-thumb svg {
+  display: block;
+  max-width: 40px;
+  max-height: 30px;
+  width: auto;
+  height: auto;
+}
+
 /* Canvas */
 
 .stage {

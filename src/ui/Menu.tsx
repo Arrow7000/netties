@@ -6,6 +6,7 @@ export function Menu(props: {
   label: JSX.Element;
   title?: string;
   class?: string;
+  menuClass?: string;
   /** The menu's contents; call `close` after acting on a pick. */
   children: (close: () => void) => JSX.Element;
 }) {
@@ -38,7 +39,7 @@ export function Menu(props: {
         <Chevron />
       </button>
       <Show when={open()}>
-        <div class="menu" role="menu">
+        <div class={`menu ${props.menuClass ?? ""}`} role="menu">
           {props.children(close)}
         </div>
       </Show>

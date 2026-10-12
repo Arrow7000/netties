@@ -7,10 +7,6 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
 
 ## Next up
 
-- **Grouped examples menu.** Bring over the prototypes' Examples dropdown:
-  groups (Typed / Directions only / Untyped), a thumbnail of each net, and
-  a subtitle saying what it shows (see `design/prototypes/types-a2/`). The
-  current menu is a flat list.
 - **"Create it for me" with an LLM** (the user's top feature request). A
   visitor describes a computation; a cheap model writes the whole system
   (agents, directions and types, rules, net) in the text format; the engine

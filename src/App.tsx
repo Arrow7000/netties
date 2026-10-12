@@ -1,8 +1,9 @@
-import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
+import { Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { createEditor } from "./state/editor";
 import { type Doc, fromShareHash, loadLocal } from "./state/persist";
 import { Canvas, createCamera } from "./ui/Canvas";
 import { ComponentEditor } from "./ui/ComponentEditor";
+import { ExamplesMenu } from "./ui/ExamplesMenu";
 import { Menu, MenuItem } from "./ui/Menu";
 import { Palette } from "./ui/Palette";
 import { Counters, HoverPanel, SelectionPanel } from "./ui/Panels";
@@ -161,25 +162,7 @@ export function App(props: { initial?: Doc }) {
           netties
         </div>
         <span class="sep" />
-        <Menu label="Examples" title="Load an example net">
-          {(close) => (
-            <>
-              <div class="menu-head">Loading an example replaces the whole net. You can undo it.</div>
-              <For each={ed.examples}>
-                {(ex) => (
-                  <MenuItem
-                    title={ex.name}
-                    note={ex.about}
-                    onClick={() => {
-                      ed.loadExample(ex);
-                      close();
-                    }}
-                  />
-                )}
-              </For>
-            </>
-          )}
-        </Menu>
+        <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
         <Menu label="Net" title="Text, sharing and export">
           {(close) => (
             <>
