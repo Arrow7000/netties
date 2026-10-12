@@ -27,7 +27,7 @@ export function ExamplesMenu(props: { examples: Example[]; onPick: (ex: Example)
   return (
     <Menu label="Examples" title="Load an example net" menuClass="examples-menu">
       {(close) => (
-        <>
+        <div class="examples-scroll">
           <div class="menu-head">Loading an example replaces the whole net. You can undo it.</div>
           <For each={grouped()}>
             {(group) => (
@@ -49,7 +49,7 @@ export function ExamplesMenu(props: { examples: Example[]; onPick: (ex: Example)
               </>
             )}
           </For>
-        </>
+        </div>
       )}
     </Menu>
   );

@@ -489,9 +489,15 @@ kbd {
 
 .examples-menu {
   width: min(380px, calc(100vw - 24px));
-  max-height: min(680px, calc(100vh - 110px));
+}
+
+.examples-scroll {
+  max-height: min(666px, calc(100dvh - 124px));
   overflow-y: auto;
   overscroll-behavior: contain;
+  border-radius: 7px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
 }
 
 .examples-menu .example-group {
