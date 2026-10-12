@@ -1,12 +1,11 @@
 import { type AgentId, type End, type Net, port } from "../src/core/net";
-import { normalize, redexes } from "../src/core/reduce";
 import type { System } from "../src/core/system";
-import { ParseError, parse, print } from "../src/core/text";
-import { badWires, clashText, missing, portName, ruleClashes } from "../src/core/types";
+import { portName } from "../src/core/types";
+import { type Stage as CheckStage, checkReply, netText } from "../src/create/check";
 import type { Answer } from "./tasks";
 
-/** How far a reply got. Each stage needs the one before it. */
-export type Stage = "no-code" | "parse" | "types" | "interface" | "run" | "readback" | "wrong" | "ok";
+/** How far a reply got: the site's own checks, then reading the answer. */
+export type Stage = CheckStage | "readback" | "wrong" | "ok";
 
 export interface Grade {
   stage: Stage;
@@ -17,53 +16,20 @@ export interface Grade {
   got?: string;
 }
 
-const LIMIT = 100_000;
-
-/** The last fenced code block in a reply, or the whole reply if it's an unfenced document. */
-export function extractCode(reply: string): string | undefined {
-  const blocks = [...reply.matchAll(/```[a-zA-Z]*\n([\s\S]*?)```/g)].map((m) => m[1]!);
-  // Some models put the language tag on its own line inside the fence.
-  if (blocks.length) return blocks.at(-1)!.replace(/^\s*inet\s*\n/, "");
-  return /^agent /m.test(reply) ? reply : undefined;
+/** The answer goes on a loose end named out, and there are no others. */
+function oneOut(_sys: System, net: Net): string | undefined {
+  const loose = [...net.free.keys()];
+  if (!loose.includes("out")) return "The net has no loose end named out for the answer.";
+  const extra = loose.filter((n) => n !== "out");
+  if (extra.length) return `The net has loose ends besides out: ${extra.join(", ")}. Each name in the net must be used twice, except out.`;
+  return undefined;
 }
 
 /** Grade a reply against the expected answer. */
 export function grade(reply: string, answer: Answer): Grade {
-  const code = extractCode(reply);
-  if (code === undefined) return { stage: "no-code", ok: false, feedback: "I couldn't find a fenced code block in your reply." };
-
-  let sys: System;
-  let net: Net;
-  try {
-    ({ system: sys, net } = parse(code));
-  } catch (e) {
-    if (e instanceof ParseError) return { stage: "parse", ok: false, feedback: `The text didn't parse: ${e.message}.` };
-    return { stage: "parse", ok: false, feedback: `The text didn't load: ${(e as Error).message}.` };
-  }
-
-  const typeProblems = checkTypes(sys, net);
-  if (typeProblems.length) return { stage: "types", ok: false, feedback: `The types don't check:\n- ${typeProblems.join("\n- ")}` };
-
-  const loose = [...net.free.keys()];
-  if (!loose.includes("out")) return { stage: "interface", ok: false, feedback: "The net has no loose end named out for the answer." };
-  const extra = loose.filter((n) => n !== "out");
-  if (extra.length) return { stage: "interface", ok: false, feedback: `The net has loose ends besides out: ${extra.join(", ")}. Each name in the net must be used twice, except out.` };
-  const empty = net.unconnected().filter((e) => e.kind === "port");
-  if (empty.length) return { stage: "interface", ok: false, feedback: `Some ports in the starting net aren't connected: ${empty.map((e) => describe(sys, net, e)).join(", ")}.` };
-
-  const { normal, stats } = normalize(net, sys, { limit: LIMIT });
-  if (!normal) return { stage: "run", ok: false, feedback: `The net was still running after ${LIMIT} interactions; it probably never stops.` };
-  const stuck = net.activePairs().filter((w) => !redexes(net, sys).includes(w));
-  if (stuck.length) {
-    const pairs = new Set(
-      stuck.map((w) => {
-        const [a, b] = net.wire(w).ends as [Extract<End, { kind: "port" }>, Extract<End, { kind: "port" }>];
-        return `${sys.type(net.agent(a.agent).type).symbol} meets ${sys.type(net.agent(b.agent).type).symbol}`;
-      }),
-    );
-    return { stage: "run", ok: false, feedback: `The net got stuck after ${stats.interactions} interactions: ${[...pairs].join("; ")}, and there's no rule for that pair.\nIt stopped as:\n${netText(sys, net)}` };
-  }
-
+  const c = checkReply(reply, oneOut);
+  if (!c.ok) return { stage: c.stage, ok: false, feedback: c.feedback };
+  const { sys, net, stats } = c;
   const read = readBack(sys, net, answer.kind);
   if ("error" in read) return { stage: "readback", ok: false, feedback: `The net finished after ${stats.interactions} interactions, but the result can't be read: ${read.error}\nIt finished as:\n${netText(sys, net)}` };
   if (read.text === show(answer)) return { stage: "ok", ok: true, got: read.text };
@@ -73,33 +39,6 @@ export function grade(reply: string, answer: Answer): Grade {
     got: read.text,
     feedback: `The net finished after ${stats.interactions} interactions, and out reads as ${read.text}. That isn't the answer to the task.\nIt finished as:\n${netText(sys, net)}`,
   };
-}
-
-function checkTypes(sys: System, net: Net): string[] {
-  const out: string[] = [];
-  if (sys.typing.dirs !== "required") out.push("Start the document with `directions required`.");
-  if (sys.typing.types !== "required") out.push("Start the document with `types required` and the type names.");
-  for (const m of missing(sys)) out.push(`${sys.type(m.type).symbol}'s ${portName(m.slot)} needs a ${m.what === "dir" ? "direction (+ or -)" : "type"}.`);
-  for (const r of sys.rules.values()) {
-    for (const c of ruleClashes(sys, r)) out.push(`In the rule ${sys.type(r.left).symbol} >< ${sys.type(r.right).symbol}: ${clashText(c.clash)}`);
-  }
-  for (const [w, c] of badWires(net, sys)) {
-    const [a, b] = net.wire(w).ends;
-    out.push(`In the net, the wire from ${describe(sys, net, a)} to ${describe(sys, net, b)}: ${clashText(c)}`);
-  }
-  return out;
-}
-
-function describe(sys: System, net: Net, e: End): string {
-  if (e.kind === "free") return `loose end ${e.name}`;
-  return `${sys.type(net.agent(e.agent).type).symbol}'s ${portName(e.slot)}`;
-}
-
-/** Just the net's equations, without the declarations and rules. */
-function netText(sys: System, net: Net): string {
-  const lines = print(sys, net).split("\n");
-  const body = lines.filter((l) => l.trim() && !/^(agent|directions|types) /.test(l) && !l.includes("><"));
-  return body.join("\n") || "(an empty net)";
 }
 
 const show = (a: Answer): string =>

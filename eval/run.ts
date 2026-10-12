@@ -9,6 +9,7 @@
  */
 import { appendFileSync, mkdirSync } from "node:fs";
 import { type Stage, grade } from "./check";
+import { feedbackMessage } from "../src/create/client";
 import { MODELS, type Model } from "./models";
 import { TASKS, type Task } from "./tasks";
 
@@ -76,7 +77,7 @@ async function attempt(model: Model, task: Task, rep: number): Promise<Attempt> 
         a.ok = true;
         break;
       }
-      message = `netties says: ${g.feedback}\n\nReply with the whole corrected document.`;
+      message = feedbackMessage(g.feedback!);
     }
   } catch (e) {
     a.error = (e as Error).message;

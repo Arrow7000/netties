@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { SYSTEM } from "./prompt";
+import { SYSTEM } from "../src/create/prompt";
 
 /** One reply, with what it cost. */
 export interface Turn {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { grade } from "./check";
-import { EXAMPLE } from "./prompt";
+import { EXAMPLE } from "../src/create/prompt";
 
 const block = (s: string) => "Here you go.\n```inet\n" + s + "\n```\n";
 const N = (value: number) => ({ kind: "number", value }) as const;
