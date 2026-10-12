@@ -2183,6 +2183,11 @@ kbd {
   color: var(--text);
 }
 
+.typing-line .off b {
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .typing-line .icon {
   width: 12px;
   height: 12px;
@@ -2216,7 +2221,8 @@ button.type-chip:hover {
 .type-chip.add {
   display: inline-flex;
   align-items: center;
-  padding: 0 5px;
+  gap: 3px;
+  padding: 0 8px 0 6px;
   background: transparent;
   border: 1px dashed var(--line-2);
   color: var(--muted);
@@ -2312,7 +2318,8 @@ button.type-chip:hover {
   font-size: 11.5px;
   color: var(--muted);
   line-height: 1.35;
-  min-height: 2.7em;
+  height: 4.05em;
+  overflow: hidden;
 }
 
 .col-note .preview {
@@ -2446,4 +2453,96 @@ button.type-chip:hover {
 .mi-blank {
   display: inline-block;
   width: 16px;
+}
+
+/* Popovers: menus pinned to whatever opened them */
+
+.menu.popover {
+  position: fixed;
+  top: auto;
+  left: auto;
+  z-index: 60;
+  min-width: 220px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.menu.popover hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 5px 2px;
+}
+
+.type-form {
+  padding: 2px 4px 4px;
+}
+
+.type-form .menu-head {
+  padding: 4px 4px 6px;
+}
+
+.type-form .input {
+  height: 30px;
+}
+
+.type-form-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  padding: 6px 4px 2px;
+}
+
+.type-form-note.bad {
+  color: var(--stuck);
+}
+
+button.select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.select span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.select .icon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+
+button.select.open {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.type-chip.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.port-head span {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 0 2px;
+}
+
+.mi:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mi:disabled:hover {
+  background: none;
+}
+
+.typing-line .nowrap {
+  white-space: nowrap;
 }

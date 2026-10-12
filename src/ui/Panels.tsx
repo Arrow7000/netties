@@ -242,7 +242,7 @@ export function HoverPanel(props: { ed: Editor }) {
             </>
           ),
           aside: t.arity === 1 ? "1 aux port" : `${t.arity} aux ports`,
-          lines: [{ text: "Drag onto the canvas to add one. Click to edit the type." }],
+          lines: [{ text: "Drag onto the canvas to add one. Click to edit it." }],
         };
       }
       case "component": {

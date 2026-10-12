@@ -112,7 +112,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
   };
 
   return (
-    <form class="pop type-editor" role="dialog" aria-label="Agent type" onSubmit={save}>
+    <form class="pop type-editor" role="dialog" aria-label="Agent" onSubmit={save}>
       <div class="te-preview">
         <svg viewBox="-95 -80 190 160" class="te-stage" classList={{ filled: filled() }} aria-hidden="true">
           {(() => {
@@ -261,6 +261,16 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
           classList={{ dirs: typing().dirs !== "off", types: typing().types !== "off" }}
           onPointerLeave={() => setHotPort(undefined)}
         >
+          <div class="port-row port-head">
+            <span />
+            <span>Label</span>
+            <Show when={typing().dirs !== "off"}>
+              <span>Direction</span>
+            </Show>
+            <Show when={typing().types !== "off"}>
+              <span>Type</span>
+            </Show>
+          </div>
           <For each={ports()}>
             {(p, i) => (
               <div class="port-row" onPointerEnter={() => setHotPort(i())}>
@@ -268,7 +278,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
                 <input
                   class="input"
                   value={p.label ?? ""}
-                  placeholder={i() === 0 ? "What this port is for (the principal port)" : `What aux port ${i()} is for`}
+                  placeholder={i() === 0 ? "e.g. the list" : i() === 1 ? "e.g. the first item" : "e.g. the rest"}
                   aria-label={`Label for the ${portName(i())}`}
                   onInput={(e) => setPort(i(), { label: e.currentTarget.value })}
                 />

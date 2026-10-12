@@ -403,18 +403,30 @@ export function createEditor(initial: Doc | undefined) {
       if (n) notify(cutMessage(n), true);
     },
 
-    addTypeName(name: string) {
+    /** Add a type ports can have. Returns why not, if the name won't do. */
+    addTypeName(name: string): string | undefined {
       const n = name.trim();
-      if (!n || system.typing.names.includes(n)) return;
+      if (!n) return "Give it a name.";
+      if (system.typing.names.includes(n)) return `There's already a type called ${n}.`;
+      if (/[\s,;()~"+]/.test(n) || n.startsWith("-")) return "Use letters, digits, - and _ only.";
       model.checkpoint();
       system.typing = { ...system.typing, names: [...system.typing.names, n] };
       touchSystem();
+      return undefined;
+    },
+
+    /** How many ports have a type. */
+    typeUses(name: string): number {
+      let n = 0;
+      for (const t of system.types.values()) for (const p of t.ports ?? []) if (p.type === name) n++;
+      return n;
     },
 
     renameTypeName(from: string, to: string): string | undefined {
       const n = to.trim();
       if (!n || n === from) return;
       if (system.typing.names.includes(n)) return `There's already a type called ${n}.`;
+      if (/[\s,;()~"+]/.test(n) || n.startsWith("-")) return "Use letters, digits, - and _ only.";
       model.checkpoint();
       system.typing = { ...system.typing, names: system.typing.names.map((x) => (x === from ? n : x)) };
       for (const t of [...system.types.values()]) {

@@ -57,11 +57,14 @@ export function App(props: { initial?: Doc }) {
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as Element).closest("input, textarea, select")) return;
-      if (overlayOpen()) return;
       const mod = e.metaKey || e.ctrlKey;
+      // The directions and types sheet edits the system in place, so undo works while it's open.
+      const sheetOnly = ed.typesOpen() && !(ed.ruleOpen() || ed.componentOpen() || ed.translateOpen() || ed.textOpen());
+      if (overlayOpen() && !(sheetOnly && mod && e.key.toLowerCase() === "z")) return;
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
         e.shiftKey ? m.redo() : m.undo();
+        if (ed.undoable()) ed.setMessage(undefined);
       } else if (mod) return;
       else if (e.key === "Delete" || e.key === "Backspace") m.deleteSelection();
       else if (e.key === "Escape") m.setSelection(undefined);

@@ -2,8 +2,8 @@ import { For, type JSX, Show, createMemo, createSignal, onCleanup, onMount } fro
 import { type Level, missing, portName } from "../core/types";
 import type { Editor } from "../state/editor";
 import { Glyph } from "./Glyph";
-import { DirectionControl, TypeControl } from "./PortControls";
-import { Close, Pencil, Plus } from "./icons";
+import { DirectionControl, TypeChips, TypeControl } from "./PortControls";
+import { Close, Pencil } from "./icons";
 
 type Dim = "dirs" | "types";
 
@@ -40,9 +40,6 @@ export function TypesSheet(props: { ed: Editor }) {
   /** A setting being switched to Required, waiting for the ports that don't have one yet. */
   const [pending, setPending] = createSignal<Dim>();
   const [preview, setPreview] = createSignal<{ dim: Dim; level: Level }>();
-  const [renaming, setRenaming] = createSignal<string>();
-  const [adding, setAdding] = createSignal(false);
-  const [problem, setProblem] = createSignal<string>();
 
   const level = (d: Dim): Level => (pending() === d ? "required" : typing()[d]);
   const gaps = createMemo(() => {
@@ -87,7 +84,7 @@ export function TypesSheet(props: { ed: Editor }) {
       const n = gaps().length;
       return (
         <span class="pending">
-          {n === 1 ? "1 port to go" : `${n} ports to go`} ·{" "}
+          {n === 1 ? "1 port to go." : `${n} ports to go.`}{" "}
           <button
             class="link-btn"
             onClick={() => {
@@ -97,7 +94,7 @@ export function TypesSheet(props: { ed: Editor }) {
           >
             Guess from the canvas
           </button>{" "}
-          ·{" "}
+          or{" "}
           <button class="link-btn" onClick={() => setPending(undefined)}>
             Stay optional
           </button>
@@ -168,66 +165,14 @@ export function TypesSheet(props: { ed: Editor }) {
             <LevelSeg dim="types" />
             <p class="col-note">{note("types")}</p>
             <Show when={!off("types")}>
-              <div class="type-chips">
-                <For each={typing().names}>
-                  {(n) => (
-                    <Show
-                      when={renaming() === n}
-                      fallback={
-                        <span
-                          class="type-chip editable"
-                          onPointerEnter={() => ed.model.setHover({ kind: "porttype", name: n })}
-                          onPointerLeave={() => ed.model.setHover(undefined)}
-                        >
-                          <button class="chip-name" title="Rename" onClick={() => setRenaming(n)}>
-                            {n}
-                          </button>
-                          <button class="chip-x" title={`Delete ${n}: its ports fit any type again`} onClick={() => ed.deleteTypeName(n)}>
-                            <Close />
-                          </button>
-                        </span>
-                      }
-                    >
-                      <input
-                        class="input chip-input"
-                        value={n}
-                        ref={(el) => setTimeout(() => el.select())}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            setProblem(ed.renameTypeName(n, e.currentTarget.value));
-                            setRenaming(undefined);
-                          } else if (e.key === "Escape") setRenaming(undefined);
-                        }}
-                        onBlur={() => setRenaming(undefined)}
-                      />
-                    </Show>
-                  )}
-                </For>
-                <Show
-                  when={adding()}
-                  fallback={
-                    <button class="type-chip add" title="Add a type" onClick={() => setAdding(true)}>
-                      <Plus />
-                    </button>
-                  }
-                >
-                  <input
-                    class="input chip-input"
-                    placeholder="like bool"
-                    ref={(el) => setTimeout(() => el.focus())}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        ed.addTypeName(e.currentTarget.value);
-                        e.currentTarget.value = "";
-                      } else if (e.key === "Escape") setAdding(false);
-                    }}
-                    onBlur={() => setAdding(false)}
-                  />
-                </Show>
-              </div>
-              <Show when={problem()}>
-                <p class="te-warn">{problem()}</p>
-              </Show>
+              <TypeChips
+                names={typing().names}
+                uses={(n) => ed.typeUses(n)}
+                onHover={(n) => ed.model.setHover(n ? { kind: "porttype", name: n } : undefined)}
+                onAdd={(n) => ed.addTypeName(n)}
+                onRename={(a, b) => ed.renameTypeName(a, b)}
+                onDelete={(n) => ed.deleteTypeName(n)}
+              />
             </Show>
           </div>
         </div>

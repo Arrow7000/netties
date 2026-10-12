@@ -4,7 +4,7 @@ import type { Editor } from "../state/editor";
 import type { Camera } from "./Canvas";
 import { ComponentGlyph, Glyph } from "./Glyph";
 import { GRID_FITS, GridLegend, GridSummary, RuleGrid } from "./RuleGrid";
-import { typingOn } from "../core/types";
+import { TypeChips } from "./PortControls";
 import { TypeEditor } from "./TypeEditor";
 import { Chevron, Close, Component, Expand, Plus } from "./icons";
 
@@ -83,9 +83,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
               New agent
             </button>
           </div>
-          <Show when={(ed.rev(), typingOn(ed.system.typing))}>
-            <TypingSummary ed={ed} />
-          </Show>
+          <TypingSummary ed={ed} />
           <div class="tiles">
             <For each={types()}>
               {(t) => (
@@ -151,7 +149,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
             fallback={
               <>
                 <p class="palette-hint">
-                  {types().length} agent types make {(types().length * (types().length + 1)) / 2} pairs, too many to edit
+                  {types().length} agents make {(types().length * (types().length + 1)) / 2} pairs, too many to edit
                   here.
                 </p>
                 <button class="grid-thumb" onClick={() => setGridOpen(true)} aria-label="Open the rule grid">
@@ -163,20 +161,20 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
             <GridSummary ed={ed} />
             <RuleGrid ed={ed} />
             <GridLegend ed={ed} />
-            <p class="palette-hint">Each cell is a pair of types. Click one to see its rule, or to write one.</p>
+            <p class="palette-hint">Each cell is a pair of agents. Click one to see its rule, or to write one.</p>
           </Show>
         </section>
       </aside>
       <Show when={gridOpen()}>
         <div class="pop grid-pop" role="dialog" aria-label="Rule grid">
           <div class="te-head">
-            <h3>Rules for {types().length} agent types</h3>
+            <h3>Rules for {types().length} agents</h3>
             <button class="btn icon" title="Close" onClick={() => setGridOpen(false)}>
               <Close />
             </button>
           </div>
           <p class="palette-hint">
-            Each cell is one pair of types; γ with δ is the same rule as δ with γ, so only half the grid is used.
+            Each cell is one pair of agents; γ with δ is the same rule as δ with γ, so only half the grid is used.
           </p>
           <GridSummary ed={ed} />
           <RuleGrid ed={ed} big />
@@ -208,51 +206,42 @@ const LEVEL_WORD = { off: "off", optional: "optional", required: "required" } as
 function TypingSummary(props: { ed: Editor }) {
   const ed = props.ed;
   const t = () => (ed.rev(), ed.system.typing);
-  const part = (what: string, level: keyof typeof LEVEL_WORD) =>
-    level === "off" ? undefined : (
-      <span>
-        {what} <b>{LEVEL_WORD[level]}</b>
-      </span>
-    );
+  const part = (what: string, level: keyof typeof LEVEL_WORD) => (
+    <span classList={{ off: level === "off" }}>
+      {what} <b>{LEVEL_WORD[level]}</b>
+    </span>
+  );
   return (
     <div class="typing-summary">
       <button class="typing-line" onClick={ed.openTypes} title="Directions and types for every agent">
-        <span>
-          <Show
-            when={t().dirs === t().types}
-            fallback={
-              <>
-                {part("Directions", t().dirs)}
-                <Show when={t().dirs !== "off" && t().types !== "off"}>
-                  <span class="dot"> · </span>
-                </Show>
-                {part(t().dirs === "off" ? "Types" : "types", t().types)}
-              </>
-            }
-          >
+        <Show
+          when={t().dirs === t().types}
+          fallback={
+            <>
+              {part("Directions", t().dirs)}
+              <span class="dot"> · </span>
+              <span class="nowrap">
+                {part("types", t().types)}
+                <Chevron />
+              </span>
+            </>
+          }
+        >
+          <span class="nowrap">
             Directions and types <b>{LEVEL_WORD[t().dirs]}</b>
-          </Show>
-          <Chevron />
-        </span>
+            <Chevron />
+          </span>
+        </Show>
       </button>
       <Show when={t().types !== "off"}>
-        <div class="type-chips">
-          <For each={t().names}>
-            {(n) => (
-              <button
-                class="type-chip"
-                onPointerEnter={() => ed.model.setHover({ kind: "porttype", name: n })}
-                onPointerLeave={() => ed.model.setHover(undefined)}
-                onClick={ed.openTypes}
-              >
-                {n}
-              </button>
-            )}
-          </For>
-          <button class="type-chip add" title="Add a type" onClick={ed.openTypes}>
-            <Plus />
-          </button>
-        </div>
+        <TypeChips
+          names={t().names}
+          uses={(n) => ed.typeUses(n)}
+          onHover={(n) => ed.model.setHover(n ? { kind: "porttype", name: n } : undefined)}
+          onAdd={(n) => ed.addTypeName(n)}
+          onRename={(a, b) => ed.renameTypeName(a, b)}
+          onDelete={(n) => ed.deleteTypeName(n)}
+        />
       </Show>
     </div>
   );
