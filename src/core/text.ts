@@ -21,6 +21,7 @@ import { type Level, type PortSpec, typingOn } from "./types";
  *
  * Agents are names that are declared, written with parentheses, or start
  * with an upper-case letter (Inpla's convention).
+ * In a net, `_` leaves a port empty; it is not a named loose end.
  *
  * A port is written `+type` (gives), `-type` (takes) or `type` (either way);
  * `+` or `-` alone has a direction but any type, and `_` neither. A quoted
@@ -270,6 +271,8 @@ export function parse(src: string): { system: System; net: Net } {
     };
     const plug = (t: Term, at: End) => {
       if (isAgent(t)) return void net.connect(port(make(t), 0), at);
+      // In an ordinary net, `_` means an empty port rather than a named loose end.
+      if (mode === "net" && t.name === "_") return;
       const other = alias.get(t.name);
       if (other !== undefined) {
         alias.delete(t.name);
@@ -368,7 +371,7 @@ function equations(net: Net, sys: System, names: (e: End) => string | undefined)
     const given = names(e);
     if (given) return given;
     const w = net.wireAt(e);
-    if (w === NONE) return `_${++fresh}`;
+    if (w === NONE) return "_";
     const p = net.partner(e)!;
     const there = names(p);
     if (there) return there;
@@ -393,10 +396,10 @@ function equations(net: Net, sys: System, names: (e: End) => string | undefined)
   for (const a of net.agents.values()) {
     if (parent.has(a.id)) continue;
     const w = net.wireAt(port(a.id, 0));
-    if (done.has(w)) continue;
-    done.add(w);
-    const p = net.partner(port(a.id, 0))!;
-    const other = p.kind === "port" && p.slot === 0 && !parent.has(p.agent) ? term(p.agent) : nameOf(port(a.id, 0));
+    if (w !== NONE && done.has(w)) continue;
+    if (w !== NONE) done.add(w);
+    const p = w === NONE ? undefined : net.partner(port(a.id, 0));
+    const other = p?.kind === "port" && p.slot === 0 && !parent.has(p.agent) ? term(p.agent) : nameOf(port(a.id, 0));
     out.push(`${other} ~ ${term(a.id)}`);
   }
   // Wires joining two free ends directly.

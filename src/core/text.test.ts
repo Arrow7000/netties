@@ -58,6 +58,14 @@ describe("text format", () => {
     expect(net.free.size).toBe(0);
   });
 
+  it("uses _ for empty ports, not loose ends", () => {
+    const { net, system } = parse("agent A 1\n\n_ ~ A(_), _ ~ A(_);");
+    expect(net.agents.size).toBe(2);
+    expect(net.unconnected().length).toBe(4);
+    expect(net.free.size).toBe(0);
+    expect(print(system, net)).toContain("_ ~ A(_),");
+  });
+
   it("points at the line of a mistake", () => {
     expect(() => parse("A(x) >< B => y ~ x;")).toThrow(ParseError);
     try {
