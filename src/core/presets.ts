@@ -206,7 +206,7 @@ export function listArithmetic(): System {
   return sys;
 }
 
-/** Three fully specified port types for practising which loose ports can join. */
+/** A small runnable system with three fully specified types for wiring practice. */
 export function typingLab(): System {
   const n = "number";
   const l = "list";
@@ -216,8 +216,27 @@ export function typingLab(): System {
     .addType({ id: "S", name: "successor", symbol: "S", arity: 1, ports: [give(n, "the next number"), take(n, "the previous number")] })
     .addType({ id: "[]", name: "empty list", symbol: "[]", arity: 0, ports: [give(l, "a list")] })
     .addType({ id: "∷", name: "list item", symbol: "∷", arity: 2, ports: [give(l, "the list"), take(n, "its first number"), take(l, "the rest")] })
+    .addType({ id: "#", name: "length", symbol: "#", arity: 1, ports: [take(l, "the list"), give(n, "its length")] })
     .addType({ id: "T", name: "true", symbol: "T", arity: 0, ports: [give(b, "a boolean")] })
-    .addType({ id: "¬", name: "not", symbol: "¬", arity: 1, ports: [take(b, "the input"), give(b, "the result")] });
+    .addType({ id: "F", name: "false", symbol: "F", arity: 0, ports: [give(b, "a boolean")] })
+    .addType({ id: "¬", name: "not", symbol: "¬", arity: 1, ports: [take(b, "the input"), give(b, "the result")] })
+    .addType({ id: "Z?", name: "is zero", symbol: "Z?", arity: 1, ports: [take(n, "the number"), give(b, "the answer")] })
+    .addType({ id: "εn", name: "erase number", symbol: "εn", arity: 0, ports: [take(n, "the number")] })
+    .addType({ id: "εl", name: "erase list", symbol: "εl", arity: 0, ports: [take(l, "the list")] });
   sys.typing = { dirs: "required", types: "required", names: [n, l, b] };
+
+  sys.addRule({ left: "#", right: "[]", agents: ["0"], wires: [[A(0, 0), L(1)]] });
+  sys.addRule({
+    left: "#", right: "∷", agents: ["S", "#", "εn"],
+    wires: [[A(0, 0), L(1)], [A(0, 1), A(1, 1)], [A(1, 0), R(2)], [A(2, 0), R(1)]],
+  });
+  sys.addRule({ left: "¬", right: "T", agents: ["F"], wires: [[A(0, 0), L(1)]] });
+  sys.addRule({ left: "¬", right: "F", agents: ["T"], wires: [[A(0, 0), L(1)]] });
+  sys.addRule({ left: "Z?", right: "0", agents: ["T"], wires: [[A(0, 0), L(1)]] });
+  sys.addRule({ left: "Z?", right: "S", agents: ["F", "εn"], wires: [[A(0, 0), L(1)], [A(1, 0), R(1)]] });
+  sys.addRule({ left: "εn", right: "0", agents: [], wires: [] });
+  sys.addRule({ left: "εn", right: "S", agents: ["εn"], wires: [[A(0, 0), R(1)]] });
+  sys.addRule({ left: "εl", right: "[]", agents: [], wires: [] });
+  sys.addRule({ left: "εl", right: "∷", agents: ["εn", "εl"], wires: [[A(0, 0), R(1)], [A(1, 0), R(2)]] });
   return sys;
 }

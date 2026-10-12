@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { examples } from "./examples";
-import { free, port, type Net } from "./net";
+import { build, examples, f, link, t } from "./examples";
+import { Net, free, port } from "./net";
+import { typingLab } from "./presets";
 import { normalize } from "./reduce";
 import { clash, specOf } from "./types";
 
@@ -21,6 +22,11 @@ function readNumber(net: Net, name: string): number {
   return n;
 }
 
+function readType(net: Net, name: string): string | undefined {
+  const at = net.partner(free(name));
+  return at?.kind === "port" ? net.agent(at.agent).type : undefined;
+}
+
 describe("new examples", () => {
   it("leaves ports open for a three-type wiring exercise", () => {
     for (const name of ["Wiring lab: three types", "Finish a typed list"]) {
@@ -35,6 +41,49 @@ describe("new examples", () => {
     expect(clash(specOf(system, "0", 0), specOf(system, "∷", 2))?.kind).toBe("type");
     expect(clash(specOf(system, "T", 0), specOf(system, "S", 1))?.kind).toBe("type");
     expect(clash(specOf(system, "0", 0), specOf(system, "[]", 0))?.kind).toBe("pol");
+    for (const a of system.types.keys()) for (const b of system.types.keys()) {
+      if (!clash(specOf(system, a, 0), specOf(system, b, 0))) {
+        expect(system.ruleFor(a, b), `${a} >< ${b}`).toBeDefined();
+      }
+    }
+  });
+
+  it("runs the pairs wired up in the three-type lab", () => {
+    const { system, net } = loaded("Wiring lab: three types");
+    const id = (type: string) => [...net.agents.values()].find((a) => a.type === type)!.id;
+    net.connect(port(id("[]"), 0), port(id("#"), 0));
+    net.connect(port(id("0"), 0), port(id("Z?"), 0));
+    net.connect(port(id("T"), 0), port(id("¬"), 0));
+    const result = normalize(net, system);
+    expect(result.normal).toBe(true);
+    expect(result.stats.interactions).toBe(3);
+    expect(readNumber(net, "length")).toBe(0);
+    expect(readType(net, "zero?")).toBe("T");
+    expect(readType(net, "answer")).toBe("F");
+  });
+
+  it("reduces both branches after the typed list is finished", () => {
+    const { system, net } = loaded("Finish a typed list");
+    const id = (type: string) => [...net.agents.values()].find((a) => a.type === type)!.id;
+    net.connect(port(id("[]"), 0), port(id("∷"), 2));
+    net.connect(port(id("∷"), 0), port(id("#"), 0));
+    net.connect(port(id("T"), 0), port(id("¬"), 0));
+    expect(normalize(net, system).normal).toBe(true);
+    expect(readNumber(net, "length")).toBe(1);
+    expect(readType(net, "answer")).toBe("F");
+  });
+
+  it("runs the other boolean branches too", () => {
+    const system = typingLab();
+    const nonzero = new Net();
+    link(nonzero, build(nonzero, system, t("S", t("0"))), build(nonzero, system, t("Z?", f("out"))));
+    expect(normalize(nonzero, system).normal).toBe(true);
+    expect(readType(nonzero, "out")).toBe("F");
+
+    const negateFalse = new Net();
+    link(negateFalse, build(negateFalse, system, t("F")), build(negateFalse, system, t("¬", f("out"))));
+    expect(normalize(negateFalse, system).normal).toBe(true);
+    expect(readType(negateFalse, "out")).toBe("T");
   });
 
   it("introduces addition before multiplication, with 3 × 2 = 6", () => {

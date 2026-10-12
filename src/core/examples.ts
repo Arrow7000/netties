@@ -159,24 +159,28 @@ export const examples: Example[] = [
   },
   {
     name: "Wiring lab: three types",
-    about: "Try joining open number, list and boolean ports. No reduction rules here.",
+    about: "Try wiring number, list and boolean ports, then run the pairs you make.",
     system: typingLab,
     net: (sys) => {
       const net = new Net();
-      for (const type of ["0", "S", "[]", "∷", "T", "¬"]) net.addAgent(sys.type(type));
+      for (const type of ["0", "S", "[]", "∷", "T"]) net.addAgent(sys.type(type));
+      build(net, sys, t("#", f("length")));
+      build(net, sys, t("Z?", f("zero?")));
+      build(net, sys, t("¬", f("answer")));
       return net;
     },
   },
   {
     name: "Finish a typed list",
-    about: "A number is in place; try fitting a list tail and boolean branch. No reduction rules.",
+    about: "Finish the list and boolean branches, then Run to see their results.",
     system: typingLab,
     net: (sys) => {
       const net = new Net();
       build(net, sys, t("∷", num(1), new Hole()));
       build(net, sys, t("[]"));
+      build(net, sys, t("#", f("length")));
       build(net, sys, t("T"));
-      build(net, sys, t("¬", new Hole()));
+      build(net, sys, t("¬", f("answer")));
       return net;
     },
   },
