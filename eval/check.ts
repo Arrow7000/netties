@@ -22,7 +22,8 @@ const LIMIT = 100_000;
 /** The last fenced code block in a reply, or the whole reply if it's an unfenced document. */
 export function extractCode(reply: string): string | undefined {
   const blocks = [...reply.matchAll(/```[a-zA-Z]*\n([\s\S]*?)```/g)].map((m) => m[1]!);
-  if (blocks.length) return blocks.at(-1);
+  // Some models put the language tag on its own line inside the fence.
+  if (blocks.length) return blocks.at(-1)!.replace(/^\s*inet\s*\n/, "");
   return /^agent /m.test(reply) ? reply : undefined;
 }
 

@@ -119,4 +119,7 @@ export const MODELS: Model[] = [
   openRouter("xiaomi/mimo-v2.6-flash"),
   openRouter("deepseek/deepseek-v4.1-flash"),
   openRouter("xiaomi/mimo-v2.6-pro"),
+  openRouter("z-ai/glm-5.3-flash"),
+  openRouter("qwen/qwen3.8-flash"),
+  openRouter("moonshotai/kimi-k2.6"),
 ];

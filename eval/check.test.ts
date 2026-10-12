@@ -86,6 +86,10 @@ agent ¬ 1 "not" ports -boolean, +boolean
     expect(grade(block(bools), { kind: "bool", value: true })).toMatchObject({ stage: "ok", got: "true" });
   });
 
+  it("skips a language tag on its own line", () => {
+    expect(grade("```\ninet\n" + NUMBERS + "+(out, S(S(0))) ~ S(S(S(0)));\n```", N(5))).toMatchObject({ stage: "ok" });
+  });
+
   it("takes an unfenced document as it is", () => {
     expect(grade(NUMBERS + "+(out, S(S(0))) ~ S(S(S(0)));", N(5))).toMatchObject({ stage: "ok" });
   });

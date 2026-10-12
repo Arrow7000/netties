@@ -22,13 +22,23 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
     | DeepSeek V4.1 Flash | 38/39 | 29 | 59 s | 19 min | $0.012 |
     | MiMo-V2.6-Pro | 39/39 | 23 | 3.7 min | 27 min | $0.013 |
     | MiMo-V2.6-Flash | 18/23 (stopped) | 9 | 5 min | 35 min | $0.012 |
+    | Kimi K2.6 | 36/39 | 36 | 2.3 min | over 5 min | $0.054 |
+    | GLM-5.3-Flash | 25/39 | 16 | 2.2 min | over 5 min | $0.0013 |
+    | Qwen3.8-Flash | 7/39 | 6 | over 5 min | over 5 min | $0.0032 |
 
-    Haiku 5.5 is the pick: as accurate, 2–8× faster, about a third of the
-    cost per success. MiMo-V2.6-Flash often reasons until it runs out of
+    Haiku 5.5 is the pick: as accurate as the best, 2–8× faster, and the
+    cheapest per success except GLM, which fails a third of the time. Kimi
+    is accurate but 15× the cost and slow; Qwen3.8-Flash reasons for 12k+
+    tokens at ~50 tokens/s, so most attempts hit the 5-minute cap (even one
+    request at a time). Untried: lower reasoning effort for the slow ones. MiMo-V2.6-Flash often reasons until it runs out of
     tokens and writes nothing. The tasks are too easy to separate the top
     three on accuracy; add harder ones (fib, map, sorting, two-type systems)
     before relying on accuracy differences. Attempts now fail after 5 minutes
     and are saved as they finish.
+  - Parse errors should give a column and name the problem ("one ) too
+    many"): Haiku miscounted the brackets in a deeply nested S(S(...)) and
+    resent the same document twice, because "line 17: expected ;" didn't
+    say where. This would help people using the text view too.
   - Step 2: a capped proxy. Netlify regular functions bill wall-clock time,
     and running out of free credits pauses every project, so use a Netlify
     Edge Function (stream the response) or a Cloudflare Worker with
