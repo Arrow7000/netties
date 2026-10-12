@@ -115,6 +115,36 @@ export const examples: Example[] = [
     },
   },
   {
+    name: "Directed annihilation",
+    about: "A constructor meets its starred twin; their four branches reconnect.",
+    system: directedCombinators,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("γ", f("a"), f("b"))), build(net, sys, t("γ*", f("c"), f("d"))));
+      return net;
+    },
+  },
+  {
+    name: "Other directed commutation",
+    about: "The dual case: δ meets γ*, copying each across the other's branches.",
+    system: directedCombinators,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("δ", f("a"), f("b"))), build(net, sys, t("γ*", f("c"), f("d"))));
+      return net;
+    },
+  },
+  {
+    name: "Co-erasing a tree",
+    about: "A starred eraser travels through ordinary constructors and duplicators.",
+    system: directedCombinators,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("ε*")), build(net, sys, t("γ", t("δ", f("a"), f("b")), t("ε"))));
+      return net;
+    },
+  },
+  {
     name: "2 × 2",
     about: "Unary arithmetic: multiplication, done by repeated addition.",
     system: arithmetic,
@@ -135,6 +165,26 @@ export const examples: Example[] = [
     },
   },
   {
+    name: "0 × 3",
+    about: "Multiplying by zero erases the other number.",
+    system: arithmetic,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("0")), build(net, sys, t("×", f("out"), num(3))));
+      return net;
+    },
+  },
+  {
+    name: "Copy a number",
+    about: "A typed duplicator makes two copies of the same unary number.",
+    system: arithmetic,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, num(2)), build(net, sys, t("δ", f("a"), f("b"))));
+      return net;
+    },
+  },
+  {
     name: "Length of a list",
     about: "Numbers and lists are different types; # counts the items in a list.",
     system: lists,
@@ -142,6 +192,26 @@ export const examples: Example[] = [
       const net = new Net();
       const list = t("∷", t("0"), t("∷", t("S", t("0")), t("∷", t("0"), t("[]"))));
       link(net, build(net, sys, t("#", f("out"))), build(net, sys, list));
+      return net;
+    },
+  },
+  {
+    name: "Length of an empty list",
+    about: "The empty list has type list; its length is the number zero.",
+    system: lists,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("#", f("out"))), build(net, sys, t("[]")));
+      return net;
+    },
+  },
+  {
+    name: "Erase a mixed list",
+    about: "A type-flexible eraser removes both a list and its number items.",
+    system: lists,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("ε")), build(net, sys, t("∷", num(2), t("∷", t("0"), t("[]")))));
       return net;
     },
   },

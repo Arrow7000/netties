@@ -4,7 +4,7 @@ import { autoLayout } from "../layout/place";
 import { toSVG } from "../render/svg";
 import { Menu, MenuItem } from "./Menu";
 
-const GROUPS = ["Typed", "Directions only", "Untyped"] as const;
+const GROUPS = ["Untyped", "Directions only", "Typed"] as const;
 type Group = (typeof GROUPS)[number];
 
 function groupOf(ex: Example): Group {

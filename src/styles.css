@@ -491,6 +491,7 @@ kbd {
   width: min(380px, calc(100vw - 24px));
   max-height: min(680px, calc(100vh - 110px));
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .examples-menu .example-group {
