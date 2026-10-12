@@ -158,8 +158,8 @@ export const examples: Example[] = [
     },
   },
   {
-    name: "Wiring lab: three types",
-    about: "Try wiring number, list and boolean ports, then run the pairs you make.",
+    name: "Try three types",
+    about: "Wire [] to #, 0 to Z?, and T to ¬; try wrong types too, then Run.",
     system: typingLab,
     net: (sys) => {
       const net = new Net();
@@ -171,16 +171,21 @@ export const examples: Example[] = [
     },
   },
   {
-    name: "Finish a typed list",
-    about: "Finish the list and boolean branches, then Run to see their results.",
+    name: "Complete a typed if",
+    about: "Connect [] to #, then 1 and 2 to if's true/false branches. Run chooses 1.",
     system: typingLab,
     net: (sys) => {
       const net = new Net();
-      build(net, sys, t("∷", num(1), new Hole()));
+      const length = new Hole();
+      const isEmpty = new Hole();
+      const whenTrue = new Hole();
+      const whenFalse = new Hole();
       build(net, sys, t("[]"));
-      build(net, sys, t("#", f("length")));
-      build(net, sys, t("T"));
-      build(net, sys, t("¬", f("answer")));
+      build(net, sys, t("#", length));
+      link(net, length, build(net, sys, t("Z?", isEmpty)));
+      link(net, isEmpty, build(net, sys, t("if", f("out"), whenTrue, whenFalse)));
+      build(net, sys, num(1));
+      build(net, sys, num(2));
       return net;
     },
   },

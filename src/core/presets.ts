@@ -221,6 +221,7 @@ export function typingLab(): System {
     .addType({ id: "F", name: "false", symbol: "F", arity: 0, ports: [give(b, "a boolean")] })
     .addType({ id: "¬", name: "not", symbol: "¬", arity: 1, ports: [take(b, "the input"), give(b, "the result")] })
     .addType({ id: "Z?", name: "is zero", symbol: "Z?", arity: 1, ports: [take(n, "the number"), give(b, "the answer")] })
+    .addType({ id: "if", name: "if / then / else", symbol: "if", arity: 3, ports: [take(b, "condition"), give(n, "result"), take(n, "if true"), take(n, "if false")] })
     .addType({ id: "εn", name: "erase number", symbol: "εn", arity: 0, ports: [take(n, "the number")] })
     .addType({ id: "εl", name: "erase list", symbol: "εl", arity: 0, ports: [take(l, "the list")] });
   sys.typing = { dirs: "required", types: "required", names: [n, l, b] };
@@ -234,6 +235,8 @@ export function typingLab(): System {
   sys.addRule({ left: "¬", right: "F", agents: ["T"], wires: [[A(0, 0), L(1)]] });
   sys.addRule({ left: "Z?", right: "0", agents: ["T"], wires: [[A(0, 0), L(1)]] });
   sys.addRule({ left: "Z?", right: "S", agents: ["F", "εn"], wires: [[A(0, 0), L(1)], [A(1, 0), R(1)]] });
+  sys.addRule({ left: "if", right: "T", agents: ["εn"], wires: [[L(1), L(2)], [A(0, 0), L(3)]] });
+  sys.addRule({ left: "if", right: "F", agents: ["εn"], wires: [[L(1), L(3)], [A(0, 0), L(2)]] });
   sys.addRule({ left: "εn", right: "0", agents: [], wires: [] });
   sys.addRule({ left: "εn", right: "S", agents: ["εn"], wires: [[A(0, 0), R(1)]] });
   sys.addRule({ left: "εl", right: "[]", agents: [], wires: [] });
