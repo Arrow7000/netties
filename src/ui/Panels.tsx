@@ -19,10 +19,10 @@ export function PortBadge(props: { spec: Effective }) {
       <Show when={props.spec.pol}>
         {(pol) => (
           <span class="dir" classList={{ give: pol() === "give", take: pol() === "take" }}>
-            <svg viewBox="0 0 22 10" aria-hidden="true">
-              <circle cx={pol() === "give" ? 3 : 19} cy={5} r={2.2} />
-              <path d="M5 5h12" />
-              <path d={pol() === "give" ? "M14 2l4 3-4 3z" : "M8 2l-4 3 4 3z"} class="head" />
+            <svg viewBox="0 0 23 10" aria-hidden="true">
+              <circle cx={2.8} cy={5} r={2.2} />
+              <path d={pol() === "give" ? "M5 5H17" : "M5 5H21.5"} />
+              <path d={pol() === "give" ? "M15.5 1.6L21 5 15.5 8.4z" : "M11 1.6L5.5 5 11 8.4z"} class="head" />
             </svg>
             {pol() === "give" ? "gives" : "takes"}
           </span>

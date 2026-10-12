@@ -1,7 +1,7 @@
 import { For, type JSX, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { type Level, missing, portName } from "../core/types";
 import type { Editor } from "../state/editor";
-import { Glyph } from "./Glyph";
+import { Glyph, dirsOf } from "./Glyph";
 import { DirectionControl, TypeChips, TypeControl } from "./PortControls";
 import { Close, Pencil } from "./icons";
 
@@ -182,7 +182,7 @@ export function TypesSheet(props: { ed: Editor }) {
               <div class="ts-row ts-agent">
                 <div class="ts-cell port-col">
                   <span class="ts-glyph">
-                    <Glyph type={t} />
+                    <Glyph type={t} stub={6} dirs={(ed.rev(), dirsOf(ed.system, t))} />
                   </span>
                   <i class="sym">{t.symbol}</i> {t.name}
                   <button

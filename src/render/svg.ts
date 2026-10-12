@@ -14,6 +14,20 @@ export const STROKE = 1.4;
 export const HALO = 6;
 
 /**
+ * A direction arrowhead as polygon points: a dart centred on `at`, pointing
+ * along the unit vector (dx, dy), with a notch cut into its back.
+ */
+export function arrowPoints(at: Pt, dx: number, dy: number, scale = 1): string {
+  const l = 3.1 * scale;
+  const w = 2.5 * scale;
+  const tip = { x: at.x + dx * l, y: at.y + dy * l };
+  const back = { x: at.x - dx * l, y: at.y - dy * l };
+  const notch = { x: back.x + dx * 1.1, y: back.y + dy * 1.1 };
+  const f = (q: Pt) => `${q.x.toFixed(2)},${q.y.toFixed(2)}`;
+  return `${f(tip)} ${f({ x: back.x - dy * w, y: back.y + dx * w })} ${f(notch)} ${f({ x: back.x + dy * w, y: back.y - dx * w })}`;
+}
+
+/**
  * Outline of an agent: a triangle with its tip on the principal port, or a
  * circle when it has no aux ports. Collapsed components are boxes with the
  * same port positions.

@@ -5,7 +5,7 @@ import { type AgentId, type End, NONE, type WireId, free, port, sameEnd } from "
 import { type System, pairKey } from "../core/system";
 import { type Box, G, type Pt, boxOf, portPos, shape } from "../layout/geometry";
 import { flattenPath, polylinePath, resample, roundedPath } from "../render/path";
-import { agentOutline, labelPos } from "../render/svg";
+import { agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { DropCheck, NetModel, WireGesture } from "../state/model";
 import { held } from "./keys";
 import { prefs } from "./prefs";
@@ -445,6 +445,22 @@ export function Canvas(props: CanvasProps) {
     return d?.g.kind === "carry" ? d.g.wire : undefined;
   };
 
+  /** The arrowhead on the wire being dragged, pointing the way its anchor's direction says. */
+  const dragArrow = (pts: Pt[]) => {
+    const d = wireDrag();
+    if (!d) return undefined;
+    const pol = ed.specAt(gestureAnchor(d.g)).pol;
+    const flat = flattenPath(pts, G.radius);
+    const m = midway(flat);
+    if (!pol || !m || m.len < 14) return undefined;
+    const start = dragStart(ed, d.g);
+    const p0 = flat[0]!;
+    const q0 = flat[flat.length - 1]!;
+    const forward = !start || Math.hypot(p0.x - start.x, p0.y - start.y) <= Math.hypot(q0.x - start.x, q0.y - start.y);
+    const sgn = (forward ? 1 : -1) * (pol === "give" ? 1 : -1);
+    return { at: m.at, dx: m.dx * sgn, dy: m.dy * sgn, class: d.g.kind === "new" ? "drag" : "" };
+  };
+
   /** How a port or free end should look right now. */
   const endState = (e: End): EndState => {
     const d = wireDrag();
@@ -608,6 +624,7 @@ export function Canvas(props: CanvasProps) {
                       <>
                         <path class="halo" d={roundedPath(p(), G.radius)} />
                         <path class="line" d={roundedPath(p(), G.radius)} />
+                        <Show when={dragArrow(p())}>{(a) => <Arrowhead {...a()} />}</Show>
                         <Show when={ed.specAt(gestureAnchor(d().g)).type}>
                           {(t) => <WireLabel pts={p()} text={t()} />}
                         </Show>
@@ -781,8 +798,8 @@ function wireType(ed: NetModel, id: WireId): string | undefined {
   return ed.specAt(a).type ?? ed.specAt(b).type;
 }
 
-/** The point halfway along a polyline, and the direction it runs there. */
-function midway(pts: Pt[]): { at: Pt; dx: number; dy: number } | undefined {
+/** The point halfway along a polyline, the direction it runs there, and its length. */
+function midway(pts: Pt[]): { at: Pt; dx: number; dy: number; len: number } | undefined {
   if (pts.length < 2) return undefined;
   let total = 0;
   for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
@@ -793,7 +810,7 @@ function midway(pts: Pt[]): { at: Pt; dx: number; dy: number } | undefined {
     const len = Math.hypot(b.x - a.x, b.y - a.y);
     if (len >= left && len > 0) {
       const t = left / len;
-      return { at: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, dx: (b.x - a.x) / len, dy: (b.y - a.y) / len };
+      return { at: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, dx: (b.x - a.x) / len, dy: (b.y - a.y) / len, len: total };
     }
     left -= len;
   }
@@ -801,16 +818,8 @@ function midway(pts: Pt[]): { at: Pt; dx: number; dy: number } | undefined {
 }
 
 /** A small arrowhead at a point, pointing along (dx, dy). */
-function Arrowhead(props: { at: Pt; dx: number; dy: number; class?: string }) {
-  const pts = () => {
-    const { at, dx, dy } = props;
-    const L = 3.2;
-    const W = 2.6;
-    const tip = { x: at.x + dx * L * 0.6, y: at.y + dy * L * 0.6 };
-    const back = { x: at.x - dx * L * 0.4, y: at.y - dy * L * 0.4 };
-    return `${tip.x},${tip.y} ${back.x - dy * W},${back.y + dx * W} ${back.x + dy * W},${back.y - dx * W}`;
-  };
-  return <polygon class={props.class ?? "arrowhead"} points={pts()} />;
+function Arrowhead(props: { at: Pt; dx: number; dy: number; scale?: number; class?: string }) {
+  return <polygon class={`arrowhead ${props.class ?? ""}`} points={arrowPoints(props.at, props.dx, props.dy, props.scale)} />;
 }
 
 /** A wire's type, written beside its midpoint. */
@@ -844,7 +853,7 @@ function Wire(props: {
     if (!flow) return undefined;
     const flat = flattenPath(pts(), G.radius);
     const m = midway(flat);
-    if (!m) return undefined;
+    if (!m || m.len < 8) return undefined;
     // Paths can run either way between the ends; check which end they start at.
     const start = endPos(ed, ed.view().net.wire(props.id).ends[0]);
     const p0 = flat[0]!;
@@ -962,13 +971,19 @@ function Agent(props: {
             const pos = () => portPos(p()!, arity(), slot);
             const spec = () => ed.specAt(port(props.id, slot));
             const empty = () => ed.view().net.wireAt(port(props.id, slot)) === NONE;
-            /** On an empty port with a direction, a little arrow says whether it gives (out) or takes (in). */
+            /**
+             * On an empty port with a direction, a little arrow says whether it gives (out) or takes (in).
+             * While a wire is dragged it turns accent on ports it could go to and faint on ports it can't.
+             */
             const arrow = () => {
               const pol = spec().pol;
               if (!pol || !empty()) return undefined;
+              const state = props.endState(port(props.id, slot));
+              if (state === "origin" || state === "target" || state === "refuse") return undefined;
               const out = pos().dir === "down" ? 1 : -1;
               const dy = pol === "give" ? out : -out;
-              return { at: { x: pos().x, y: pos().y + out * 6.5 }, dx: 0, dy };
+              const tone = state === "candidate" ? "ok" : state === "blocked" ? "dim" : "";
+              return { at: { x: pos().x, y: pos().y + out * 7.2 }, dx: 0, dy, scale: 0.82, class: `port-arrow ${tone}` };
             };
             const xray = () => {
               const h = ed.hover();
@@ -976,7 +991,7 @@ function Agent(props: {
             };
             return (
               <g class="port">
-                <Show when={arrow()}>{(a) => <Arrowhead {...a()} class="arrowhead port-arrow" />}</Show>
+                <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
                 <Show when={xray()}>
                   <circle class="port-xray" cx={pos().x} cy={pos().y} r={5} />
                 </Show>

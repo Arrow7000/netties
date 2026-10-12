@@ -2,12 +2,14 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount }
 import type { AgentType } from "../core/net";
 import { type PortSpec, portName, portsFor, typingOn } from "../core/types";
 import { portPos, shape } from "../layout/geometry";
-import { agentOutline, labelPos } from "../render/svg";
+import { agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { Editor } from "../state/editor";
 import { DirectionControl, TypeControl } from "./PortControls";
 import { Close, Minus, Plus } from "./icons";
 
 const MAX_AUX = 8;
+/** Length of the wire stubs on the preview's ports. */
+const STUB = 13;
 
 /**
  * Create or edit an agent, with a live drawing of it. Symbol and fill only
@@ -107,7 +109,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
     const p = { x: 0, y: 0, orient: "down" as const };
     const o = agentOutline(p, n);
     const s = shape(n);
-    const k = Math.min(3.2, 150 / Math.max(s.w, 1), 110 / s.h);
+    const k = Math.min(3.2, 150 / Math.max(s.w, 1), 130 / (s.h + 2 * STUB));
     return { n, o, k, ports: Array.from({ length: n + 1 }, (_, i) => portPos(p, n, i)), label: labelPos(p, n) };
   };
 
@@ -131,13 +133,12 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
                 <For each={v.ports}>
                   {(q, i) => (
                     <>
-                      <line class="stub" x1={q.x} y1={q.y} x2={q.x} y2={q.y + (q.dir === "down" ? 7 : -7)} />
+                      <line class="stub" x1={q.x} y1={q.y} x2={q.x} y2={q.y + (q.dir === "down" ? STUB : -STUB)} />
                       <Show when={typing().dirs !== "off" && ports()[i()]?.pol}>
                         {(pol) => {
                           const out = q.dir === "down" ? 1 : -1;
                           const dy = pol() === "give" ? out : -out;
-                          const y = q.y + out * 4.6;
-                          return <polygon class="arrow" points={`${q.x},${y + dy * 2} ${q.x - 2},${y - dy * 1.4} ${q.x + 2},${y - dy * 1.4}`} />;
+                          return <polygon class="arrowhead" points={arrowPoints({ x: q.x, y: q.y + out * STUB * 0.55 }, 0, dy, 1.1)} />;
                         }}
                       </Show>
                       <Show when={hotPort() === i()}>

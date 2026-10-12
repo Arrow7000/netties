@@ -2,7 +2,7 @@ import { For, type JSX, Show, createSignal } from "solid-js";
 import { Portal } from "solid-js/web";
 import type { Editor } from "../state/editor";
 import type { Camera } from "./Canvas";
-import { ComponentGlyph, Glyph } from "./Glyph";
+import { ComponentGlyph, Glyph, dirsOf } from "./Glyph";
 import { GRID_FITS, GridLegend, GridSummary, RuleGrid } from "./RuleGrid";
 import { TypeChips } from "./PortControls";
 import { TypeEditor } from "./TypeEditor";
@@ -69,7 +69,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
     if (!c) return null;
     if (c.what.kind === "type") {
       const t = ed.system.types.get(c.what.id);
-      return t ? <Glyph type={t} /> : null;
+      return t ? <Glyph type={t} stub={9} dirs={dirsOf(ed.system, t)} /> : null;
     }
     const d = ed.defs().get(c.what.id);
     return d ? <ComponentGlyph def={d} /> : null;
@@ -98,7 +98,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
                   onPointerLeave={() => m.setHover(undefined)}
                   aria-label={`${t.name}: drag to add, click to edit`}
                 >
-                  <Glyph type={t} />
+                  <Glyph type={t} stub={9} dirs={(ed.rev(), dirsOf(ed.system, t))} />
                   <span class="tile-name">{t.name}</span>
                 </button>
               )}
