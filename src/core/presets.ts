@@ -205,3 +205,19 @@ export function listArithmetic(): System {
   for (const rule of numbers.rules.values()) if (rule.left === "+") sys.addRule(rule);
   return sys;
 }
+
+/** Three fully specified port types for practising which loose ports can join. */
+export function typingLab(): System {
+  const n = "number";
+  const l = "list";
+  const b = "boolean";
+  const sys = new System()
+    .addType({ id: "0", name: "zero", symbol: "0", arity: 0, ports: [give(n, "a number")] })
+    .addType({ id: "S", name: "successor", symbol: "S", arity: 1, ports: [give(n, "the next number"), take(n, "the previous number")] })
+    .addType({ id: "[]", name: "empty list", symbol: "[]", arity: 0, ports: [give(l, "a list")] })
+    .addType({ id: "∷", name: "list item", symbol: "∷", arity: 2, ports: [give(l, "the list"), take(n, "its first number"), take(l, "the rest")] })
+    .addType({ id: "T", name: "true", symbol: "T", arity: 0, ports: [give(b, "a boolean")] })
+    .addType({ id: "¬", name: "not", symbol: "¬", arity: 1, ports: [take(b, "the input"), give(b, "the result")] });
+  sys.typing = { dirs: "required", types: "required", names: [n, l, b] };
+  return sys;
+}

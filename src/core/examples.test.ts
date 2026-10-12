@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { examples } from "./examples";
 import { free, port, type Net } from "./net";
 import { normalize } from "./reduce";
+import { clash, specOf } from "./types";
 
 function loaded(name: string) {
   const ex = examples.find((e) => e.name === name)!;
@@ -21,6 +22,21 @@ function readNumber(net: Net, name: string): number {
 }
 
 describe("new examples", () => {
+  it("leaves ports open for a three-type wiring exercise", () => {
+    for (const name of ["Wiring lab: three types", "Finish a typed list"]) {
+      const { system, net } = loaded(name);
+      expect(system.typing).toEqual({ dirs: "required", types: "required", names: ["number", "list", "boolean"] });
+      expect(net.unconnected().length, name).toBeGreaterThan(3);
+    }
+    const { system } = loaded("Wiring lab: three types");
+    expect(clash(specOf(system, "0", 0), specOf(system, "S", 1))).toBeUndefined();
+    expect(clash(specOf(system, "[]", 0), specOf(system, "∷", 2))).toBeUndefined();
+    expect(clash(specOf(system, "T", 0), specOf(system, "¬", 0))).toBeUndefined();
+    expect(clash(specOf(system, "0", 0), specOf(system, "∷", 2))?.kind).toBe("type");
+    expect(clash(specOf(system, "T", 0), specOf(system, "S", 1))?.kind).toBe("type");
+    expect(clash(specOf(system, "0", 0), specOf(system, "[]", 0))?.kind).toBe("pol");
+  });
+
   it("introduces addition before multiplication, with 3 × 2 = 6", () => {
     expect(examples.findIndex((e) => e.name === "3 + 2")).toBeLessThan(examples.findIndex((e) => e.name === "3 × 2"));
     const { system, net } = loaded("3 × 2");

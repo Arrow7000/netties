@@ -1,5 +1,5 @@
 import { type End, Net, free, port } from "./net";
-import { arithmetic, combinators, directedCombinators, listArithmetic, lists } from "./presets";
+import { arithmetic, combinators, directedCombinators, listArithmetic, lists, typingLab } from "./presets";
 import type { System } from "./system";
 
 /**
@@ -154,6 +154,29 @@ export const examples: Example[] = [
       const net = new Net();
       const list = t("∷", t("0"), t("∷", t("S", t("0")), t("∷", t("0"), t("[]"))));
       link(net, build(net, sys, t("#", f("out"))), build(net, sys, list));
+      return net;
+    },
+  },
+  {
+    name: "Wiring lab: three types",
+    about: "Try joining open number, list and boolean ports. No reduction rules here.",
+    system: typingLab,
+    net: (sys) => {
+      const net = new Net();
+      for (const type of ["0", "S", "[]", "∷", "T", "¬"]) net.addAgent(sys.type(type));
+      return net;
+    },
+  },
+  {
+    name: "Finish a typed list",
+    about: "A number is in place; try fitting a list tail and boolean branch. No reduction rules.",
+    system: typingLab,
+    net: (sys) => {
+      const net = new Net();
+      build(net, sys, t("∷", num(1), new Hole()));
+      build(net, sys, t("[]"));
+      build(net, sys, t("T"));
+      build(net, sys, t("¬", new Hole()));
       return net;
     },
   },
