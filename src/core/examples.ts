@@ -1,5 +1,5 @@
 import { type End, Net, free, port } from "./net";
-import { arithmetic, combinators, directedCombinators, lists } from "./presets";
+import { arithmetic, combinators, directedCombinators, listArithmetic, lists } from "./presets";
 import type { System } from "./system";
 
 /**
@@ -69,8 +69,8 @@ export const examples: Example[] = [
     },
   },
   {
-    name: "Duplicating a loop",
-    about: "A duplicator copies a net that loops back on itself.",
+    name: "Copying a feedback loop",
+    about: "A duplicator copies a small loop, then the reduction stops.",
     system: combinators,
     net: (sys) => {
       // A γ whose aux ports are joined, copied by a δ.
@@ -117,32 +117,22 @@ export const examples: Example[] = [
     },
   },
   {
-    name: "Other directed commutation",
-    about: "The dual case: δ meets γ*, copying each across the other's branches.",
-    system: directedCombinators,
-    net: (sys) => {
-      const net = new Net();
-      link(net, build(net, sys, t("δ", f("a"), f("b"))), build(net, sys, t("γ*", f("c"), f("d"))));
-      return net;
-    },
-  },
-  {
-    name: "2 × 2",
-    about: "Unary arithmetic: multiplication, done by repeated addition.",
-    system: arithmetic,
-    net: (sys) => {
-      const net = new Net();
-      link(net, build(net, sys, num(2)), build(net, sys, t("×", f("out"), num(2))));
-      return net;
-    },
-  },
-  {
     name: "3 + 2",
     about: "Unary arithmetic: adding two numbers.",
     system: arithmetic,
     net: (sys) => {
       const net = new Net();
       link(net, build(net, sys, num(3)), build(net, sys, t("+", f("out"), num(2))));
+      return net;
+    },
+  },
+  {
+    name: "3 × 2",
+    about: "Unary arithmetic: multiplication by repeated addition.",
+    system: arithmetic,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, num(3)), build(net, sys, t("×", f("out"), num(2))));
       return net;
     },
   },
@@ -207,6 +197,40 @@ export const examples: Example[] = [
       const plain = t("γ", t("γ", f("a"), f("b")), t("δ", f("c"), f("d")));
       const starred = t("δ*", t("γ*", f("e"), f("f")), t("δ*", f("g"), f("h")));
       link(net, build(net, sys, plain), build(net, sys, starred));
+      return net;
+    },
+  },
+  {
+    name: "One number, two calculations",
+    about: "Copy 3, then add 2 on one branch and multiply by 2 on the other.",
+    showcase: true,
+    system: arithmetic,
+    net: (sys) => {
+      const net = new Net();
+      const addInput = new Hole();
+      const multiplyInput = new Hole();
+      link(net, build(net, sys, num(3)), build(net, sys, t("δ", addInput, multiplyInput)));
+      link(net, addInput, build(net, sys, t("+", f("sum"), num(2))));
+      link(net, multiplyInput, build(net, sys, t("×", f("product"), num(2))));
+      return net;
+    },
+  },
+  {
+    name: "Add two list lengths",
+    about: "Measure two different lists, then add their lengths to get 5.",
+    showcase: true,
+    system: listArithmetic,
+    net: (sys) => {
+      const net = new Net();
+      const firstLength = new Hole();
+      const secondLength = new Hole();
+      const secondAddend = new Hole();
+      const first = t("∷", num(1), t("∷", num(2), t("[]")));
+      const second = t("∷", num(2), t("∷", num(1), t("∷", t("0"), t("[]"))));
+      link(net, build(net, sys, first), build(net, sys, t("#", firstLength)));
+      link(net, build(net, sys, second), build(net, sys, t("#", secondLength)));
+      link(net, firstLength, build(net, sys, t("+", f("out"), secondAddend)));
+      link(net, secondLength, secondAddend);
       return net;
     },
   },

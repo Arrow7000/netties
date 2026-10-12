@@ -196,3 +196,12 @@ export function lists(): System {
   sys.addRule({ left: "ε", right: "∷", agents: ["ε", "ε"], wires: [[A(0, 0), R(1)], [A(1, 0), R(2)]] });
   return sys;
 }
+
+/** Lists and unary addition together, so a computed length can feed arithmetic. */
+export function listArithmetic(): System {
+  const sys = lists();
+  const numbers = arithmetic();
+  sys.addType(numbers.type("+"));
+  for (const rule of numbers.rules.values()) if (rule.left === "+") sys.addRule(rule);
+  return sys;
+}

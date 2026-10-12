@@ -21,6 +21,13 @@ function readNumber(net: Net, name: string): number {
 }
 
 describe("new examples", () => {
+  it("introduces addition before multiplication, with 3 × 2 = 6", () => {
+    expect(examples.findIndex((e) => e.name === "3 + 2")).toBeLessThan(examples.findIndex((e) => e.name === "3 × 2"));
+    const { system, net } = loaded("3 × 2");
+    expect(normalize(net, system).normal).toBe(true);
+    expect(readNumber(net, "out")).toBe(6);
+  });
+
   it("reconnects the four ends of a directed annihilation", () => {
     const { system, net } = loaded("Directed annihilation");
     expect(normalize(net, system).normal).toBe(true);
@@ -28,10 +35,11 @@ describe("new examples", () => {
     expect(net.partner(free("b"))).toEqual(free("c"));
   });
 
-  it("runs the dual directed commutation", () => {
-    const { system, net } = loaded("Other directed commutation");
-    expect(normalize(net, system, { limit: 100 }).normal).toBe(true);
-    expect(net.activePairs()).toEqual([]);
+  it("distinguishes a finite feedback loop from the repeating net", () => {
+    const { system, net } = loaded("Copying a feedback loop");
+    const result = normalize(net, system, { limit: 100 });
+    expect(result.normal).toBe(true);
+    expect(result.stats.interactions).toBeGreaterThan(0);
   });
 
   it("runs the additional typed examples to their expected results", () => {
@@ -57,5 +65,18 @@ describe("new examples", () => {
     expect(cascadeResult.normal).toBe(true);
     expect(cascadeResult.stats.interactions).toBeGreaterThan(1);
     expect(cascade.net.activePairs()).toEqual([]);
+
+    const branches = loaded("One number, two calculations");
+    const branchResult = normalize(branches.net, branches.system, { limit: 1000 });
+    expect(branchResult.normal).toBe(true);
+    expect(branchResult.stats.interactions).toBeGreaterThan(5);
+    expect(readNumber(branches.net, "sum")).toBe(5);
+    expect(readNumber(branches.net, "product")).toBe(6);
+
+    const lengths = loaded("Add two list lengths");
+    const lengthResult = normalize(lengths.net, lengths.system, { limit: 1000 });
+    expect(lengthResult.normal).toBe(true);
+    expect(lengthResult.stats.interactions).toBeGreaterThan(5);
+    expect(readNumber(lengths.net, "out")).toBe(5);
   });
 });

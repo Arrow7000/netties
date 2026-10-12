@@ -131,7 +131,7 @@ function commutes(source: Net, s: ReturnType<typeof combinators>, mode: "general
 
 describe("translation", () => {
   it("translates the combinators into themselves, preserving reduction", () => {
-    for (const name of ["Commutation", "Erasing a tree", "Duplicating a loop"]) {
+    for (const name of ["Commutation", "Erasing a tree", "Copying a feedback loop"]) {
       const ex = examples.find((e) => e.name === name)!;
       const s = ex.system();
       commutes(ex.net(s), s, "general");
@@ -139,7 +139,7 @@ describe("translation", () => {
   });
 
   it("translates unary arithmetic", () => {
-    const ex = examples.find((e) => e.name === "2 × 2")!;
+    const ex = examples.find((e) => e.name === "3 × 2")!;
     const s = ex.system();
     commutes(ex.net(s), s, "general");
   });
