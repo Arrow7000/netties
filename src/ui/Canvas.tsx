@@ -264,12 +264,12 @@ export function Canvas(props: CanvasProps) {
     return undefined;
   };
 
-  /** Start dragging the selection in manual mode. */
+  /** Start dragging the selection in either layout mode. */
   const startMove = (w: Pt) => {
-    if (ed.mode() !== "manual") return;
     const s = ed.selection();
     if (s?.kind !== "items") return;
-    ed.beginSelectionMove();
+    if (ed.mode() === "manual") ed.beginSelectionMove();
+    else ed.beginAutoSelectionMove([...s.agents], [...s.groups]);
     setDrag({ kind: "move", ids: [...s.agents], groups: [...s.groups], last: w, moved: false });
   };
 
@@ -351,7 +351,8 @@ export function Canvas(props: CanvasProps) {
       const w = toWorld(e);
       const dx = w.x - d.last.x;
       const dy = w.y - d.last.y;
-      ed.moveSelectionBy(d.ids, d.groups, dx, dy);
+      if (ed.mode() === "manual") ed.moveSelectionBy(d.ids, d.groups, dx, dy);
+      else ed.moveAutoSelectionBy(dx, dy);
       setDrag({ ...d, last: w, moved: true });
     }
   };
@@ -376,6 +377,7 @@ export function Canvas(props: CanvasProps) {
     setDrag(undefined);
     cancelAnimationFrame(previewFrame);
     if (!d) return;
+    if (d.kind === "move" && ed.mode() === "auto") ed.endAutoSelectionMove();
     if (d.kind === "marquee") {
       if (d.moved) ed.pickMany(marqueed(d), d.additive);
       else if (!d.additive) ed.clearSelection();
@@ -391,6 +393,14 @@ export function Canvas(props: CanvasProps) {
       else ed.selectWire(d.id);
     }
     ed.setHover(hoverAt(document.elementFromPoint(e.clientX, e.clientY)));
+  };
+
+  const onPointerCancel = () => {
+    const d = drag();
+    setDrag(undefined);
+    cancelAnimationFrame(previewFrame);
+    if (d?.kind === "move" && ed.mode() === "auto") ed.endAutoSelectionMove();
+    ed.setHover(undefined);
   };
 
   /** Double-click a box to open it up, or an instance's outline to close it. */
@@ -508,6 +518,7 @@ export function Canvas(props: CanvasProps) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onPointerLeave={() => !drag() && ed.setHover(undefined)}
         onDblClick={onDblClick}
         onWheel={onWheel}
@@ -546,7 +557,7 @@ export function Canvas(props: CanvasProps) {
               )}
             </For>
             <For each={agentIds()}>
-              {(id) => <Agent ed={ed} system={sys} id={id} pre={preselected().has(id)} endState={endState} />}
+              {(id) => <Agent ed={ed} system={sys} id={id} pre={preselected().has(id)} endState={endState} readonly={props.readonly} />}
             </For>
             <For each={freeNames()}>
               {(name) => {
@@ -884,6 +895,7 @@ function Agent(props: {
   id: AgentId;
   pre: boolean;
   endState: (e: End) => EndState;
+  readonly?: boolean;
 }) {
   const ed = props.ed;
   const p = () => ed.layout().placement.get(props.id);
@@ -925,7 +937,7 @@ function Agent(props: {
           selected: selected(),
           pre: props.pre && !selected(),
           hot: hot(),
-          movable: ed.mode() === "manual",
+          movable: !props.readonly,
         }}
         data-agent={props.id}
       >

@@ -30,6 +30,48 @@ describe("net model gesture boundary", () => {
     });
   });
 
+  it("previews an auto-layout drag and returns to its computed position without history", () => {
+    createRoot((dispose) => {
+      const system = new System().addType({ id: "a", name: "Agent", symbol: "A", arity: 0 });
+      const model = createNetModel({ system: () => system });
+      const id = model.addAgent("a");
+      model.clearHistory();
+      const before = model.layout().placement.get(id)!;
+
+      model.beginAutoSelectionMove([id], []);
+      model.moveAutoSelectionBy(20, -10);
+      expect(model.layout().placement.get(id)).toEqual({ ...before, x: before.x + 20, y: before.y - 10 });
+      expect(model.savedPositions()).toEqual([]);
+
+      model.endAutoSelectionMove();
+      expect(model.layout().placement.get(id)).toEqual(before);
+      expect(model.historySize()).toEqual({ undo: 0, redo: 0 });
+      dispose();
+    });
+  });
+
+  it("tidies manual positions and keeps the change undoable", () => {
+    createRoot((dispose) => {
+      const system = new System().addType({ id: "a", name: "Agent", symbol: "A", arity: 0 });
+      const model = createNetModel({ system: () => system });
+      const id = model.addAgent("a");
+      model.setMode("manual");
+      const tidyPosition = model.positionOf(id)!;
+      model.moveSelectionBy([id], [], 30, 20);
+      const moved = model.positionOf(id)!;
+      model.clearHistory();
+
+      model.tidy();
+      expect(model.mode()).toBe("manual");
+      expect(model.positionOf(id)).toEqual(tidyPosition);
+      expect(model.historySize()).toEqual({ undo: 1, redo: 0 });
+
+      model.undo();
+      expect(model.positionOf(id)).toEqual(moved);
+      dispose();
+    });
+  });
+
   it("flips several agents as one undoable action", () => {
     createRoot((dispose) => {
       const system = new System().addType({ id: "a", name: "Agent", symbol: "A", arity: 0 });

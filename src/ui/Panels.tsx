@@ -105,7 +105,7 @@ export function HoverPanel(props: { ed: Editor }) {
             </>
           ),
           aside: t.arity === 1 ? "1 aux port" : `${t.arity} aux ports`,
-          lines: [{ text: manual ? "Click to select. Drag to move." : "Click to select. Switch to manual layout to move it." }],
+          lines: [{ text: manual ? "Click to select. Drag to move." : "Click to select. Drag to move; auto layout will return it to place." }],
         };
       }
       case "port": {

@@ -106,6 +106,7 @@ export function createNetModel(opts: NetModelOptions) {
 
   const [frame, setFrame] = createSignal<Frame>();
   let raf = 0;
+  const [autoDrag, setAutoDrag] = createSignal<{ ids: ReadonlySet<AgentId>; dx: number; dy: number }>();
 
   /**
    * The net as drawn just before the current edit. The next `bump` animates
@@ -202,13 +203,27 @@ export function createNetModel(opts: NetModelOptions) {
   /** The last automatic layout, so the next one can stay close to it. */
   let lastAuto: Placement | undefined;
 
+  const automatic = createMemo(() => {
+    const v = view();
+    const pins = opts.pins?.();
+    const l = autoLayout(v.net, { pins, prev: lastAuto });
+    lastAuto = l.placement;
+    return l;
+  });
+
   const layout = createMemo<Layout>(() => {
     const v = view();
     const pins = opts.pins?.();
     if (mode() === "auto") {
-      const l = autoLayout(v.net, { pins, prev: lastAuto });
-      lastAuto = l.placement;
-      return { placement: l.placement, routed: l.routed };
+      const base = automatic();
+      const drag = autoDrag();
+      if (!drag || (!drag.dx && !drag.dy)) return { placement: base.placement, routed: base.routed };
+      const placement = new Map(base.placement);
+      for (const id of drag.ids) {
+        const p = placement.get(id);
+        if (p) placement.set(id, { ...p, x: p.x + drag.dx, y: p.y + drag.dy });
+      }
+      return { placement, routed: route(v.net, placement, { pins }) };
     }
     // Agents without a position yet (new ones) get one next to the others;
     // boxes sit where their members are.
@@ -228,6 +243,26 @@ export function createNetModel(opts: NetModelOptions) {
     }
     return { placement, routed: route(v.net, placement, { pins }) };
   });
+
+  /** Place real agents so the visible agents and collapsed boxes match an automatic drawing. */
+  const positionsFromAuto = (shown: Placement): Placement => {
+    const result = new Map(autoLayout(net).placement);
+    const v = view();
+    for (const [id, p] of shown) {
+      const g = v.box.get(id);
+      if (g === undefined) result.set(id, p);
+      else {
+        const ms = groups.members(g);
+        const cx = ms.reduce((s, a) => s + (result.get(a)?.x ?? 0), 0) / Math.max(1, ms.length);
+        const cy = ms.reduce((s, a) => s + (result.get(a)?.y ?? 0), 0) / Math.max(1, ms.length);
+        for (const a of ms) {
+          const q = result.get(a)!;
+          result.set(a, { ...q, x: q.x - cx + p.x, y: q.y - cy + p.y });
+        }
+      }
+    }
+    return result;
+  };
 
   const activeWires = createMemo(() => {
     rev();
@@ -590,6 +625,32 @@ export function createNetModel(opts: NetModelOptions) {
       checkpoint();
     },
 
+    /** Preview a move in auto layout without changing the saved placement. */
+    beginAutoSelectionMove(ids: AgentId[], groupIds: GroupId[]) {
+      noAnimation();
+      const members = new Set(ids);
+      for (const g of groupIds) for (const id of groups.members(g)) members.add(id);
+      const v = view();
+      const shown = new Set<AgentId>();
+      for (const id of v.net.agents.keys()) {
+        const group = v.box.get(id);
+        if (members.has(id) || (group !== undefined && groups.members(group).some((member) => members.has(member)))) shown.add(id);
+      }
+      setAutoDrag({ ids: shown, dx: 0, dy: 0 });
+    },
+
+    moveAutoSelectionBy(dx: number, dy: number) {
+      setAutoDrag((drag) => drag && { ...drag, dx: drag.dx + dx, dy: drag.dy + dy });
+    },
+
+    endAutoSelectionMove() {
+      const drag = autoDrag();
+      if (!drag) return;
+      const before = drag.dx || drag.dy ? animSnapshot() : undefined;
+      setAutoDrag(undefined);
+      if (before) animate(before, [], true, 260);
+    },
+
     /** Move selected agents and expanded groups during a pointer gesture. */
     moveSelectionBy(ids: AgentId[], groupIds: GroupId[], dx: number, dy: number) {
       noAnimation();
@@ -606,25 +667,7 @@ export function createNetModel(opts: NetModelOptions) {
       if (m === mode()) return;
       if (record) checkpoint();
       if (m === "manual") {
-        // Boxes in the view stand for their members; keep members' own spots.
-        const l = autoLayout(net);
-        positions = new Map(l.placement);
-        const v = view();
-        const shown = layout().placement;
-        for (const [id, p] of shown) {
-          const g = v.box.get(id);
-          if (g === undefined) positions.set(id, p);
-          else {
-            // Gather the members around where the box was drawn.
-            const ms = groups.members(g);
-            const cx = ms.reduce((s, a) => s + (positions.get(a)?.x ?? 0), 0) / Math.max(1, ms.length);
-            const cy = ms.reduce((s, a) => s + (positions.get(a)?.y ?? 0), 0) / Math.max(1, ms.length);
-            for (const a of ms) {
-              const q = positions.get(a)!;
-              positions.set(a, { ...q, x: q.x - cx + p.x, y: q.y - cy + p.y });
-            }
-          }
-        }
+        positions = positionsFromAuto(layout().placement);
       } else positions = new Map();
       setModeSignal(m);
       bump();
@@ -762,10 +805,18 @@ export function createNetModel(opts: NetModelOptions) {
     flipAgent: (viewId: AgentId) => flipAgents([viewId]),
     flipAgents,
 
-    /** Lay the net out afresh, forgetting where things were. */
+    /** Tidy manual positions using a fresh automatic drawing. */
     tidy() {
-      expectEdit();
-      lastAuto = undefined;
+      if (mode() !== "manual") return;
+      const shown = autoLayout(view().net, { pins: opts.pins?.() }).placement;
+      const next = positionsFromAuto(shown);
+      const changed = [...next].some(([id, p]) => {
+        const old = positions.get(id);
+        return !old || old.x !== p.x || old.y !== p.y || old.orient !== p.orient;
+      });
+      if (!changed) return;
+      checkpoint();
+      positions = next;
       bump();
     },
 

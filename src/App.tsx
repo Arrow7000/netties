@@ -301,7 +301,7 @@ export function App(props: { initial?: Doc }) {
               Manual
             </button>
           </div>
-          <button class="btn" onClick={() => ed.dispatch({ kind: "layout/tidy" })} disabled={m.mode() !== "auto"} title="Lay the net out afresh, ignoring where things were">
+          <button class="btn" onClick={() => ed.dispatch({ kind: "layout/tidy" })} disabled={m.mode() !== "manual"} title="Tidy up manually placed agents">
             Tidy
           </button>
           <span class="sep" />
