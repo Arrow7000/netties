@@ -52,27 +52,26 @@ export function App(props: { initial?: Doc }) {
     }),
   );
 
-  const overlayOpen = () => !!(ed.ruleOpen() || ed.componentOpen() || ed.translateOpen() || ed.textOpen() || ed.typesOpen());
+  const overlayOpen = () => ed.screen().kind !== "net";
 
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as Element).closest("input, textarea, select")) return;
       const mod = e.metaKey || e.ctrlKey;
       // The directions and types sheet edits the system in place, so undo works while it's open.
-      const sheetOnly = ed.typesOpen() && !(ed.ruleOpen() || ed.componentOpen() || ed.translateOpen() || ed.textOpen());
+      const sheetOnly = ed.screen().kind === "types";
       if (overlayOpen() && !(sheetOnly && mod && e.key.toLowerCase() === "z")) return;
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        e.shiftKey ? m.redo() : m.undo();
-        if (ed.undoable()) ed.setMessage(undefined);
+        ed.dispatch({ kind: e.shiftKey ? "history/redo" : "history/undo" });
       } else if (mod) return;
-      else if (e.key === "Delete" || e.key === "Backspace") m.deleteSelection();
-      else if (e.key === "Escape") m.setSelection(undefined);
-      else if (e.key === "s") ed.stepOne();
-      else if (e.key === "a") ed.stepAll();
-      else if (e.key === "r") ed.run();
+      else if (e.key === "Delete" || e.key === "Backspace") ed.dispatch({ kind: "selection/delete" });
+      else if (e.key === "Escape") ed.dispatch({ kind: "selection/clear" });
+      else if (e.key === "s") ed.dispatch({ kind: "run/step-one" });
+      else if (e.key === "a") ed.dispatch({ kind: "run/step-all" });
+      else if (e.key === "r") ed.dispatch({ kind: "run/toggle" });
       else if (e.key === "f") camera.fit();
-      else if (e.key === "x") m.selectedAgents().forEach((a) => m.flipAgent(a));
+      else if (e.key === "x") ed.dispatch({ kind: "selection/flip", agents: m.selectedAgents() });
     };
     window.addEventListener("keydown", onKey);
     onCleanup(() => window.removeEventListener("keydown", onKey));
@@ -137,7 +136,7 @@ export function App(props: { initial?: Doc }) {
       <Canvas
         m={m}
         camera={camera}
-        onFire={ed.fire}
+        onFire={(wire) => ed.dispatch({ kind: "run/fire", wire })}
         onStuck={openStuck}
         pad={{ t: 72, r: 270, b: 90, l: 48 }}
         empty={
@@ -218,20 +217,20 @@ export function App(props: { initial?: Doc }) {
 
       <div class="island top-mid">
         <div class="seg" role="tablist" aria-label="Screen">
-          <button role="tab" aria-pressed={!ed.translateOpen()} onClick={ed.closeTranslate}>
+          <button role="tab" aria-pressed={ed.screen().kind !== "translation"} onClick={ed.closeTranslate}>
             Net
           </button>
-          <button role="tab" aria-pressed={ed.translateOpen()} onClick={ed.openTranslate}>
+          <button role="tab" aria-pressed={ed.screen().kind === "translation"} onClick={ed.openTranslate}>
             Combinator translation
           </button>
         </div>
       </div>
 
       <div class="island top-right">
-        <button class="btn icon" onClick={m.undo} disabled={!m.historySize().undo} title="Undo (⌘Z)">
+        <button class="btn icon" onClick={() => ed.dispatch({ kind: "history/undo" })} disabled={!m.historySize().undo} title="Undo (⌘Z)">
           <I.Undo />
         </button>
-        <button class="btn icon" onClick={m.redo} disabled={!m.historySize().redo} title="Redo (⇧⌘Z)">
+        <button class="btn icon" onClick={() => ed.dispatch({ kind: "history/redo" })} disabled={!m.historySize().redo} title="Redo (⇧⌘Z)">
           <I.Redo />
         </button>
         <span class="sep" />
@@ -250,18 +249,18 @@ export function App(props: { initial?: Doc }) {
         <Counters ed={ed} />
 
         <div class="island transport" aria-label="Run">
-          <button class="btn outline" onClick={ed.stepOne} disabled={!active() || ed.running()} title="Fire one active pair (S)">
+          <button class="btn outline" onClick={() => ed.dispatch({ kind: "run/step-one" })} disabled={!active() || ed.running()} title="Fire one active pair (S)">
             <I.Step />
             Step
           </button>
-          <button class="btn outline" onClick={ed.stepAll} disabled={!active() || ed.running()} title="Fire every active pair at once (A)">
+          <button class="btn outline" onClick={() => ed.dispatch({ kind: "run/step-all" })} disabled={!active() || ed.running()} title="Fire every active pair at once (A)">
             <I.StepAll />
             Step all
           </button>
           <button
             class="btn run"
             classList={{ stop: ed.running() }}
-            onClick={ed.run}
+            onClick={() => ed.dispatch({ kind: "run/toggle" })}
             disabled={!active() && !ed.running()}
             title="Keep stepping until nothing can fire (R)"
           >
@@ -290,14 +289,14 @@ export function App(props: { initial?: Doc }) {
 
         <div class="island view-controls">
           <div class="seg" role="group" aria-label="Layout">
-            <button aria-pressed={m.mode() === "auto"} onClick={() => m.setMode("auto")} title="Lay the net out automatically">
+            <button aria-pressed={m.mode() === "auto"} onClick={() => ed.dispatch({ kind: "layout/set", mode: "auto" })} title="Lay the net out automatically">
               Auto layout
             </button>
-            <button aria-pressed={m.mode() === "manual"} onClick={() => m.setMode("manual")} title="Place agents yourself; wires still route themselves">
+            <button aria-pressed={m.mode() === "manual"} onClick={() => ed.dispatch({ kind: "layout/set", mode: "manual" })} title="Place agents yourself; wires still route themselves">
               Manual
             </button>
           </div>
-          <button class="btn" onClick={m.tidy} disabled={m.mode() !== "auto"} title="Lay the net out afresh, ignoring where things were">
+          <button class="btn" onClick={() => ed.dispatch({ kind: "layout/tidy" })} disabled={m.mode() !== "auto"} title="Lay the net out afresh, ignoring where things were">
             Tidy
           </button>
           <span class="sep" />
@@ -345,20 +344,20 @@ export function App(props: { initial?: Doc }) {
         </div>
       </Show>
 
-      <Show when={ed.typesOpen()}>
+      <Show when={ed.screen().kind === "types"}>
         <TypesSheet ed={ed} />
       </Show>
-      <Show when={ed.textOpen()}>
+      <Show when={ed.screen().kind === "text"}>
         <TextView ed={ed} />
       </Show>
-      <Show when={ed.translateOpen()}>
+      <Show when={ed.screen().kind === "translation"}>
         <TranslateView ed={ed} />
       </Show>
-      <Show when={ed.componentOpen()} keyed>
-        {(id) => <ComponentEditor ed={ed} id={id} />}
+      <Show when={ed.screen().kind === "component" ? ed.screen() as Extract<ReturnType<typeof ed.screen>, { kind: "component" }> : undefined} keyed>
+        {(screen) => <ComponentEditor ed={ed} id={screen.id} />}
       </Show>
-      <Show when={ed.ruleOpen()} keyed>
-        {([a, b]) => <RuleEditor ed={ed} left={a} right={b} />}
+      <Show when={ed.screen().kind === "rule" ? ed.screen() as Extract<ReturnType<typeof ed.screen>, { kind: "rule" }> : undefined} keyed>
+        {(screen) => <RuleEditor ed={ed} left={screen.left} right={screen.right} />}
       </Show>
       <Show when={ed.message()}>
         <div class="toast" role="status">
@@ -366,7 +365,7 @@ export function App(props: { initial?: Doc }) {
           <Show when={ed.undoable()}>
             <button
               onClick={() => {
-                m.undo();
+                ed.dispatch({ kind: "history/undo" });
                 ed.setMessage(undefined);
               }}
             >

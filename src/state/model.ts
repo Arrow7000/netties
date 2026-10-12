@@ -385,6 +385,28 @@ export function createNetModel(opts: NetModelOptions) {
     }
   }
 
+  const flipAgents = (viewIds: AgentId[]) => {
+    const ids = viewIds.filter((id) => positions.has(id) && mode() === "manual" && !view().box.has(id));
+    if (!ids.length) return;
+    checkpoint();
+    for (const id of ids) {
+      const p = positions.get(id)!;
+      positions.set(id, { ...p, orient: p.orient === "down" ? "up" : "down" });
+    }
+    bump();
+  };
+
+  const setGroupsCollapsed = (ids: GroupId[], collapsed: boolean) => {
+    const changed = ids.filter((id) => {
+      const group = groups.groups.get(id);
+      return group && group.collapsed !== collapsed;
+    });
+    if (!changed.length) return;
+    checkpoint();
+    for (const id of changed) groups.groups.get(id)!.collapsed = collapsed;
+    bump();
+  };
+
   return {
     rev,
     bump,
@@ -480,9 +502,10 @@ export function createNetModel(opts: NetModelOptions) {
     get groups() {
       return groups;
     },
-    get positions() {
-      return positions;
-    },
+    savedPositions: () => [...positions] as [AgentId, Placed][],
+    positionOf: (id: AgentId) => positions.get(id),
+    setPosition: (id: AgentId, placed: Placed) => positions.set(id, placed),
+    deletePosition: (id: AgentId) => positions.delete(id),
     defs,
     /** Replace the whole net (not undoable by itself; call `checkpoint` first if it should be). */
     setNet(n: Net, pos = new Map<AgentId, Placed>(), gs = new Groups()) {
@@ -500,9 +523,11 @@ export function createNetModel(opts: NetModelOptions) {
     layout,
     mode,
     selection,
-    setSelection,
+    clearSelection: () => setSelection(undefined),
+    selectWire: (id: WireId) => setSelection({ kind: "wire", id }),
     selectedAgents,
     armed,
+    clearArmed: () => setArmed(undefined),
     setArmed,
     activeWires,
     stuckWires,
@@ -558,6 +583,23 @@ export function createNetModel(opts: NetModelOptions) {
         else agents.add(it.agent);
       }
       setSelection(agents.size || gs.size ? { kind: "items", agents, groups: gs } : undefined);
+    },
+
+    /** Begin one undoable selection move; subsequent pointer updates belong to this edit. */
+    beginSelectionMove() {
+      checkpoint();
+    },
+
+    /** Move selected agents and expanded groups during a pointer gesture. */
+    moveSelectionBy(ids: AgentId[], groupIds: GroupId[], dx: number, dy: number) {
+      noAnimation();
+      const moving = new Set(ids);
+      for (const g of groupIds) for (const id of groups.members(g)) moving.add(id);
+      for (const id of moving) {
+        const p = positions.get(id);
+        if (p) positions.set(id, { ...p, x: p.x + dx, y: p.y + dy });
+      }
+      bump();
     },
 
     setMode(m: LayoutMode, record = true) {
@@ -687,13 +729,8 @@ export function createNetModel(opts: NetModelOptions) {
       groups.dissolveAround(agents);
     },
 
-    setCollapsed(g: GroupId, collapsed: boolean) {
-      const grp = groups.groups.get(g);
-      if (!grp || grp.collapsed === collapsed) return;
-      checkpoint();
-      grp.collapsed = collapsed;
-      bump();
-    },
+    setCollapsed: (g: GroupId, collapsed: boolean) => setGroupsCollapsed([g], collapsed),
+    setGroupsCollapsed,
 
     /** Manual mode: move a view agent (a box moves its whole instance). Call `checkpoint` once before a drag. */
     moveAgent(viewId: AgentId, to: Pt) {
@@ -722,13 +759,8 @@ export function createNetModel(opts: NetModelOptions) {
     },
 
     /** Manual mode: turn an agent to point the other way. */
-    flipAgent(viewId: AgentId) {
-      const p = positions.get(viewId);
-      if (!p || mode() !== "manual" || view().box.has(viewId)) return;
-      checkpoint();
-      positions.set(viewId, { ...p, orient: p.orient === "down" ? "up" : "down" });
-      bump();
-    },
+    flipAgent: (viewId: AgentId) => flipAgents([viewId]),
+    flipAgents,
 
     /** Lay the net out afresh, forgetting where things were. */
     tidy() {

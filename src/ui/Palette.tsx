@@ -22,7 +22,10 @@ interface Carry {
 export function Palette(props: { ed: Editor; camera: Camera }) {
   const ed = props.ed;
   const m = ed.model;
-  const editing = ed.agentOpen;
+  const editing = () => {
+    const screen = ed.screen();
+    return screen.kind === "agent" ? screen.id : undefined;
+  };
   const setEditing = (id: string | undefined) => (id ? ed.openAgent(id) : ed.closeAgent());
   const [carry, setCarry] = createSignal<Carry>();
   const [gridOpen, setGridOpen] = createSignal(false);
@@ -54,8 +57,8 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       if (!dragging) return open();
       const at = props.camera.toWorld(ev.clientX, ev.clientY);
       if (!at || overChrome(ev)) return;
-      if (what.kind === "type") m.addAgent(what.id, at);
-      else m.addComponent(what.id, at);
+      if (what.kind === "type") ed.dispatch({ kind: "net/add-agent", type: what.id, at });
+      else ed.dispatch({ kind: "net/add-component", id: what.id, at });
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);

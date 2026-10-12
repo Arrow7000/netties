@@ -80,8 +80,8 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
       else if (e.key === "Delete" || e.key === "Backspace") rhs.deleteSelection();
       else if (e.key === "Escape") {
         if (rhs.selection() || rhs.armed()) {
-          rhs.setSelection(undefined);
-          rhs.setArmed(undefined);
+          rhs.clearSelection();
+          rhs.clearArmed();
         } else ed.closeRule();
       }
     };

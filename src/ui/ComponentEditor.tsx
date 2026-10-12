@@ -41,8 +41,8 @@ export function ComponentEditor(props: { ed: Editor; id: string }) {
       else if (e.key === "Delete" || e.key === "Backspace") m.deleteSelection();
       else if (e.key === "Escape") {
         if (m.selection() || m.armed()) {
-          m.setSelection(undefined);
-          m.setArmed(undefined);
+          m.clearSelection();
+          m.clearArmed();
         } else ed.closeComponent();
       }
     };

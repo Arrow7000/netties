@@ -269,7 +269,7 @@ export function Canvas(props: CanvasProps) {
     if (ed.mode() !== "manual") return;
     const s = ed.selection();
     if (s?.kind !== "items") return;
-    ed.checkpoint();
+    ed.beginSelectionMove();
     setDrag({ kind: "move", ids: [...s.agents], groups: [...s.groups], last: w, moved: false });
   };
 
@@ -351,12 +351,7 @@ export function Canvas(props: CanvasProps) {
       const w = toWorld(e);
       const dx = w.x - d.last.x;
       const dy = w.y - d.last.y;
-      for (const id of d.ids) {
-        const p = ed.positions.get(id);
-        if (p) ed.positions.set(id, { ...p, x: p.x + dx, y: p.y + dy });
-      }
-      for (const g of d.groups) ed.moveGroup(g, dx, dy);
-      ed.bump();
+      ed.moveSelectionBy(d.ids, d.groups, dx, dy);
       setDrag({ ...d, last: w, moved: true });
     }
   };
@@ -383,7 +378,7 @@ export function Canvas(props: CanvasProps) {
     if (!d) return;
     if (d.kind === "marquee") {
       if (d.moved) ed.pickMany(marqueed(d), d.additive);
-      else if (!d.additive) ed.setSelection(undefined);
+      else if (!d.additive) ed.clearSelection();
     }
     if (d.kind === "wire") {
       if (!d.target) ed.finishGesture(d.g);
@@ -393,7 +388,7 @@ export function Canvas(props: CanvasProps) {
       const alt = d.alt || e.altKey;
       if (ed.activeWires().has(d.id) && !alt && props.onFire) props.onFire(d.id);
       else if (ed.stuckWires().has(d.id) && !alt && props.onStuck) props.onStuck(d.id);
-      else ed.setSelection({ kind: "wire", id: d.id });
+      else ed.selectWire(d.id);
     }
     ed.setHover(hoverAt(document.elementFromPoint(e.clientX, e.clientY)));
   };

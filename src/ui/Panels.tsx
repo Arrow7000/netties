@@ -409,7 +409,7 @@ export function SelectionPanel(props: { ed: Editor }) {
                 disabled={breaks(t.id) > 0}
                 note={breaks(t.id) ? `Its ports wouldn't fit ${breaks(t.id) === 1 ? "1 wire" : `${breaks(t.id)} wires`}` : undefined}
                 onClick={() => {
-                  m.changeType(agents, t.id);
+                  ed.dispatch({ kind: "selection/change-type", agents, type: t.id });
                   close();
                 }}
               />
@@ -419,7 +419,7 @@ export function SelectionPanel(props: { ed: Editor }) {
       },
       {
         label: "Flip",
-        run: () => agents.forEach((a) => m.flipAgent(a)),
+        run: () => ed.dispatch({ kind: "selection/flip", agents }),
         why: m.mode() !== "manual" ? "Auto layout decides which way agents point." : !agents.length ? "Components don't flip." : undefined,
       },
       {
@@ -428,7 +428,7 @@ export function SelectionPanel(props: { ed: Editor }) {
       },
       {
         label: groups.length && !allCollapsed ? "Collapse" : "Expand",
-        run: () => groups.forEach((g) => m.setCollapsed(g, !allCollapsed)),
+        run: () => ed.dispatch({ kind: "component/set-collapsed", groups, collapsed: !allCollapsed }),
         why: groups.length ? undefined : "There are no components in the selection.",
       },
       {
@@ -461,7 +461,7 @@ export function SelectionPanel(props: { ed: Editor }) {
           } as Info,
           actions: (active
             ? [
-                { label: "Fire", primary: true, run: () => ed.fire(s.id) },
+                { label: "Fire", primary: true, run: () => ed.dispatch({ kind: "run/fire", wire: s.id }) },
                 { label: "Open rule", run: () => ed.openRule(types[0], types[1]) },
               ]
             : [{ label: "Write rule", primary: true, run: () => ed.openRule(types[0], types[1]) }]) as Action[],
@@ -546,7 +546,7 @@ export function SelectionPanel(props: { ed: Editor }) {
                   )
                 }
               </For>
-              <button class="btn small icon danger push" title="Delete (⌫)" onClick={() => m.deleteSelection()}>
+              <button class="btn small icon danger push" title="Delete (⌫)" onClick={() => ed.dispatch({ kind: "selection/delete" })}>
                 <Trash />
               </button>
             </div>

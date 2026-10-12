@@ -5,12 +5,43 @@ import { type AgentId, type AgentType, Net, type WireId } from "../core/net";
 import { type Stats, type StepRecord, emptyStats, interact, isActive, parallelStep } from "../core/reduce";
 import { type Rule, System, type SystemJSON, pairKey } from "../core/system";
 import { type PortSpec, type Typing, badWires, canMeet, flip, specOf } from "../core/types";
-import type { Placed, Placement } from "../layout/geometry";
+import type { Placed, Placement, Pt } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
 import { createNetModel } from "./model";
 import { type Doc, decode, saveLocal } from "./persist";
 
 export type { Layout, Selection } from "./model";
+
+/** The one workspace shown over the main net. These states are mutually exclusive. */
+export type Screen =
+  | { kind: "net" }
+  | { kind: "rule"; left: string; right: string }
+  | { kind: "component"; id: string }
+  | { kind: "translation" }
+  | { kind: "text" }
+  | { kind: "types" }
+  | { kind: "agent"; id: string | "new" };
+
+/** Semantic application messages. High-frequency canvas gestures stay local to Canvas. */
+export type EditorMsg =
+  | { kind: "screen/open"; screen: Exclude<Screen, { kind: "net" }> }
+  | { kind: "screen/close" }
+  | { kind: "run/step-one" }
+  | { kind: "run/step-all" }
+  | { kind: "run/fire"; wire: WireId }
+  | { kind: "run/toggle" }
+  | { kind: "run/stop" }
+  | { kind: "history/undo" }
+  | { kind: "history/redo" }
+  | { kind: "selection/clear" }
+  | { kind: "selection/delete" }
+  | { kind: "selection/change-type"; agents: AgentId[]; type: string }
+  | { kind: "selection/flip"; agents: AgentId[] }
+  | { kind: "component/set-collapsed"; groups: GroupId[]; collapsed: boolean }
+  | { kind: "net/add-agent"; type: string; at?: Pt }
+  | { kind: "net/add-component"; id: string; at?: Pt }
+  | { kind: "layout/set"; mode: "auto" | "manual" }
+  | { kind: "layout/tidy" };
 
 /** The main editor: a net model plus the interaction system, reduction, and saving. */
 export function createEditor(initial: Doc | undefined) {
@@ -60,26 +91,32 @@ export function createEditor(initial: Doc | undefined) {
     setStats(emptyStats());
     setSteps(0);
   };
-  /** The pair whose rule is open in the rule editor. */
-  const [ruleOpen, setRuleOpen] = createSignal<[string, string]>();
-  /** The component open in the component editor. */
-  const [componentOpen, setComponentOpen] = createSignal<string>();
-  const [translateOpen, setTranslateOpen] = createSignal(false);
-  const [textOpen, setTextOpen] = createSignal(false);
-  /** The directions and types sheet. */
-  const [typesOpen, setTypesOpen] = createSignal(false);
-  /** The agent open in the agent editor, or "new" for one being made. */
-  const [agentOpen, setAgentOpen] = createSignal<string>();
+  const [screen, setScreen] = createSignal<Screen>({ kind: "net" });
 
   /** Changes to the net or to the system. */
   const rev = createMemo(() => model.rev() + sysRev() * 1e6);
+
+  /**
+   * One durable system edit is one undo entry and one reactive revision.
+   * Keeping this protocol here prevents callers from forgetting one of the
+   * checkpoint/touch/bump steps when an edit spans System and Net.
+   */
+  const commitSystemEdit = <T>(edit: () => T): T => {
+    return batch(() => {
+      model.checkpoint();
+      const result = edit();
+      touchSystem();
+      model.bump();
+      return result;
+    });
+  };
 
   const toDoc = (): Doc => ({
     v: 1,
     system: system.toJSON(),
     net: model.net.toJSON(),
     mode: model.mode(),
-    positions: model.mode() === "manual" ? [...model.positions] : undefined,
+    positions: model.mode() === "manual" ? model.savedPositions() : undefined,
     components: [...library.values()],
     groups: model.groups.toJSON(),
   });
@@ -112,9 +149,9 @@ export function createEditor(initial: Doc | undefined) {
     const cx = old.reduce((s, p) => s + p.x, 0) / Math.max(1, old.length);
     const cy = old.reduce((s, p) => s + p.y, 0) / Math.max(1, old.length);
     created.forEach((id, i) =>
-      model.positions.set(id, { x: cx + (i - (created.length - 1) / 2) * 44, y: cy, orient: i % 2 ? "up" : "down" }),
+      model.setPosition(id, { x: cx + (i - (created.length - 1) / 2) * 44, y: cy, orient: i % 2 ? "up" : "down" }),
     );
-    removed.forEach((id) => model.positions.delete(id));
+    removed.forEach((id) => model.deletePosition(id));
   };
 
   const fire = (w: WireId) => {
@@ -139,7 +176,7 @@ export function createEditor(initial: Doc | undefined) {
       setMessage((e as Error).message);
     }
     if (recs.length) setSteps((n) => n + 1);
-    model.setSelection(undefined);
+    model.clearSelection();
     model.bump();
     model.animate(snap, recs, false, stepDuration());
   };
@@ -162,7 +199,7 @@ export function createEditor(initial: Doc | undefined) {
     }
     setStats(s);
     if (recs.length) setSteps((n) => n + 1);
-    model.setSelection(undefined);
+    model.clearSelection();
     model.bump();
     model.animate(snap, recs, false, stepDuration());
     return recs.length > 0;
@@ -188,6 +225,77 @@ export function createEditor(initial: Doc | undefined) {
     timer = setTimeout(tick, 0);
   };
 
+  /**
+   * The application boundary for durable user intentions. Pointer movement,
+   * camera motion and animation frames deliberately do not pass through it.
+   */
+  const dispatch = (msg: EditorMsg): void => {
+    switch (msg.kind) {
+      case "screen/open":
+        if (msg.screen.kind === "translation") {
+          if (model.net.unconnected().length) {
+            setMessage("Wire up every port before translating.");
+            return;
+          }
+          stop();
+        }
+        setScreen(msg.screen);
+        return;
+      case "screen/close":
+        setScreen({ kind: "net" });
+        return;
+      case "run/step-one":
+        stepOne();
+        return;
+      case "run/step-all":
+        stepAll();
+        return;
+      case "run/fire":
+        fire(msg.wire);
+        return;
+      case "run/toggle":
+        run();
+        return;
+      case "run/stop":
+        stop();
+        return;
+      case "history/undo":
+        model.undo();
+        if (undoable()) setMessage(undefined);
+        return;
+      case "history/redo":
+        model.redo();
+        return;
+      case "selection/clear":
+        model.clearSelection();
+        return;
+      case "selection/delete":
+        model.deleteSelection();
+        return;
+      case "selection/change-type":
+        model.changeType(msg.agents, msg.type);
+        return;
+      case "selection/flip":
+        model.flipAgents(msg.agents);
+        return;
+      case "component/set-collapsed":
+        model.setGroupsCollapsed(msg.groups, msg.collapsed);
+        return;
+      case "net/add-agent":
+        model.addAgent(msg.type, msg.at);
+        return;
+      case "net/add-component":
+        model.addComponent(msg.id, msg.at);
+        return;
+      case "layout/set":
+        model.setMode(msg.mode);
+        return;
+      case "layout/tidy":
+        model.tidy();
+        return;
+    }
+  };
+
   /** Manual mode: lay a fresh instance's agents out around a point, as its definition would be drawn. */
   const placeInstance = (agents: AgentId[], def: ComponentDef, at: { x: number; y: number }) => {
     if (model.mode() !== "manual") return;
@@ -199,7 +307,7 @@ export function createEditor(initial: Doc | undefined) {
     [...src.agents.keys()].forEach((id, i) => {
       const p = l.placement.get(id);
       const a = agents[i];
-      if (p && a !== undefined) model.positions.set(a, { ...p, x: p.x - cx + at.x, y: p.y - cy + at.y });
+      if (p && a !== undefined) model.setPosition(a, { ...p, x: p.x - cx + at.x, y: p.y - cy + at.y });
     });
   };
 
@@ -228,13 +336,13 @@ export function createEditor(initial: Doc | undefined) {
     const shown = model.layout().placement;
     for (const g of topmost(model.groups, changed)) {
       const members = model.groups.members(g);
-      const ps = members.map((a) => model.positions.get(a)).filter((p) => !!p);
+      const ps = members.map((a) => model.positionOf(a)).filter((p) => !!p);
       const center = ps.length
         ? { x: ps.reduce((s, p) => s + p!.x, 0) / ps.length, y: ps.reduce((s, p) => s + p!.y, 0) / ps.length }
         : (shown.get(-g) ?? { x: 0, y: 0 });
       const def = library.get(model.groups.groups.get(g)!.def)!;
       const fresh = refresh(model.net, model.groups, g, def, system);
-      members.forEach((a) => model.positions.delete(a));
+      members.forEach((a) => model.deletePosition(a));
       placeInstance(fresh, def, center);
     }
   };
@@ -272,6 +380,8 @@ export function createEditor(initial: Doc | undefined) {
 
   return {
     model,
+    dispatch,
+    screen,
     rev,
     get net() {
       return model.net;
@@ -299,9 +409,8 @@ export function createEditor(initial: Doc | undefined) {
     stop,
     toDoc,
     save: () => saveLocal(toDoc()),
-    ruleOpen,
-    openRule: (a: string, b: string) => setRuleOpen([a, b]),
-    closeRule: () => setRuleOpen(undefined),
+    openRule: (left: string, right: string) => dispatch({ kind: "screen/open", screen: { kind: "rule", left, right } }),
+    closeRule: () => dispatch({ kind: "screen/close" }),
 
     load(doc: Doc) {
       stop();
@@ -340,9 +449,7 @@ export function createEditor(initial: Doc | undefined) {
     },
 
     addType(t: AgentType) {
-      model.checkpoint();
-      system.addType(t);
-      touchSystem();
+      commitSystemEdit(() => system.addType(t));
     },
 
     /**
@@ -350,12 +457,11 @@ export function createEditor(initial: Doc | undefined) {
      * from the net, and their rules; wires that stop fitting are cut.
      */
     updateType(id: string, t: Omit<AgentType, "id">) {
-      model.checkpoint();
-      if (system.type(id).arity !== t.arity) dropType(id);
-      system.types.set(id, { ...t, id });
-      const n = enforceTypes();
-      touchSystem();
-      model.bump();
+      const n = commitSystemEdit(() => {
+        if (system.type(id).arity !== t.arity) dropType(id);
+        system.types.set(id, { ...t, id });
+        return enforceTypes();
+      });
       if (n) notify(cutMessage(n), true);
     },
 
@@ -369,37 +475,35 @@ export function createEditor(initial: Doc | undefined) {
 
     /** Set one port's direction or type (or label), from the directions and types sheet. */
     setPort(id: string, slot: number, patch: Partial<PortSpec>) {
-      model.checkpoint();
-      const t = system.type(id);
-      const ports = Array.from({ length: t.arity + 1 }, (_, s) => ({ ...(t.ports?.[s] ?? {}) }));
-      ports[slot] = { ...ports[slot], ...patch };
-      for (const k of ["pol", "type", "label"] as const) if (ports[slot]![k] === undefined) delete ports[slot]![k];
-      withPorts(id, ports);
-      const n = enforceTypes();
-      touchSystem();
-      model.bump();
+      const n = commitSystemEdit(() => {
+        const t = system.type(id);
+        const ports = Array.from({ length: t.arity + 1 }, (_, s) => ({ ...(t.ports?.[s] ?? {}) }));
+        ports[slot] = { ...ports[slot], ...patch };
+        for (const k of ["pol", "type", "label"] as const) if (ports[slot]![k] === undefined) delete ports[slot]![k];
+        withPorts(id, ports);
+        return enforceTypes();
+      });
       if (n) notify(cutMessage(n), true);
     },
 
     /** Change how strict the system is. Turning a dimension off forgets it on every port. */
     setTyping(next: Partial<Typing>) {
-      model.checkpoint();
-      const typing = { ...system.typing, ...next };
-      for (const t of [...system.types.values()]) {
-        if (!t.ports) continue;
-        const ports = t.ports.map((p) => {
-          const q = { ...p };
-          if (typing.dirs === "off") delete q.pol;
-          if (typing.types === "off") delete q.type;
-          return q;
-        });
-        system.types.set(t.id, { ...t, ports });
-      }
-      if (typing.types === "off") typing.names = [];
-      system.typing = typing;
-      const n = enforceTypes();
-      touchSystem();
-      model.bump();
+      const n = commitSystemEdit(() => {
+        const typing = { ...system.typing, ...next };
+        for (const t of [...system.types.values()]) {
+          if (!t.ports) continue;
+          const ports = t.ports.map((p) => {
+            const q = { ...p };
+            if (typing.dirs === "off") delete q.pol;
+            if (typing.types === "off") delete q.type;
+            return q;
+          });
+          system.types.set(t.id, { ...t, ports });
+        }
+        if (typing.types === "off") typing.names = [];
+        system.typing = typing;
+        return enforceTypes();
+      });
       if (n) notify(cutMessage(n), true);
     },
 
@@ -409,9 +513,9 @@ export function createEditor(initial: Doc | undefined) {
       if (!n) return "Give it a name.";
       if (system.typing.names.includes(n)) return `There's already a type called ${n}.`;
       if (/[\s,;()~"+]/.test(n) || n.startsWith("-")) return "Use letters, digits, - and _ only.";
-      model.checkpoint();
-      system.typing = { ...system.typing, names: [...system.typing.names, n] };
-      touchSystem();
+      commitSystemEdit(() => {
+        system.typing = { ...system.typing, names: [...system.typing.names, n] };
+      });
       return undefined;
     },
 
@@ -427,25 +531,23 @@ export function createEditor(initial: Doc | undefined) {
       if (!n || n === from) return;
       if (system.typing.names.includes(n)) return `There's already a type called ${n}.`;
       if (/[\s,;()~"+]/.test(n) || n.startsWith("-")) return "Use letters, digits, - and _ only.";
-      model.checkpoint();
-      system.typing = { ...system.typing, names: system.typing.names.map((x) => (x === from ? n : x)) };
-      for (const t of [...system.types.values()]) {
-        if (t.ports?.some((p) => p.type === from)) withPorts(t.id, t.ports.map((p) => (p.type === from ? { ...p, type: n } : p)));
-      }
-      touchSystem();
-      model.bump();
+      commitSystemEdit(() => {
+        system.typing = { ...system.typing, names: system.typing.names.map((x) => (x === from ? n : x)) };
+        for (const t of [...system.types.values()]) {
+          if (t.ports?.some((p) => p.type === from)) withPorts(t.id, t.ports.map((p) => (p.type === from ? { ...p, type: n } : p)));
+        }
+      });
     },
 
     /** Forget a type: its ports fit anything again, so no wire breaks. */
     deleteTypeName(name: string) {
-      model.checkpoint();
-      system.typing = { ...system.typing, names: system.typing.names.filter((x) => x !== name) };
-      for (const t of [...system.types.values()]) {
-        if (!t.ports?.some((p) => p.type === name)) continue;
-        withPorts(t.id, t.ports.map((p) => { if (p.type !== name) return p; const { type: _, ...rest } = p; return rest; }));
-      }
-      touchSystem();
-      model.bump();
+      commitSystemEdit(() => {
+        system.typing = { ...system.typing, names: system.typing.names.filter((x) => x !== name) };
+        for (const t of [...system.types.values()]) {
+          if (!t.ports?.some((p) => p.type === name)) continue;
+          withPorts(t.id, t.ports.map((p) => { if (p.type !== name) return p; const { type: _, ...rest } = p; return rest; }));
+        }
+      });
     },
 
     /** Fill in missing directions and types from what the ports are wired to on the canvas. Returns how many it filled. */
@@ -468,42 +570,38 @@ export function createEditor(initial: Doc | undefined) {
       }
       const n = [...guesses.values()].flat().reduce((k, g) => k + (g.pol ? 1 : 0) + (g.type ? 1 : 0), 0);
       if (!n) return 0;
-      model.checkpoint();
-      for (const [id, gs] of guesses) {
-        const t = system.type(id);
-        withPorts(id, Array.from({ length: t.arity + 1 }, (_, s) => ({ ...gs[s], ...(t.ports?.[s] ?? {}) })));
-      }
-      enforceTypes();
-      touchSystem();
-      model.bump();
+      commitSystemEdit(() => {
+        for (const [id, gs] of guesses) {
+          const t = system.type(id);
+          withPorts(id, Array.from({ length: t.arity + 1 }, (_, s) => ({ ...gs[s], ...(t.ports?.[s] ?? {}) })));
+        }
+        enforceTypes();
+      });
       return n;
     },
 
     removeType(id: string) {
-      model.checkpoint();
-      dropType(id);
-      system.types.delete(id);
-      if (model.armed() === id) model.setArmed(undefined);
-      touchSystem();
-      model.bump();
+      commitSystemEdit(() => {
+        dropType(id);
+        system.types.delete(id);
+        if (model.armed() === id) model.setArmed(undefined);
+      });
     },
 
     /** Save a rule from the rule editor, replacing any rule for the same pair. */
     saveRule(rule: Rule) {
-      model.checkpoint();
-      system.rules.delete(pairKey(rule.left, rule.right));
-      system.rules.delete(pairKey(rule.right, rule.left));
-      system.addRule(rule);
-      touchSystem();
-      model.bump();
+      commitSystemEdit(() => {
+        system.rules.delete(pairKey(rule.left, rule.right));
+        system.rules.delete(pairKey(rule.right, rule.left));
+        system.addRule(rule);
+      });
     },
 
     deleteRule(a: string, b: string) {
-      model.checkpoint();
-      system.rules.delete(pairKey(a, b));
-      system.rules.delete(pairKey(b, a));
-      touchSystem();
-      model.bump();
+      commitSystemEdit(() => {
+        system.rules.delete(pairKey(a, b));
+        system.rules.delete(pairKey(b, a));
+      });
     },
 
     defs,
@@ -512,34 +610,34 @@ export function createEditor(initial: Doc | undefined) {
     makeComponent(name: string, symbol: string): GroupId | undefined {
       const agents = model.selectedAgents();
       if (!agents.length) return;
-      model.checkpoint();
-      const gs = model.groups;
-      const inside = new Set(agents);
-      // Instances straddling the edge of the selection are broken up.
-      for (const g of [...gs.groups.keys()]) {
-        if (!gs.groups.has(g)) continue;
-        const ms = gs.members(g);
-        if (ms.some((a) => inside.has(a)) && !ms.every((a) => inside.has(a))) gs.dissolve(g);
-      }
-      const shown = model.layout().placement;
-      const xOf = (a: AgentId) => {
-        const p = shown.get(a);
-        if (p) return p.x;
-        const outer = gs.chain(gs.of.get(a)).find((h) => shown.has(-h));
-        return outer !== undefined ? shown.get(-outer)!.x : 0;
-      };
-      const id = slug(name);
-      const { def, boundary } = extract(model.net, gs, agents, { id, name: name.trim() || id, symbol }, (e) =>
-        e.kind === "port" ? xOf(e.agent) : 0,
-      );
-      library.set(id, def);
-      const g = gs.add({ def: id, iface: boundary, collapsed: true });
-      for (const h of gs.groups.values()) {
-        if (h.id !== g && h.parent === undefined && gs.members(h.id).every((a) => inside.has(a))) h.parent = g;
-      }
-      for (const a of agents) if (!gs.of.has(a)) gs.of.set(a, g);
-      touchSystem();
-      model.bump();
+      const g = commitSystemEdit(() => {
+        const gs = model.groups;
+        const inside = new Set(agents);
+        // Instances straddling the edge of the selection are broken up.
+        for (const candidate of [...gs.groups.keys()]) {
+          if (!gs.groups.has(candidate)) continue;
+          const ms = gs.members(candidate);
+          if (ms.some((a) => inside.has(a)) && !ms.every((a) => inside.has(a))) gs.dissolve(candidate);
+        }
+        const shown = model.layout().placement;
+        const xOf = (a: AgentId) => {
+          const p = shown.get(a);
+          if (p) return p.x;
+          const outer = gs.chain(gs.of.get(a)).find((h) => shown.has(-h));
+          return outer !== undefined ? shown.get(-outer)!.x : 0;
+        };
+        const id = slug(name);
+        const { def, boundary } = extract(model.net, gs, agents, { id, name: name.trim() || id, symbol }, (e) =>
+          e.kind === "port" ? xOf(e.agent) : 0,
+        );
+        library.set(id, def);
+        const group = gs.add({ def: id, iface: boundary, collapsed: true });
+        for (const h of gs.groups.values()) {
+          if (h.id !== group && h.parent === undefined && gs.members(h.id).every((a) => inside.has(a))) h.parent = group;
+        }
+        for (const a of agents) if (!gs.of.has(a)) gs.of.set(a, group);
+        return group;
+      });
       model.pickGroup(g);
       return g;
     },
@@ -551,33 +649,31 @@ export function createEditor(initial: Doc | undefined) {
       for (const w of net.wires.values()) {
         if (w.ends[0].kind === "free" && w.ends[1].kind === "free") return "Interface ports can't be wired straight to each other.";
       }
-      model.checkpoint();
-      const names = [...net.free.keys()];
-      const iface = [...old.iface.filter((n) => names.includes(n)), ...names.filter((n) => !old.iface.includes(n))];
-      library.set(id, { ...old, ...meta, net: net.toJSON(), groups: groups.toJSON(), iface });
-      propagate(id);
-      touchSystem();
-      model.bump();
+      commitSystemEdit(() => {
+        const names = [...net.free.keys()];
+        const iface = [...old.iface.filter((n) => names.includes(n)), ...names.filter((n) => !old.iface.includes(n))];
+        library.set(id, { ...old, ...meta, net: net.toJSON(), groups: groups.toJSON(), iface });
+        propagate(id);
+      });
       return undefined;
     },
 
     /** Start a new, empty component. Returns its id, for opening in the component editor. */
     newComponent(): string {
-      model.checkpoint();
-      const id = slug("component");
-      library.set(id, { id, name: "New component", symbol: "C", net: new Net().toJSON(), groups: new Groups().toJSON(), iface: [] });
-      touchSystem();
-      return id;
+      return commitSystemEdit(() => {
+        const id = slug("component");
+        library.set(id, { id, name: "New component", symbol: "C", net: new Net().toJSON(), groups: new Groups().toJSON(), iface: [] });
+        return id;
+      });
     },
 
     deleteComponent(id: string): string | undefined {
       const users = [...library.values()].filter((d) => d.id !== id && d.groups.groups.some((g) => g.def === id));
       if (users.length) return `It's used inside ${users.map((u) => u.name).join(", ")}.`;
-      model.checkpoint();
-      for (const g of [...model.groups.groups.values()]) if (g.def === id && model.groups.groups.has(g.id)) model.groups.dissolve(g.id);
-      library.delete(id);
-      touchSystem();
-      model.bump();
+      commitSystemEdit(() => {
+        for (const g of [...model.groups.groups.values()]) if (g.def === id && model.groups.groups.has(g.id)) model.groups.dissolve(g.id);
+        library.delete(id);
+      });
       return undefined;
     },
 
@@ -587,24 +683,20 @@ export function createEditor(initial: Doc | undefined) {
       if (s?.kind !== "items" || !s.groups.size) return;
       model.checkpoint();
       for (const g of s.groups) if (model.groups.groups.has(g)) model.groups.dissolve(g);
-      model.setSelection(undefined);
+      model.clearSelection();
       model.bump();
     },
 
     addComponent(id: string) {
-      const g = model.addComponent(id);
-      if (g !== undefined) model.bump();
+      model.addComponent(id);
     },
 
-    agentOpen,
-    openAgent: (id: string) => setAgentOpen(id),
-    closeAgent: () => setAgentOpen(undefined),
-    typesOpen,
-    openTypes: () => setTypesOpen(true),
-    closeTypes: () => setTypesOpen(false),
-    textOpen,
-    openText: () => setTextOpen(true),
-    closeText: () => setTextOpen(false),
+    openAgent: (id: string | "new") => dispatch({ kind: "screen/open", screen: { kind: "agent", id } }),
+    closeAgent: () => dispatch({ kind: "screen/close" }),
+    openTypes: () => dispatch({ kind: "screen/open", screen: { kind: "types" } }),
+    closeTypes: () => dispatch({ kind: "screen/close" }),
+    openText: () => dispatch({ kind: "screen/open", screen: { kind: "text" } }),
+    closeText: () => dispatch({ kind: "screen/close" }),
     /** Replace everything with a parsed system and net. */
     loadParsed(sys: System, net: Net) {
       stop();
@@ -622,17 +714,11 @@ export function createEditor(initial: Doc | undefined) {
       model.requestFit();
       return n;
     },
-    translateOpen,
     /** Open the combinator translation, if the net is ready for it. */
-    openTranslate() {
-      if (model.net.unconnected().length) return setMessage("Wire up every port before translating.");
-      stop();
-      setTranslateOpen(true);
-    },
-    closeTranslate: () => setTranslateOpen(false),
-    componentOpen,
-    openComponent: (id: string) => setComponentOpen(id),
-    closeComponent: () => setComponentOpen(undefined),
+    openTranslate: () => dispatch({ kind: "screen/open", screen: { kind: "translation" } }),
+    closeTranslate: () => dispatch({ kind: "screen/close" }),
+    openComponent: (id: string) => dispatch({ kind: "screen/open", screen: { kind: "component", id } }),
+    closeComponent: () => dispatch({ kind: "screen/close" }),
 
     examples,
     init() {
