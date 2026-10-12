@@ -4,3 +4,9 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+[[redirects]]
+  from = "https://netties-936.netlify.app/*"
+  to = "https://netties.adler.dev/:splat"
+  status = 301
+  force = true
