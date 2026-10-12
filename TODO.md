@@ -32,6 +32,8 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
 
 ## Rough edges in directions and types
 
+- SVG export omits the direction arrows shown on the canvas, so a directed
+  net loses its flow cues when exported.
 - The agent editor covers the canvas, so the wires it would cut (marked
   red) are often hidden. The prototype slid the canvas aside.
 - The combinator translation ignores types; for systems with directions it
