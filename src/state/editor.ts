@@ -796,7 +796,7 @@ export function createEditor(initial: Doc | undefined) {
       const pieceGroups = "v" in src ? Groups.fromJSON(src.groups) : new Groups();
       const rel = new Map("v" in src ? src.positions : []);
       const components = "v" in src ? src.components : [];
-      if (!piece.agents.size) return "There are no agents to paste.";
+      if (!piece.agents.size && !piece.wires.size) return "There's nothing to paste.";
       const plan = mergePlan(system, from);
       if ("error" in plan) return plan.error;
       // Instances of components that are neither here nor in the clip become plain agents.

@@ -363,7 +363,8 @@ export function SelectionPanel(props: { ed: Editor }) {
     m.rev();
     const groups = [...s.groups].filter((g) => m.groups.groups.has(g));
     const agents = [...s.agents].filter((a) => m.net.agents.has(a));
-    return agents.length + groups.length ? { agents, groups } : undefined;
+    const wires = [...s.wires].filter((w) => m.view().net.wires.has(w));
+    return agents.length + groups.length + wires.length ? { agents, groups, wires } : undefined;
   };
 
   const itemActions = (agents: AgentId[], groups: GroupId[]): Action[] => {
@@ -475,13 +476,16 @@ export function SelectionPanel(props: { ed: Editor }) {
     }
     const it = items();
     if (!it) return undefined;
-    const { agents, groups } = it;
+    const { agents, groups, wires } = it;
     const count = [
       agents.length ? (agents.length === 1 ? "1 agent" : `${agents.length} agents`) : "",
       groups.length ? (groups.length === 1 ? "1 component" : `${groups.length} components`) : "",
+      wires.length ? (wires.length === 1 ? "1 wire" : `${wires.length} wires`) : "",
     ]
       .filter(Boolean)
       .join(", ");
+    // Wires only: there's nothing to do with them here but delete or copy them.
+    if (!agents.length && !groups.length) return { info: { title: count, lines: [] } as Info, actions: [] as Action[] };
     let title: JSX.Element = `${agents.length + groups.length} selected`;
     if (agents.length === 1 && !groups.length) {
       const t = ed.system.types.get(m.net.agent(agents[0]!).type);

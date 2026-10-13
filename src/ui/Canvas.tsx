@@ -401,20 +401,26 @@ export function Canvas(props: CanvasProps) {
     }
   };
 
-  /** View agents inside a marquee. */
+  /** View agents inside a marquee, and the wires with both ends inside it. */
   const marqueed = (d: Extract<Drag, { kind: "marquee" }>) => {
     const x0 = Math.min(d.start.x, d.cur.x);
     const x1 = Math.max(d.start.x, d.cur.x);
     const y0 = Math.min(d.start.y, d.cur.y);
     const y1 = Math.max(d.start.y, d.cur.y);
-    return [...ed.layout().placement]
-      .filter(([id, p]) => ed.view().net.agents.has(id) && p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1)
-      .map(([id]) => id);
+    const within = (p: Pt) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
+    const l = ed.layout();
+    const v = ed.view().net;
+    const agents = new Set([...l.placement].filter(([id, p]) => v.agents.has(id) && within(p)).map(([id]) => id));
+    // A loose end is inside when the spot it's drawn at is.
+    const inside = (e: End) => (e.kind === "port" ? agents.has(e.agent) : !!l.routed.free.get(e.name) && within(l.routed.free.get(e.name)!));
+    const wires = [...v.wires.values()].filter((w) => inside(w.ends[0]) && inside(w.ends[1])).map((w) => w.id);
+    return { agents, wires };
   };
   const preselected = createMemo(() => {
     const d = drag();
-    return d?.kind === "marquee" && d.moved ? new Set(marqueed(d)) : new Set<AgentId>();
+    return d?.kind === "marquee" && d.moved ? marqueed(d) : { agents: new Set<AgentId>(), wires: [] as WireId[] };
   });
+  const preselectedWires = createMemo(() => new Set(preselected().wires));
 
   const onPointerUp = (e: PointerEvent) => {
     const d = drag();
@@ -423,7 +429,10 @@ export function Canvas(props: CanvasProps) {
     if (!d) return;
     if (d.kind === "move" && ed.mode() === "auto") ed.endAutoSelectionMove();
     if (d.kind === "marquee") {
-      if (d.moved) ed.pickMany(marqueed(d), d.additive);
+      if (d.moved) {
+        const { agents, wires } = marqueed(d);
+        ed.pickMany([...agents], wires, d.additive);
+      }
       else if (!d.additive) ed.clearSelection();
     }
     if (d.kind === "wire") {
@@ -659,6 +668,7 @@ export function Canvas(props: CanvasProps) {
                   hidden={carried() === id}
                   highlighted={highlighted().has(id)}
                   fading={!!firing()?.wires.has(id)}
+                  pre={preselectedWires().has(id)}
                 />
               )}
             </For>
@@ -668,7 +678,7 @@ export function Canvas(props: CanvasProps) {
                   ed={ed}
                   system={sys}
                   id={id}
-                  pre={preselected().has(id)}
+                  pre={preselected().agents.has(id)}
                   fading={!!firing()?.agents.has(id)}
                   endState={endState}
                   readonly={props.readonly}
@@ -1005,6 +1015,8 @@ function Wire(props: {
   plain?: boolean;
   hidden?: boolean;
   highlighted?: boolean;
+  /** Inside the drag selection being drawn. */
+  pre?: boolean;
   /** Taken away, or rerouted, by the step being previewed. */
   fading?: boolean;
 }) {
@@ -1033,7 +1045,7 @@ function Wire(props: {
   };
   const sel = () => {
     const s = ed.selection();
-    return s?.kind === "wire" && s.id === props.id;
+    return (s?.kind === "wire" && s.id === props.id) || (s?.kind === "items" && s.wires.has(props.id)) || !!props.pre;
   };
   const hot = () => {
     const h = ed.hover();

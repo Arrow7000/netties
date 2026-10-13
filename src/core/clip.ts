@@ -141,7 +141,8 @@ export function mergePlan(into: System, from: System): { error: string } | { typ
 
 /**
  * Add a piece to a net under fresh ids and fresh loose-end names. Returns
- * the new agents (by the piece's ids) and the new top-level instances.
+ * the new agents (by the piece's ids), the new top-level instances and
+ * the new wires.
  */
 export function graft(net: Net, groups: Groups, sys: System, piece: Net, pieceGroups: Groups, freeName: () => string) {
   const ids = new Map<AgentId, AgentId>();
@@ -157,7 +158,7 @@ export function graft(net: Net, groups: Groups, sys: System, piece: Net, pieceGr
     }
     return free(name);
   };
-  for (const w of piece.wires.values()) net.connect(map(w.ends[0]), map(w.ends[1]));
+  const wires = [...piece.wires.values()].map((w) => net.connect(map(w.ends[0]), map(w.ends[1])));
   const gmap = new Map<GroupId, GroupId>();
   const order = [...pieceGroups.groups.values()].sort((x, y) => pieceGroups.chain(x.id).length - pieceGroups.chain(y.id).length);
   for (const g of order) {
@@ -166,5 +167,5 @@ export function graft(net: Net, groups: Groups, sys: System, piece: Net, pieceGr
   }
   for (const [a, g] of pieceGroups.of) groups.of.set(ids.get(a)!, gmap.get(g)!);
   const top = order.filter((g) => g.parent === undefined).map((g) => gmap.get(g.id)!);
-  return { ids, groups: top };
+  return { ids, groups: top, wires };
 }

@@ -20,9 +20,13 @@ export interface Layout {
   columns?: Map<string, number>;
 }
 
-/** Selected agents and component instances, or one wire. */
+/**
+ * Selected agents, component instances and wires, or one clicked wire
+ * (which can fire or open its rule). A drag selection takes the wires with
+ * both ends inside it.
+ */
 export type Selection =
-  | { kind: "items"; agents: ReadonlySet<AgentId>; groups: ReadonlySet<GroupId> }
+  | { kind: "items"; agents: ReadonlySet<AgentId>; groups: ReadonlySet<GroupId>; wires: ReadonlySet<WireId> }
   | { kind: "wire"; id: WireId }
   | undefined;
 
@@ -312,6 +316,19 @@ export function createNetModel(opts: NetModelOptions) {
     if (s?.kind !== "items") return [];
     return [...new Set([...s.agents, ...[...s.groups].flatMap((g) => groups.members(g))])];
   };
+
+  /** The current items, as sets to add to, when `additive`; otherwise empty sets. */
+  const keptItems = (additive: boolean) => {
+    const s = selection();
+    const keep = additive && s?.kind === "items";
+    return {
+      agents: new Set<AgentId>(keep ? s.agents : []),
+      groups: new Set<GroupId>(keep ? s.groups : []),
+      wires: new Set<WireId>(keep ? s.wires : []),
+    };
+  };
+  const setItems = (agents: Set<AgentId>, groups: Set<GroupId>, wires: Set<WireId> = new Set()) =>
+    setSelection(agents.size || groups.size || wires.size ? { kind: "items", agents, groups, wires } : undefined);
 
   /** A view agent as something selectable: a real agent, or the instance a box stands for. */
   const itemOf = (viewId: AgentId): { agent: AgentId } | { group: GroupId } => {
@@ -622,33 +639,28 @@ export function createNetModel(opts: NetModelOptions) {
     /** Click on a view agent: select it, or with `additive` toggle it in the selection. */
     pick(viewId: AgentId, additive = false) {
       const it = itemOf(viewId);
-      const s = selection();
-      const agents = new Set(additive && s?.kind === "items" ? s.agents : []);
-      const gs = new Set(additive && s?.kind === "items" ? s.groups : []);
+      const { agents, groups: gs, wires } = keptItems(additive);
       if ("group" in it) gs.has(it.group) && additive ? gs.delete(it.group) : gs.add(it.group);
       else agents.has(it.agent) && additive ? agents.delete(it.agent) : agents.add(it.agent);
-      setSelection(agents.size || gs.size ? { kind: "items", agents, groups: gs } : undefined);
+      setItems(agents, gs, wires);
     },
 
     pickGroup(g: GroupId, additive = false) {
-      const s = selection();
-      const agents = new Set(additive && s?.kind === "items" ? s.agents : []);
-      const gs = new Set(additive && s?.kind === "items" ? s.groups : []);
+      const { agents, groups: gs, wires } = keptItems(additive);
       gs.add(g);
-      setSelection({ kind: "items", agents, groups: gs });
+      setItems(agents, gs, wires);
     },
 
-    /** Select every view agent in a list (from a marquee). */
-    pickMany(viewIds: AgentId[], additive = false) {
-      const s = selection();
-      const agents = new Set(additive && s?.kind === "items" ? s.agents : []);
-      const gs = new Set(additive && s?.kind === "items" ? s.groups : []);
+    /** Select view agents and wires (from a marquee). */
+    pickMany(viewIds: AgentId[], wireIds: WireId[] = [], additive = false) {
+      const { agents, groups: gs, wires } = keptItems(additive);
       for (const id of viewIds) {
         const it = itemOf(id);
         if ("group" in it) gs.add(it.group);
         else agents.add(it.agent);
       }
-      setSelection(agents.size || gs.size ? { kind: "items", agents, groups: gs } : undefined);
+      for (const w of wireIds) wires.add(w);
+      setItems(agents, gs, wires);
     },
 
     /** Begin one undoable selection move; subsequent pointer updates belong to this edit. */
@@ -709,7 +721,7 @@ export function createNetModel(opts: NetModelOptions) {
       const id = net.addAgent(opts.system().type(type));
       if (at && mode() === "manual") positions.set(id, { x: at.x, y: at.y, orient: "down" });
       else if (at) spawnAt.set(id, at);
-      setSelection({ kind: "items", agents: new Set([id]), groups: new Set<GroupId>() });
+      setItems(new Set([id]), new Set());
       bump();
       return id;
     },
@@ -731,7 +743,7 @@ export function createNetModel(opts: NetModelOptions) {
           positions.set(a, { ...p, x: p.x - cx + (at?.x ?? 0), y: p.y - cy + (at?.y ?? 0) });
         });
       }
-      setSelection({ kind: "items", agents: new Set<AgentId>(), groups: new Set([inst.group]) });
+      setItems(new Set(), new Set([inst.group]));
       bump();
       return inst.group;
     },
@@ -769,9 +781,11 @@ export function createNetModel(opts: NetModelOptions) {
      * the piece's middle.
      */
     copySelection() {
+      const s = selection();
       const agents = selectedAgents();
-      if (!agents.length) return undefined;
-      const piece = cutOut(net, groups, agents);
+      const wires = s?.kind === "items" ? [...s.wires].filter((w) => net.wires.has(w)) : [];
+      if (!agents.length && !wires.length) return undefined;
+      const piece = cutOut(net, groups, agents, wires);
       const shown = mode() === "manual" ? positions : positionsFromAuto(layout().placement);
       const ps = agents.map((a) => shown.get(a)).filter((p): p is Placed => !!p);
       const cx = ps.reduce((s, p) => s + p.x, 0) / Math.max(1, ps.length);
@@ -789,7 +803,7 @@ export function createNetModel(opts: NetModelOptions) {
      * types must already be in the system. Part of an edit already under way.
      */
     insertPiece(piece: Net, pieceGroups: Groups, rel: ReadonlyMap<AgentId, Placed>, at: Pt) {
-      const { ids, groups: top } = graft(net, groups, opts.system(), piece, pieceGroups, nextFreeName);
+      const { ids, groups: top, wires } = graft(net, groups, opts.system(), piece, pieceGroups, nextFreeName);
       for (const [old, id] of ids) {
         const p = rel.get(old) ?? { x: 0, y: 0, orient: "down" as const };
         const placed = { ...p, x: p.x + at.x, y: p.y + at.y };
@@ -797,7 +811,7 @@ export function createNetModel(opts: NetModelOptions) {
         else spawnAt.set(id, placed);
       }
       const loose = [...ids.values()].filter((id) => !groups.of.has(id));
-      setSelection({ kind: "items", agents: new Set(loose), groups: new Set(top) });
+      setItems(new Set(loose), new Set(top), new Set(wires));
     },
 
     deleteSelection() {
@@ -816,6 +830,13 @@ export function createNetModel(opts: NetModelOptions) {
           // Taking an agent out of an instance breaks it.
           groups.dissolveAround([a]);
           removeAgent(a);
+        }
+        // Wires left over: between loose ends, or into an instance kept whole.
+        for (const w of sel.wires) {
+          if (!net.wires.has(w)) continue;
+          const [a, b] = net.wire(w).ends;
+          for (const e of [a, b]) if (e.kind === "port") groups.dissolveAround([e.agent]);
+          detach(a);
         }
       } else if (sel.kind === "wire" && net.wires.has(sel.id)) {
         const [a, b] = net.wire(sel.id).ends;
