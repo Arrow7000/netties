@@ -1,11 +1,11 @@
-import { type AgentId, type End, type Net, type WireId, sameEnd } from "../core/net";
+import { type AgentId, type End, type Net, NONE, type WireId, free, port, sameEnd } from "../core/net";
 import { type StepRecord, interact, isActive } from "../core/reduce";
 import { ifaceName, interfacePins, ruleToNet } from "../core/ruleNet";
 import type { Rule, System } from "../core/system";
 import { flattenPath } from "../render/path";
 import { type Box, G, type Placed, type Placement, type Pt, type Terminal, boxOf, portPos } from "./geometry";
 import { autoLayout } from "./place";
-import { type Pins, type Routed, route } from "./route";
+import { type Pins, type RouteOptions, type Routed, crossings, length as pathLength, route } from "./route";
 
 /**
  * What firing active pairs will do, shown before it happens.
@@ -95,7 +95,8 @@ export function planSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], opt
   const plans = new Map<WireId, StepPlan>();
   const taken: Box[] = [];
   for (const w of ws) {
-    const p = planOne(net, sys, drawn, w, taken, opts);
+    // Routing each candidate for real is worth it for a few pairs, not for many.
+    const p = planOne(net, sys, drawn, w, taken, opts, ws.length <= ROUTED_PAIRS ? ROUTED_CANDIDATES : 1);
     if (!p) continue;
     plans.set(w, p);
     taken.push(p.frame);
@@ -107,8 +108,19 @@ export function planSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], opt
 const GRID = 16;
 /** Room left between a pair and its frame. */
 const CLEAR = 22;
+/** How many of the best-looking places to route for real before choosing, and for up to how many pairs at once. */
+const ROUTED_CANDIDATES = 8;
+const ROUTED_PAIRS = 4;
 
-function planOne(net: Net, sys: System, drawn: Drawn, w: WireId, taken: Box[], opts: PlanOptions): StepPlan | undefined {
+function planOne(
+  net: Net,
+  sys: System,
+  drawn: Drawn,
+  w: WireId,
+  taken: Box[],
+  opts: PlanOptions,
+  routed: number,
+): StepPlan | undefined {
   if (!net.wires.has(w)) return undefined;
   const [a, b] = net.wire(w).ends;
   if (a.kind !== "port" || b.kind !== "port" || a.slot !== 0 || b.slot !== 0) return undefined;
@@ -136,6 +148,11 @@ function planOne(net: Net, sys: System, drawn: Drawn, w: WireId, taken: Box[], o
     const bx = grow(boxOf(p, arity(id)), 6);
     if (near(bx)) obstacles.push(bx);
   }
+  // Loose ends stay where they are in a preview, with their labels beside them.
+  for (const f of drawn.routed.free.values()) {
+    const bx = grow(pointBox(f), 14);
+    if (near(bx)) obstacles.push(bx);
+  }
   obstacles.push(...taken.map((t) => grow(t, 8)));
   const segments: [Pt, Pt][] = [];
   for (const pts of drawn.routed.wires.values())
@@ -152,7 +169,7 @@ function planOne(net: Net, sys: System, drawn: Drawn, w: WireId, taken: Box[], o
   const keepClear = pairBoxes.map((bx) => grow(bx, CLEAR));
 
   const steps = Math.min(14, Math.ceil(reach / GRID));
-  let best: { cost: number; at: Pt; turned: boolean } | undefined;
+  const candidates: { cost: number; at: Pt; turned: boolean }[] = [];
   for (const turned of opts.turn ? [false, true] : [false]) {
     for (let i = -steps; i <= steps; i++) {
       for (let j = -steps; j <= steps; j++) {
@@ -174,21 +191,59 @@ function planOne(net: Net, sys: System, drawn: Drawn, w: WireId, taken: Box[], o
             const [p2, q2] = links[y]!;
             if (q1 && q2 && segmentsCross(p1, q1, p2, q2)) cost += 40;
           }
-        if (!best || cost < best.cost - 1e-6) best = { cost, at, turned };
+        candidates.push({ cost, at, turned });
       }
     }
   }
-  if (!best) return undefined;
-  const { at, turned } = best;
-  const move = <T extends Pt>(p: T): T => (turned ? { ...p, x: at.x - p.x, y: at.y - p.y } : { ...p, x: at.x + p.x, y: at.y + p.y });
-  return {
-    wire: w,
-    rule: found.rule,
-    pair,
-    agents: d.agents.map((p) => ({ ...move(p), orient: turned ? (p.orient === "down" ? "up" : "down") : p.orient })),
-    frame: { x0: at.x - fw / 2, x1: at.x + fw / 2, y0: at.y - fh / 2, y1: at.y + fh / 2 },
-    turned,
+  if (!candidates.length) return undefined;
+  const planAt = ({ at, turned }: { at: Pt; turned: boolean }): StepPlan => {
+    const move = <T extends Pt>(p: T): T => (turned ? { ...p, x: at.x - p.x, y: at.y - p.y } : { ...p, x: at.x + p.x, y: at.y + p.y });
+    return {
+      wire: w,
+      rule: found.rule,
+      pair,
+      agents: d.agents.map((p) => ({ ...move(p), orient: turned ? (p.orient === "down" ? "up" : "down") : p.orient })),
+      frame: { x0: at.x - fw / 2, x1: at.x + fw / 2, y0: at.y - fh / 2, y1: at.y + fh / 2 },
+      turned,
+    };
   };
+  candidates.sort((x, y) => x.cost - y.cost);
+  // The best few places, not all bunched together, judged by how the wires would actually run.
+  const shortlist: typeof candidates = [];
+  for (const c of candidates) {
+    if (shortlist.length >= routed) break;
+    if (shortlist.some((o) => o.turned === c.turned && Math.hypot(o.at.x - c.at.x, o.at.y - c.at.y) < 2 * GRID)) continue;
+    shortlist.push(c);
+  }
+  if (shortlist.length === 1) return planAt(shortlist[0]!);
+  let best: { plan: StepPlan; cost: number } | undefined;
+  for (const c of shortlist) {
+    const plan = planAt(c);
+    const cost = c.cost + routingCost(net, sys, drawn, plan);
+    if (!best || cost < best.cost - 1e-6) best = { plan, cost };
+  }
+  return best!.plan;
+}
+
+/** How tangled the net would be drawn right after firing a planned step: crossings, wires over loose ends, and length. */
+function routingCost(net: Net, sys: System, drawn: Drawn, plan: StepPlan): number {
+  const tmp = net.clone();
+  const rec = interact(tmp, sys, plan.wire);
+  const placement = new Map(drawn.placement);
+  rec.removed.forEach((id) => placement.delete(id));
+  rec.created.forEach((id, i) => placement.set(id, plan.agents[i]!));
+  const r = routeHoldingEnds(tmp, placement, { columns: drawn.columns, pins: drawn.pins }, drawn.routed.free);
+  let cost = crossings(r.wires) * 300 + r.arounds * 400;
+  for (const pts of r.wires.values()) cost += pathLength(pts);
+  // A wire running over a loose end that isn't its own makes the end unreadable.
+  for (const [name, at] of r.free) {
+    const own = tmp.free.get(name);
+    for (const [id, pts] of r.wires) {
+      if (id === own) continue;
+      for (let i = 1; i < pts.length; i++) if (segmentHitsBox(pts[i - 1]!, pts[i]!, grow(pointBox(at), 6))) cost += 500;
+    }
+  }
+  return cost;
 }
 
 function pinAt(d: RuleDrawing, name: string, at: Pt, turned: boolean): Terminal | undefined {
@@ -234,7 +289,7 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], 
     const plan = plans.get(w);
     if (plan) rec.created.forEach((id, i) => placement.set(id, plan.agents[i]!));
   }
-  const routed = route(tmp, placement, { columns: drawn.columns, pins: drawn.pins });
+  const routed = routeHoldingEnds(tmp, placement, { columns: drawn.columns, pins: drawn.pins }, drawn.routed.free);
 
   // Which old wires each new wire continues, across every step.
   const origin = new Map<WireId, WireId[]>();
@@ -280,6 +335,33 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], 
     .filter((x) => x.ends.some((e) => e.kind === "port" && gone.has(e.agent)))
     .map((x) => x.id);
   return { plans, wires: fired, agents, fading, kept, strokes };
+}
+
+/**
+ * Route a net with its loose ends held where they're drawn now, rather than
+ * on the lines above and below the net where routing would put them. Each
+ * held end stands in as a tiny agent at its place, facing back into the net.
+ */
+export function routeHoldingEnds(net: Net, placement: Placement, opts: RouteOptions, ends: Map<string, Terminal>): Routed {
+  const tmp = net.clone();
+  const pl = new Map(placement);
+  const held = new Map<string, Terminal>();
+  for (const name of [...tmp.free.keys()]) {
+    const w = tmp.free.get(name)!;
+    const at = ends.get(name);
+    if (w === NONE || !at || !tmp.wires.has(w)) continue;
+    const other = tmp.partner(free(name))!;
+    tmp.disconnect(w);
+    tmp.free.delete(name);
+    const stand = tmp.addAgent({ id: "·", name: "", symbol: "", arity: 0 });
+    const orient = at.dir === "up" ? "down" : "up";
+    pl.set(stand, { x: at.x, y: orient === "up" ? at.y + G.circleR : at.y - G.circleR, orient });
+    tmp.connect(port(stand, 0), other, w);
+    held.set(name, at);
+  }
+  const routed = route(tmp, pl, opts);
+  for (const [name, at] of held) routed.free.set(name, at);
+  return routed;
 }
 
 /** Where an end is drawn. */

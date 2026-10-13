@@ -214,7 +214,7 @@ export function createEditor(initial: Doc | undefined) {
     const recs: StepRecord[] = [];
     model.checkpoint();
     const before = model.layout().placement;
-    const columns = model.layout().columns;
+    const drawnBefore = { columns: model.layout().columns, free: model.layout().routed.free };
     const plans = plan([w]);
     try {
       const rec = interact(net, system, w);
@@ -238,7 +238,7 @@ export function createEditor(initial: Doc | undefined) {
     batch(() => {
       model.clearSelection();
       model.bump();
-      model.settleFrom(start, columns, stepDuration());
+      model.settleFrom(start, drawnBefore, stepDuration());
     });
   };
 
@@ -252,7 +252,7 @@ export function createEditor(initial: Doc | undefined) {
     const fromExample = inExampleRun();
     if (record) model.checkpoint();
     const before = model.layout().placement;
-    const columns = model.layout().columns;
+    const drawnBefore = { columns: model.layout().columns, free: model.layout().routed.free };
     const plans = plan([...model.activeWires()]);
     const s: Stats = { ...stats(), byRule: new Map(stats().byRule) };
     const recs = parallelStep(model.net, system, s);
@@ -267,7 +267,7 @@ export function createEditor(initial: Doc | undefined) {
     batch(() => {
       model.clearSelection();
       model.bump();
-      model.settleFrom(start, columns, stepDuration());
+      model.settleFrom(start, drawnBefore, stepDuration());
     });
     return recs.length > 0;
   };

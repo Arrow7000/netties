@@ -7,6 +7,7 @@ import type { System } from "../core/system";
 import { type Clash, type Effective, clash, clashText, endSpec } from "../core/types";
 import { G, type Placed, type Placement, type Pt, portPos } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
+import { routeHoldingEnds } from "../layout/replace";
 import { type Pins, type Routed, route } from "../layout/route";
 
 export type LayoutMode = "auto" | "manual";
@@ -329,16 +330,17 @@ export function createNetModel(opts: NetModelOptions) {
    * it says (the new ones where their rules put them, the rest where they
    * were), then let it settle into its layout. Call `seedLayout` with the
    * same positions before the change, so the layout stays close to them.
-   * `columns` are the ones the net was drawn with before the change, so the
-   * first frame is routed exactly as the step's preview was.
+   * `before` is how the net was drawn before the change (its columns and
+   * where its loose ends were), so the first frame is routed exactly as the
+   * step's preview was.
    */
-  function settleFrom(start: Placement, columns?: Map<string, number>, duration = 420) {
+  function settleFrom(start: Placement, before: { columns?: Map<string, number>; free: Routed["free"] }, duration = 420) {
     if (mode() === "manual") return noAnimation();
     const v = view();
     const final = layout();
     const placement: Placement = new Map();
     for (const [id, p] of final.placement) placement.set(id, start.get(id) ?? p);
-    const routed = route(v.net, placement, { columns, pins: opts.pins?.() });
+    const routed = routeHoldingEnds(v.net, placement, { columns: before.columns, pins: opts.pins?.() }, before.free);
     animate({ net: v.net.clone(), sys: v.sys, placement, routed }, [], true, duration);
   }
 

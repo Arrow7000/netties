@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { examples } from "../core/examples";
 import { type Box, boxOf } from "./geometry";
 import { autoLayout } from "./place";
-import { planSteps, previewSteps } from "./replace";
+import { planSteps, previewSteps, routeHoldingEnds } from "./replace";
 
 const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
@@ -48,4 +48,21 @@ describe("step plans", () => {
       }
     });
   }
+
+  it("keeps loose ends where they're drawn when rerouting", () => {
+    const ex = examples.find((e) => e.name === "Commutation")!;
+    const system = ex.system();
+    const net = ex.net(system);
+    const l = autoLayout(net);
+    // Move every agent far off, as a step's result would sit somewhere new.
+    const moved = new Map([...l.placement].map(([id, p]) => [id, { ...p, x: p.x + 300, y: p.y + 200 }]));
+    const r = routeHoldingEnds(net, moved, {}, l.routed.free);
+    for (const [name, w] of net.free) {
+      const at = l.routed.free.get(name)!;
+      expect(r.free.get(name)).toEqual(at);
+      const pts = r.wires.get(w)!;
+      const ends = [pts[0]!, pts[pts.length - 1]!];
+      expect(ends.some((q) => Math.hypot(q.x - at.x, q.y - at.y) < 0.5)).toBe(true);
+    }
+  });
 });
