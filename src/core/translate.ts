@@ -358,6 +358,8 @@ export type Mode = "general" | "restricted";
 
 export interface Translation {
   mode: Mode;
+  /** The source already is the target calculus, so no encoding is needed. */
+  identity: boolean;
   /** The source system's agent types, in the order used for menus and selectors. */
   types: string[];
   /**
@@ -370,13 +372,59 @@ export interface Translation {
   missing: [string, string][];
 }
 
+/** Compare rules as nets, so agent numbering and wire order do not matter. */
+function isCombinatorSystem(sys: System): boolean {
+  const target = combinators();
+  if (sys.types.size !== target.types.size || sys.rules.size !== target.rules.size) return false;
+  for (const [id, type] of target.types) if (sys.types.get(id)?.arity !== type.arity) return false;
+  for (const expected of target.rules.values()) {
+    const found = sys.ruleFor(expected.left, expected.right);
+    if (!found) return false;
+    const actual = ruleToNet(sys, found.rule);
+    if (found.swapped) {
+      const j = actual.toJSON();
+      const swap = (name: string) => `${name[0] === "L" ? "R" : "L"}${name.slice(1)}`;
+      const swapped = Net.fromJSON({
+        agents: j.agents,
+        free: j.free.map(swap),
+        wires: j.wires.map((w) => ({
+          id: w.id,
+          ends: w.ends.map((e) => (e.kind === "free" ? free(swap(e.name)) : e)) as [End, End],
+        })),
+      });
+      if (canonical(swapped) !== canonical(ruleToNet(target, expected))) return false;
+    } else if (canonical(actual) !== canonical(ruleToNet(target, expected))) return false;
+  }
+  return true;
+}
+
 /**
- * Prepare a translation of a whole system. Throws a TranslationError if a
- * rule's result isn't reduced, a self-rule isn't symmetric, or (in the
- * restricted case) the system is recursive.
+ * Prepare a translation of a whole system. An exact combinator system uses
+ * the identity map. Otherwise, throws a TranslationError if a rule's result
+ * isn't reduced, a self-rule isn't symmetric, or (in the restricted case)
+ * the system is recursive.
  */
 export function translation(sys: System, mode: Mode = "general"): Translation {
   const types = [...sys.types.keys()];
+  if (isCombinatorSystem(sys)) {
+    return {
+      mode,
+      identity: true,
+      types,
+      missing: [],
+      net(source: Net) {
+        for (const a of source.agents.values()) {
+          if (!sys.types.has(a.type)) throw new TranslationError(`unknown agent type ${a.type}`);
+          if (a.wires.some((w) => w === NONE)) throw new TranslationError("every port needs a wire before translating");
+        }
+        return {
+          net: source.clone(),
+          tagOf: new Map([...source.agents.keys()].map((id) => [id, id])),
+          ports: new Map([...source.agents.values()].map((a) => [a.id, a.wires.map((_, slot) => port(a.id, slot))])),
+        };
+      },
+    };
+  }
   const m = types.length;
   const idx = new Map(types.map((t, i) => [t, i]));
   const arity = types.map((t) => sys.type(t).arity);
@@ -561,6 +609,7 @@ export function translation(sys: System, mode: Mode = "general"): Translation {
 
   return {
     mode,
+    identity: false,
     types,
     missing,
     net(source: Net) {

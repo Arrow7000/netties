@@ -1,6 +1,6 @@
 import { type End, Net, free, port } from "./net";
 import { arithmetic, combinators, directedCombinators, listArithmetic, lists, typingLab } from "./presets";
-import type { System } from "./system";
+import { System } from "./system";
 
 /**
  * A small helper for writing nets as trees: `t("S", t("0"))` is the agent
@@ -46,6 +46,48 @@ export interface Example {
 }
 
 const num = (n: number): Spec => (n === 0 ? t("0") : t("S", num(n - 1)));
+
+const tokenSystem = () => new System().addType({ id: "A", name: "token", symbol: "A", arity: 0 });
+const annihilatingTokens = () => tokenSystem().addRule({ left: "A", right: "A", agents: [], wires: [] });
+const combinatorsWithoutCommutation = () => {
+  const sys = combinators();
+  sys.rules.delete("δ|γ");
+  return sys;
+};
+
+/** Small translation examples kept here for comparison; enable in `examples` below. */
+export const smallTranslationExamples: Example[] = [
+  {
+    name: "One token, no rules",
+    about: "The smallest system: one zero-port token, with no interactions. Compare both translations.",
+    system: tokenSystem,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("A")), free("x"));
+      return net;
+    },
+  },
+  {
+    name: "Two annihilating tokens",
+    about: "A minimal interaction: two tokens meet and disappear. Compare both translations.",
+    system: annihilatingTokens,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("A")), build(net, sys, t("A")));
+      return net;
+    },
+  },
+  {
+    name: "Erasing without commutation",
+    about: "Erase a γ tree in the recursion-free combinator system without the γ–δ rule.",
+    system: combinatorsWithoutCommutation,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, t("ε")), build(net, sys, t("γ", t("ε"), t("ε"))));
+      return net;
+    },
+  },
+];
 
 export const examples: Example[] = [
   {
@@ -96,6 +138,7 @@ export const examples: Example[] = [
       return net;
     },
   },
+  // ...smallTranslationExamples,
   {
     name: "Directed commutation",
     about: "Lafont's directed combinators: γ meets δ*, and each one gets copied.",

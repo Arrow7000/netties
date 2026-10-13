@@ -3,7 +3,7 @@ import { canonical } from "./canon";
 import { examples } from "./examples";
 import { Net, free } from "./net";
 import { arithmetic, combinators } from "./presets";
-import { normalize } from "./reduce";
+import { interact, normalize } from "./reduce";
 import { Builder, type Ref, code, split, translation } from "./translate";
 
 const sys = combinators();
@@ -130,12 +130,50 @@ function commutes(source: Net, s: ReturnType<typeof combinators>, mode: "general
 }
 
 describe("translation", () => {
-  it("translates the combinators into themselves, preserving reduction", () => {
+  it("leaves the exact combinators as themselves, preserving each step", () => {
     for (const name of ["Commutation", "Erasing a tree", "Copying a feedback loop"]) {
       const ex = examples.find((e) => e.name === name)!;
       const s = ex.system();
+      const source = ex.net(s);
+      const tr = translation(s);
+      const translated = tr.net(source);
+      expect(tr.identity).toBe(true);
+      expect(translation(s, "restricted").identity).toBe(true);
+      expect(canonical(translated.net)).toBe(canonical(source));
+      expect(translated.net.agents.size).toBe(source.agents.size);
+      for (const a of source.agents.values()) {
+        expect(translated.tagOf.get(a.id)).toBe(a.id);
+        expect(translated.ports.get(a.id)).toEqual(a.wires.map((_, slot) => ({ kind: "port", agent: a.id, slot })));
+      }
+      const first = source.activePairs()[0]!;
+      interact(source, s, first);
+      interact(translated.net, combinators(), first);
+      expect(canonical(translated.net)).toBe(canonical(source));
       commutes(ex.net(s), s, "general");
     }
+  });
+
+  it("recognizes equivalent combinator rules regardless of order or pair orientation", () => {
+    const s = combinators();
+    const rule = s.rules.get("δ|γ")!;
+    s.rules.delete("δ|γ");
+    s.rules.set("γ|δ", {
+      left: "γ", right: "δ", agents: [...rule.agents],
+      wires: [...rule.wires].reverse().map(([a, b]) => {
+        const flip = (e: typeof a) => e.kind === "iface" ? { ...e, side: (1 - e.side) as 0 | 1 } : e;
+        return [flip(a), flip(b)];
+      }),
+    });
+    expect(translation(s).identity).toBe(true);
+  });
+
+  it("does not use identity when a combinator rule has changed", () => {
+    const s = combinators();
+    s.rules.set("γ|γ", { left: "γ", right: "γ", agents: [], wires: [
+      [{ kind: "iface", side: 0, slot: 1 }, { kind: "iface", side: 1, slot: 1 }],
+      [{ kind: "iface", side: 0, slot: 2 }, { kind: "iface", side: 1, slot: 2 }],
+    ] });
+    expect(translation(s).identity).toBe(false);
   });
 
   it("translates unary arithmetic", () => {

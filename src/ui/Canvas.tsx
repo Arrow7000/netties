@@ -432,12 +432,10 @@ export function Canvas(props: CanvasProps) {
     ed.setHover(undefined);
   };
 
-  /** Double-click a box to open it up, or an instance's outline to close it. */
-  const onDblClick = (e: MouseEvent) => {
-    if (props.readonly) return;
-    // Pointer capture retargets the event to the canvas, so look at what's under the pointer.
-    const target = document.elementFromPoint(e.clientX, e.clientY);
-    if (!target) return;
+  /** Capture prevents Chrome from emitting dblclick, but mousedown still has the click count and original target. */
+  const onMouseDown = (e: MouseEvent) => {
+    if (props.readonly || e.button !== 0 || e.detail !== 2) return;
+    const target = e.target as Element;
     const agentEl = target.closest("[data-agent]");
     if (agentEl) {
       const g = ed.view().box.get(Number(agentEl.getAttribute("data-agent")));
@@ -585,11 +583,11 @@ export function Canvas(props: CanvasProps) {
           alt: held.alt(),
         }}
         onPointerDown={onPointerDown}
+        onMouseDown={onMouseDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
         onPointerLeave={() => !drag() && ed.setHover(undefined)}
-        onDblClick={onDblClick}
         onWheel={onWheel}
         onContextMenu={(e) => e.preventDefault()}
         role="application"
