@@ -945,13 +945,47 @@ kbd {
 
 /* Expanded component instances */
 
-.hull rect {
+.hull .hull-line {
   fill: none;
   stroke: var(--muted);
   stroke-width: 1;
   stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+/* A wider, invisible band along the outline, so it can be picked up. */
+.hull .hull-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
   pointer-events: stroke;
   cursor: pointer;
+}
+
+.hull-collapse {
+  cursor: pointer;
+}
+
+.hull-collapse rect {
+  fill: var(--chrome);
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.hull-collapse path {
+  stroke: var(--muted);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.hull-collapse:hover rect,
+.hull.selected .hull-collapse rect {
+  stroke: var(--accent);
+}
+
+.hull-collapse:hover path,
+.hull.selected .hull-collapse path {
+  stroke: var(--accent);
 }
 
 .hull text {
@@ -960,7 +994,7 @@ kbd {
   cursor: pointer;
 }
 
-.hull.selected rect {
+.hull.selected .hull-line {
   stroke: var(--accent);
   stroke-dasharray: none;
   stroke-width: 1.5;

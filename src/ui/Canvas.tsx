@@ -338,6 +338,11 @@ export function Canvas(props: CanvasProps) {
       if (!ed.isSelected(id) || e.shiftKey) ed.pick(id, e.shiftKey);
       return startMove(w);
     }
+    const collapseEl = target.closest("[data-collapse]");
+    if (collapseEl) {
+      ed.setCollapsed(Number(collapseEl.getAttribute("data-collapse")), true);
+      return;
+    }
     const hullEl = target.closest("[data-group]");
     if (hullEl) {
       const g = Number(hullEl.getAttribute("data-group"));
@@ -613,6 +618,15 @@ export function Canvas(props: CanvasProps) {
               {(h) => (
                 <g class="hull" classList={{ selected: groupSelected(h.id) }} data-group={h.id}>
                   <rect
+                    class="hull-hit"
+                    x={h.box.x0}
+                    y={h.box.y0}
+                    width={h.box.x1 - h.box.x0}
+                    height={h.box.y1 - h.box.y0}
+                    rx={6}
+                  />
+                  <rect
+                    class="hull-line"
                     x={h.box.x0}
                     y={h.box.y0}
                     width={h.box.x1 - h.box.x0}
@@ -622,6 +636,17 @@ export function Canvas(props: CanvasProps) {
                   <text x={h.box.x0 + 6} y={h.box.y0 - 4}>
                     {h.label}
                   </text>
+                  <Show when={!props.readonly}>
+                    <g
+                      class="hull-collapse"
+                      data-collapse={h.id}
+                      data-tip="Collapse back into one box"
+                      transform={`translate(${h.box.x1 - 12} ${h.box.y0})`}
+                    >
+                      <rect x={-6} y={-6} width={12} height={12} rx={3} />
+                      <path d="M -3 0 H 3" />
+                    </g>
+                  </Show>
                 </g>
               )}
             </For>
