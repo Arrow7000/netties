@@ -143,6 +143,7 @@ export function App(props: { initial?: Doc }) {
         m={m}
         camera={camera}
         onFire={(wire) => ed.dispatch({ kind: "run/fire", wire })}
+        plan={ed.planFor}
         onStuck={openStuck}
         pad={{ t: 72, r: 270, b: 90, l: 48 }}
         empty={
@@ -321,6 +322,15 @@ export function App(props: { initial?: Doc }) {
                   }
                   onClick={() => {
                     prefs.setWireTypes(!prefs.wireTypes());
+                    close();
+                  }}
+                />
+                <MenuItem
+                  lead={ed.turnResults() ? <I.Check /> : <span class="mi-blank" />}
+                  title="Turn step results to fit"
+                  note="Trial: a rule's result may be drawn upside down when that suits the pair. Otherwise it's drawn exactly as in the rule editor"
+                  onClick={() => {
+                    ed.setTurnResults(!ed.turnResults());
                     close();
                   }}
                 />

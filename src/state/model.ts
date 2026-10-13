@@ -322,6 +322,22 @@ export function createNetModel(opts: NetModelOptions) {
     return { net: view().net.clone(), sys: view().sys, placement: l.placement, routed: l.routed };
   }
 
+  /**
+   * After a step: draw the net as it is now with the agents in `start` where
+   * it says (the new ones where their rules put them, the rest where they
+   * were), then let it settle into its layout. Call `seedLayout` with the
+   * same positions before the change, so the layout stays close to them.
+   */
+  function settleFrom(start: Placement, duration = 420) {
+    if (mode() === "manual") return noAnimation();
+    const v = view();
+    const final = layout();
+    const placement: Placement = new Map();
+    for (const [id, p] of final.placement) placement.set(id, start.get(id) ?? p);
+    const routed = route(v.net, placement, { pins: opts.pins?.() });
+    animate({ net: v.net.clone(), sys: v.sys, placement, routed }, [], true, duration);
+  }
+
   /** Animate from a snapshot to the net as it is now, given what the step did (if it was a step). */
   function animate(before: AnimSnapshot, records: StepRecord[], edit = false, duration = 420) {
     pending = undefined;
@@ -579,6 +595,15 @@ export function createNetModel(opts: NetModelOptions) {
     frame,
     animSnapshot,
     animate,
+    settleFrom,
+    /** Positions the next automatic layout should stay close to, on top of the last one. Part of an edit under way. */
+    seedLayout(start: Placement) {
+      if (mode() === "manual") {
+        for (const [id, p] of start) positions.set(id, p);
+        return;
+      }
+      lastAuto = new Map([...(lastAuto ?? []), ...start]);
+    },
 
     /** Whether a view agent is selected (a box counts when its instance is). */
     isSelected(viewId: AgentId) {

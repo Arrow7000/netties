@@ -5,8 +5,9 @@ import { type AgentId, type AgentType, Net, type WireId } from "../core/net";
 import { type Stats, type StepRecord, emptyStats, interact, isActive, parallelStep } from "../core/reduce";
 import { type Rule, System, type SystemJSON, pairKey } from "../core/system";
 import { type PortSpec, type Typing, badWires, canMeet, flip, specOf } from "../core/types";
-import type { Placed, Placement, Pt } from "../layout/geometry";
+import type { Placement, Pt } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
+import { type StepPlan, placeCreated, planSteps } from "../layout/replace";
 import { createNetModel } from "./model";
 import { type Doc, decode, saveLocal } from "./persist";
 
@@ -87,6 +88,16 @@ export function createEditor(initial: Doc | undefined) {
     }
   };
   const stepDuration = () => 420 / speed();
+  /** Let a step's result be drawn upside down when that fits the pair better (a trial setting). */
+  const [turnResults, setTurnResultsSignal] = createSignal(readFlag(TURN_KEY));
+  const setTurnResults = (on: boolean) => {
+    setTurnResultsSignal(on);
+    try {
+      localStorage.setItem(TURN_KEY, on ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  };
   const resetRun = () => {
     setStats(emptyStats());
     setSteps(0);
@@ -161,16 +172,23 @@ export function createEditor(initial: Doc | undefined) {
     return missing;
   });
 
-  /** Place new agents from a reduction step near where the pair used to be. */
-  const placeCreated = (removed: AgentId[], created: AgentId[], before: Placement) => {
-    if (model.mode() !== "manual") return;
-    const old = removed.map((id) => before.get(id)).filter((p): p is Placed => !!p);
-    const cx = old.reduce((s, p) => s + p.x, 0) / Math.max(1, old.length);
-    const cy = old.reduce((s, p) => s + p.y, 0) / Math.max(1, old.length);
-    created.forEach((id, i) =>
-      model.setPosition(id, { x: cx + (i - (created.length - 1) / 2) * 44, y: cy, orient: i % 2 ? "up" : "down" }),
-    );
-    removed.forEach((id) => model.deletePosition(id));
+  /** Where firing these active pairs would put what their rules create. */
+  const plan = (ws: WireId[]): Map<WireId, StepPlan> => {
+    const l = model.layout();
+    return planSteps(model.view().net, system, { placement: l.placement, wires: l.routed.wires }, ws, { turn: turnResults() });
+  };
+
+  /**
+   * Put what the steps created where their plans said, and the rest where it
+   * was; the net settles from there once the step is drawn.
+   */
+  const startAfter = (plans: Map<WireId, StepPlan>, recs: StepRecord[], before: Placement): Placement => {
+    const start = new Map(before);
+    for (const r of recs) r.removed.forEach((id) => start.delete(id));
+    for (const [id, p] of placeCreated(plans, recs)) start.set(id, p);
+    for (const r of recs) r.removed.forEach((id) => model.deletePosition(id));
+    model.seedLayout(new Map([...start].filter(([id]) => model.net.agents.has(id))));
+    return start;
   };
 
   const fire = (w: WireId) => {
@@ -180,10 +198,9 @@ export function createEditor(initial: Doc | undefined) {
     const recs: StepRecord[] = [];
     model.checkpoint();
     const before = model.layout().placement;
-    const snap = model.animSnapshot();
+    const plans = plan([w]);
     try {
       const rec = interact(net, system, w);
-      placeCreated(rec.removed, rec.created, before);
       model.dissolveAround(rec.removed);
       recs.push(rec);
       setStats((s) => {
@@ -199,9 +216,13 @@ export function createEditor(initial: Doc | undefined) {
       setSteps((n) => n + 1);
       rememberReduction(fromExample);
     }
-    model.clearSelection();
-    model.bump();
-    model.animate(snap, recs, false, stepDuration());
+    const start = startAfter(plans, recs, before);
+    // One update, so the canvas sees the step and its animation together.
+    batch(() => {
+      model.clearSelection();
+      model.bump();
+      model.settleFrom(start, stepDuration());
+    });
   };
 
   const stepOne = () => {
@@ -214,21 +235,22 @@ export function createEditor(initial: Doc | undefined) {
     const fromExample = inExampleRun();
     if (record) model.checkpoint();
     const before = model.layout().placement;
-    const snap = model.animSnapshot();
+    const plans = plan([...model.activeWires()]);
     const s: Stats = { ...stats(), byRule: new Map(stats().byRule) };
     const recs = parallelStep(model.net, system, s);
-    for (const r of recs) {
-      placeCreated(r.removed, r.created, before);
-      model.dissolveAround(r.removed);
-    }
+    for (const r of recs) model.dissolveAround(r.removed);
+    const start = startAfter(plans, recs, before);
     setStats(s);
     if (recs.length) {
       setSteps((n) => n + 1);
       rememberReduction(fromExample);
     }
-    model.clearSelection();
-    model.bump();
-    model.animate(snap, recs, false, stepDuration());
+    // One update, so the canvas sees the step and its animation together.
+    batch(() => {
+      model.clearSelection();
+      model.bump();
+      model.settleFrom(start, stepDuration());
+    });
     return recs.length > 0;
   };
 
@@ -429,6 +451,10 @@ export function createEditor(initial: Doc | undefined) {
     notify,
     speed,
     setSpeed,
+    turnResults,
+    setTurnResults,
+    /** What firing an active pair would do, for previewing it. */
+    planFor: (w: WireId) => plan([w]).get(w),
     canResetExample,
     resetExample() {
       const start = exampleStart();
@@ -783,6 +809,15 @@ export function createEditor(initial: Doc | undefined) {
 export type Editor = ReturnType<typeof createEditor>;
 
 const SPEED_KEY = "netties:speed";
+const TURN_KEY = "netties:turn-results";
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
 
 function readSpeed(): number {
   try {

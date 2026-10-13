@@ -4,6 +4,7 @@ import type { GroupId } from "../core/groups";
 import { type AgentId, type End, NONE, type WireId, free, port, sameEnd } from "../core/net";
 import { type System, pairKey } from "../core/system";
 import { type Box, G, type Pt, boxOf, portPos, shape } from "../layout/geometry";
+import type { StepPlan } from "../layout/replace";
 import { flattenPath, polylinePath, resample, roundedPath } from "../render/path";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { DropCheck, NetModel, WireGesture } from "../state/model";
@@ -79,6 +80,8 @@ export interface CanvasProps {
   camera?: Camera;
   /** Called when an active pair's wire is clicked. Without it, active pairs just select. */
   onFire?: (w: WireId) => void;
+  /** What firing an active pair would do, previewed while the pointer is on it. */
+  plan?: (w: WireId) => StepPlan | undefined;
   /** Called when an active pair with no rule is clicked. */
   onStuck?: (w: WireId) => void;
   /** Display names for free ports. */
@@ -128,19 +131,38 @@ export function Canvas(props: CanvasProps) {
     return b;
   };
 
-  const fit = () => {
+  let glide = 0;
+  onCleanup(() => cancelAnimationFrame(glide));
+  /** Fit the net in view, straight away or (`smooth`) gliding there. */
+  const fit = (smooth = false) => {
     if (tooBig()) return;
+    cancelAnimationFrame(glide);
     const b = contentBounds();
     const { w, h } = size();
     const p = pad();
     const bw = Math.max(b.x1 - b.x0, 60);
     const bh = Math.max(b.y1 - b.y0, 60);
     const k = Math.min((w - p.l - p.r) / bw, (h - p.t - p.b) / bh, 2.4);
-    setView({
+    const to = {
       k,
       x: p.l + (w - p.l - p.r) / 2 - ((b.x0 + b.x1) / 2) * k,
       y: p.t + (h - p.t - p.b) / 2 - ((b.y0 + b.y1) / 2) * k,
-    });
+    };
+    if (!smooth || matchMedia("(prefers-reduced-motion: reduce)").matches) return setView(to);
+    const from = view();
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - t0) / 280);
+      const e = 1 - Math.pow(1 - t, 3);
+      // Zoom geometrically, so the scale changes at an even pace.
+      const kk = from.k * Math.pow(to.k / from.k, e);
+      // Keep the point that ends up centred moving in a straight line.
+      const cx = (w / 2 - from.x) / from.k + ((w / 2 - to.x) / to.k - (w / 2 - from.x) / from.k) * e;
+      const cy = (h / 2 - from.y) / from.k + ((h / 2 - to.y) / to.k - (h / 2 - from.y) / from.k) * e;
+      setView({ k: kk, x: w / 2 - cx * kk, y: h / 2 - cy * kk });
+      if (t < 1) glide = requestAnimationFrame(tick);
+    };
+    glide = requestAnimationFrame(tick);
   };
 
   onMount(() => {
@@ -172,12 +194,14 @@ export function Canvas(props: CanvasProps) {
 
   createEffect(on(ed.fitTick, () => queueMicrotask(fit), { defer: true }));
 
-  // In automatic mode, keep the whole net in view as it changes shape.
+  // In automatic mode, keep the whole net in view as it changes shape. A
+  // change being animated keeps the camera still until it has settled, so a
+  // step's result appears exactly where its preview was.
   createEffect(
     on(
-      () => (tooBig() ? undefined : ed.layout()),
-      () => {
-        if (ed.mode() !== "auto" || drag() || tooBig()) return;
+      () => (tooBig() || ed.frame() ? undefined : ed.layout()),
+      (l) => {
+        if (!l || ed.mode() !== "auto" || drag() || tooBig()) return;
         const b = contentBounds();
         const v = view();
         const { w, h } = size();
@@ -186,7 +210,7 @@ export function Canvas(props: CanvasProps) {
         const sx1 = b.x1 * v.k + v.x;
         const sy0 = b.y0 * v.k + v.y;
         const sy1 = b.y1 * v.k + v.y;
-        if (sx0 < p.l / 2 || sy0 < p.t / 2 || sx1 > w - p.r / 2 || sy1 > h - p.b / 2) fit();
+        if (sx0 < p.l / 2 || sy0 < p.t / 2 || sx1 > w - p.r / 2 || sy1 > h - p.b / 2) fit(true);
       },
       { defer: true },
     ),
@@ -496,6 +520,17 @@ export function Canvas(props: CanvasProps) {
     );
   });
 
+  /** The active pair under the pointer, while clicking it would fire it. */
+  const firing = createMemo(() => {
+    const h = ed.hover();
+    if (drag() || held.alt() || !props.onFire || h?.kind !== "wire" || !ed.activeWires().has(h.id)) return undefined;
+    const v = ed.view().net;
+    if (!v.wires.has(h.id)) return undefined;
+    const [a, b] = v.wire(h.id).ends;
+    if (a.kind !== "port" || b.kind !== "port") return undefined;
+    return { wire: h.id, agents: new Set([a.agent, b.agent]), plan: props.plan?.(h.id) };
+  });
+
   /** Whether a wire's type label shows: always, by preference, or when the pointer is on or near it. */
   const typeShown = (id: WireId) => {
     if (prefs.wireTypes()) return true;
@@ -569,11 +604,22 @@ export function Canvas(props: CanvasProps) {
                   plain={props.readonly}
                   hidden={carried() === id}
                   highlighted={highlighted().has(id)}
+                  consumed={firing()?.wire === id}
                 />
               )}
             </For>
             <For each={agentIds()}>
-              {(id) => <Agent ed={ed} system={sys} id={id} pre={preselected().has(id)} endState={endState} readonly={props.readonly} />}
+              {(id) => (
+                <Agent
+                  ed={ed}
+                  system={sys}
+                  id={id}
+                  pre={preselected().has(id)}
+                  consumed={!!firing()?.agents.has(id)}
+                  endState={endState}
+                  readonly={props.readonly}
+                />
+              )}
             </For>
             <For each={freeNames()}>
               {(name) => {
@@ -604,6 +650,7 @@ export function Canvas(props: CanvasProps) {
               </For>
             </g>
             <StepPreview ed={ed} hidden={!!drag() || !props.onFire} />
+            <Show when={firing()?.plan}>{(p) => <RulePreview plan={p()} system={sys} />}</Show>
             <HoverPill ed={ed} hidden={!!drag()} canFire={!!props.onFire} />
           </g>
           <Show when={wireDrag()}>
@@ -736,6 +783,53 @@ function StepPreview(props: { ed: NetModel; hidden: boolean }) {
   );
 }
 
+/**
+ * For a pair under the pointer whose rule creates agents: what it turns
+ * into, framed and drawn exactly where firing will put it, with dashed
+ * links from the pair's aux ports to the interface pins they'll join.
+ */
+function RulePreview(props: { plan: StepPlan; system: () => System }) {
+  const f = () => props.plan.frame;
+  return (
+    <g class="rule-preview">
+      <For each={props.plan.links}>{(pts) => <path class="link" d={roundedPath(pts, G.radius)} />}</For>
+      <rect class="frame" x={f().x0} y={f().y0} width={f().x1 - f().x0} height={f().y1 - f().y0} rx={6} />
+      <For each={props.plan.wires}>{(pts) => <path class="inner" d={roundedPath(pts, G.radius)} />}</For>
+      <For each={props.plan.agents}>
+        {(p, i) => {
+          const type = () => props.system().types.get(props.plan.rule.agents[i()]!);
+          const arity = () => type()?.arity ?? 0;
+          const box = () => !!type()?.box;
+          const o = () => agentOutline(p, arity(), box());
+          return (
+            <g class="agent" classList={{ filled: !!type()?.filled, box: box() }}>
+              {(() => {
+                const s = o();
+                return s.kind === "circle" ? (
+                  <circle class="body" cx={p.x} cy={p.y} r={s.r} />
+                ) : (
+                  <polygon class="body" points={s.points.map((q) => `${q.x},${q.y}`).join(" ")} />
+                );
+              })()}
+              <Show when={type()?.symbol}>
+                <text
+                  class="symbol"
+                  x={labelPos(p, arity(), box()).x}
+                  y={labelPos(p, arity(), box()).y}
+                  text-anchor="middle"
+                  dominant-baseline="central"
+                >
+                  {type()!.symbol}
+                </text>
+              </Show>
+            </g>
+          );
+        }}
+      </For>
+    </g>
+  );
+}
+
 /** "Click to fire" next to the active pair under the pointer. */
 function HoverPill(props: { ed: NetModel; hidden: boolean; canFire: boolean }) {
   const ed = props.ed;
@@ -842,6 +936,8 @@ function Wire(props: {
   plain?: boolean;
   hidden?: boolean;
   highlighted?: boolean;
+  /** Taken away by the step under the pointer. */
+  consumed?: boolean;
 }) {
   const ed = props.ed;
   const pts = () => ed.layout().routed.wires.get(props.id) ?? [];
@@ -883,6 +979,7 @@ function Wire(props: {
         selected: sel(),
         hot: hot(),
         highlighted: !!props.highlighted,
+        consumed: !!props.consumed,
         xray: xray(),
         doomed: ed.doomed().has(props.id),
       }}
@@ -903,6 +1000,8 @@ function Agent(props: {
   system: () => System;
   id: AgentId;
   pre: boolean;
+  /** Taken away by the step under the pointer. */
+  consumed?: boolean;
   endState: (e: End) => EndState;
   readonly?: boolean;
 }) {
@@ -945,6 +1044,7 @@ function Agent(props: {
           box: box(),
           selected: selected(),
           pre: props.pre && !selected(),
+          consumed: !!props.consumed,
           hot: hot(),
           movable: !props.readonly,
         }}
