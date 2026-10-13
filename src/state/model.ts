@@ -768,7 +768,7 @@ export function createNetModel(opts: NetModelOptions) {
       checkpoint();
       const t = opts.system().type(type);
       const id = net.addAgent(t);
-      let orient: Placed["orient"] = "down";
+      let place: Placed | undefined = at && { x: at.x, y: at.y, orient: "down" };
       if (attach) {
         const real = v.toReal(attach.end);
         const w = net.wireAt(real);
@@ -779,18 +779,20 @@ export function createNetModel(opts: NetModelOptions) {
           net.free.delete(other.name);
         }
         if (net.wireAt(real) === NONE) net.connect(port(id, attach.slot), real);
-        // Turn the new agent so the port that plugs in faces the one it plugs into.
+        // Set the new agent a short wire beyond the port it plugs into, turned to face it,
+        // rather than on top of it where it was let go.
         const p = attach.end.kind === "port" ? l.placement.get(attach.end.agent) : undefined;
-        if (at && p && attach.end.kind === "port") {
+        if (p && attach.end.kind === "port") {
           const target = portPos(p, v.net.agent(attach.end.agent).wires.length - 1, attach.end.slot);
-          const dist = (o: Placed["orient"]) => {
-            const q = portPos({ x: at.x, y: at.y, orient: o }, t.arity, attach.slot);
-            return Math.hypot(q.x - target.x, q.y - target.y);
-          };
-          orient = dist("up") < dist("down") ? "up" : "down";
+          const facing = target.dir === "up" ? "down" : "up";
+          const orient = attach.slot === 0 ? facing : target.dir;
+          const gap = attach.slot === 0 && attach.end.slot === 0 ? G.pairGap : G.layerH - G.agentH;
+          const plug = portPos({ x: 0, y: 0, orient }, t.arity, attach.slot);
+          const y = target.y + (target.dir === "up" ? -gap : gap);
+          place = { x: target.x - plug.x, y: y - plug.y, orient };
         }
       }
-      if (at && mode() === "manual") positions.set(id, { x: at.x, y: at.y, orient });
+      if (place && mode() === "manual") positions.set(id, place);
       else if (at) spawnAt.set(id, at);
       setItems(new Set([id]), new Set());
       bump();
