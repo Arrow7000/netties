@@ -30,6 +30,8 @@ export const G = {
   pairGap: 26,
   /** Horizontal gap between independent parts of the net. */
   unitGap: 28,
+  /** Horizontal gap between nets that aren't connected at all. */
+  netGap: 40,
   /** Corner radius for wire bends. */
   radius: 9,
   /** Height of every triangular agent. */

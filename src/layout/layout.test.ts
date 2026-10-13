@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { examples } from "../core/examples";
 import { type End, Net, free, port } from "../core/net";
 import { combinators } from "../core/presets";
-import { parallelStep } from "../core/reduce";
+import { interact, parallelStep, redexes } from "../core/reduce";
+import { parse } from "../core/text";
 import { boxOf, portPos } from "./geometry";
 import { autoLayout } from "./place";
 
@@ -72,5 +73,27 @@ describe("auto layout", () => {
         if (!parallelStep(net, s).length) break;
       }
     }
+  });
+
+  it("keeps separate nets together after steps that pushed them apart", () => {
+    const { net, system } = parse(`
+agent S 1
+agent Z 0
+agent Add 2
+Add(y, r) >< Z => y ~ r;
+Add(y, r) >< S(x) => r ~ S(w), x ~ Add(y, w);
+Add(S(S(Z)), out) ~ S(S(S(Z)));
+Add(Z, out2) ~ S(S(Z));
+`);
+    const width = (p: Map<number, { x: number }>) => {
+      const xs = [...p.values()].map((q) => q.x);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    let prev = autoLayout(net).placement;
+    for (let r = redexes(net, system); r.length; r = redexes(net, system)) {
+      interact(net, system, r[0]!);
+      prev = autoLayout(net, { prev }).placement;
+    }
+    expect(width(prev)).toBeCloseTo(width(autoLayout(net).placement));
   });
 });

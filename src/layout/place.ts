@@ -349,6 +349,29 @@ function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement): AutoLa
     });
     for (const lv of levels) pack(lv, want);
   }
+  // Separate nets sit side by side, a set gap apart, in the order they
+  // came out. Left to the steps above, where they were last time would
+  // hold them apart even after whatever pushed them apart has gone.
+  {
+    const root = units.map((_, u) => u);
+    const find = (u: number): number => (root[u] === u ? u : (root[u] = find(root[u]!)));
+    for (const { a, b } of links) root[find(a)] = find(b);
+    const parts = new Map<number, { units: number[]; l: number; r: number }>();
+    units.forEach((_, u) => {
+      const p = parts.get(find(u)) ?? { units: [], l: Infinity, r: -Infinity };
+      p.units.push(u);
+      p.l = Math.min(p.l, x[u]! + geoms[u]!.l);
+      p.r = Math.max(p.r, x[u]! + geoms[u]!.r);
+      parts.set(find(u), p);
+    });
+    const order = [...parts.values()].sort((p, q) => p.l + p.r - (q.l + q.r));
+    let right = order[0] ? order[0].l - G.netGap : 0;
+    for (const p of order) {
+      const dx = right + G.netGap - p.l;
+      for (const u of p.units) x[u] = x[u]! + dx;
+      right = p.r + dx;
+    }
+  }
 
   // Vertical positions: stack the levels with room between them for the
   // wires that cross over.
