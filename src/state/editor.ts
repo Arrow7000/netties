@@ -88,16 +88,6 @@ export function createEditor(initial: Doc | undefined) {
     }
   };
   const stepDuration = () => 420 / speed();
-  /** Let a step's result be drawn upside down when that fits the pair better (a trial setting). */
-  const [turnResults, setTurnResultsSignal] = createSignal(readFlag(TURN_KEY));
-  const setTurnResults = (on: boolean) => {
-    setTurnResultsSignal(on);
-    try {
-      localStorage.setItem(TURN_KEY, on ? "1" : "0");
-    } catch {
-      // ignore
-    }
-  };
   const resetRun = () => {
     setStats(emptyStats());
     setSteps(0);
@@ -177,7 +167,7 @@ export function createEditor(initial: Doc | undefined) {
     return { placement: l.placement, routed: l.routed, columns: l.columns };
   };
   /** Where firing these active pairs would put what their rules create. */
-  const plan = (ws: WireId[]): Map<WireId, StepPlan> => planSteps(model.view().net, system, drawn(), ws, { turn: turnResults() });
+  const plan = (ws: WireId[]): Map<WireId, StepPlan> => planSteps(model.view().net, system, drawn(), ws);
 
   /**
    * Which active pairs to preview without the pointer on them: the next
@@ -478,10 +468,8 @@ export function createEditor(initial: Doc | undefined) {
     notify,
     speed,
     setSpeed,
-    turnResults,
-    setTurnResults,
     /** What firing these active pairs at once would do, for previewing it. */
-    preview: (ws: WireId[]): StepPreview => previewSteps(model.view().net, system, drawn(), ws, { turn: turnResults() }),
+    preview: (ws: WireId[]): StepPreview => previewSteps(model.view().net, system, drawn(), ws),
     previewing,
     setPreviewMode,
     canResetExample,
@@ -838,19 +826,11 @@ export function createEditor(initial: Doc | undefined) {
 export type Editor = ReturnType<typeof createEditor>;
 
 const SPEED_KEY = "netties:speed";
-const TURN_KEY = "netties:turn-results";
 /** How long a run shows each step's preview, as a share of the time a step takes to animate. */
 const FLASH = 0.8;
 /** Don't preview more active pairs than this at once. */
 const PREVIEW_LIMIT = 24;
 
-function readFlag(key: string): boolean {
-  try {
-    return localStorage.getItem(key) === "1";
-  } catch {
-    return false;
-  }
-}
 
 function readSpeed(): number {
   try {

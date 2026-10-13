@@ -68,13 +68,11 @@ export interface StepPlan {
   /** Where each agent the rule creates goes, index-aligned with `rule.agents`. */
   agents: Placed[];
   frame: Box;
-  /** Drawn upside down (a half turn) from how the rule editor shows it. */
+  /**
+   * Turned a half turn from how the rule editor draws it, because that suits
+   * the pair better. Only the whole drawing turns; nothing in it changes.
+   */
   turned: boolean;
-}
-
-export interface PlanOptions {
-  /** Allow a half turn when it fits the pair better. Otherwise the frame is exactly the rule editor's drawing. */
-  turn?: boolean;
 }
 
 /** The net as drawn: what a preview starts from. */
@@ -91,12 +89,12 @@ export interface Drawn {
  * plan (they only reconnect wires). Each frame avoids the agents and wires
  * already drawn, and the frames planned before it.
  */
-export function planSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], opts: PlanOptions = {}): Map<WireId, StepPlan> {
+export function planSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[]): Map<WireId, StepPlan> {
   const plans = new Map<WireId, StepPlan>();
   const taken: Box[] = [];
   for (const w of ws) {
     // Routing each candidate for real is worth it for a few pairs, not for many.
-    const p = planOne(net, sys, drawn, w, taken, opts, ws.length <= ROUTED_PAIRS ? ROUTED_CANDIDATES : 1);
+    const p = planOne(net, sys, drawn, w, taken, ws.length <= ROUTED_PAIRS ? ROUTED_CANDIDATES : 1);
     if (!p) continue;
     plans.set(w, p);
     taken.push(p.frame);
@@ -118,7 +116,6 @@ function planOne(
   drawn: Drawn,
   w: WireId,
   taken: Box[],
-  opts: PlanOptions,
   routed: number,
 ): StepPlan | undefined {
   if (!net.wires.has(w)) return undefined;
@@ -170,7 +167,7 @@ function planOne(
 
   const steps = Math.min(14, Math.ceil(reach / GRID));
   const candidates: { cost: number; at: Pt; turned: boolean }[] = [];
-  for (const turned of opts.turn ? [false, true] : [false]) {
+  for (const turned of [false, true]) {
     for (let i = -steps; i <= steps; i++) {
       for (let j = -steps; j <= steps; j++) {
         const at = { x: centre.x + i * GRID, y: centre.y + j * GRID };
@@ -269,8 +266,8 @@ export interface StepPreview {
 }
 
 /** Preview firing some active pairs (at once, as in a parallel step). */
-export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], opts: PlanOptions = {}): StepPreview {
-  const plans = planSteps(net, sys, drawn, ws, opts);
+export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[]): StepPreview {
+  const plans = planSteps(net, sys, drawn, ws);
   const tmp = net.clone();
   const placement = new Map(drawn.placement);
   const fired: WireId[] = [];

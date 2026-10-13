@@ -16,13 +16,12 @@ describe("step plans", () => {
         const [a, b] = net.wire(w).ends;
         return a.kind === "port" && b.kind === "port" && !!system.ruleFor(net.agent(a.agent).type, net.agent(b.agent).type);
       });
-      for (const turn of [false, true]) {
+      {
         const drawn = { placement: l.placement, routed: l.routed, columns: l.columns };
-        const plans = planSteps(net, system, drawn, ws, { turn });
+        const plans = planSteps(net, system, drawn, ws);
         const frames = [...plans.values()].map((p) => p.frame);
         for (const p of plans.values()) {
           expect(p.agents.length).toBe(p.rule.agents.length);
-          if (!turn) expect(p.turned).toBe(false);
           // The pair stays visible beside its preview.
           for (const id of p.pair) expect(overlaps(boxOf(l.placement.get(id)!, net.agent(id).wires.length - 1), p.frame)).toBe(false);
           // New agents sit inside their frame.
@@ -37,7 +36,7 @@ describe("step plans", () => {
         frames.forEach((f, i) => frames.slice(i + 1).forEach((g) => expect(overlaps(f, g)).toBe(false)));
 
         // Every pair fires in the preview, and its new wires show; solid stretches lie inside frames.
-        const pv = previewSteps(net, system, drawn, ws, { turn });
+        const pv = previewSteps(net, system, drawn, ws);
         expect(pv.wires).toEqual(ws);
         const aux = pv.agents.reduce((n, id) => n + net.agent(id).wires.length - 1, 0);
         if (aux) expect(pv.strokes.length).toBeGreaterThan(0);

@@ -346,6 +346,7 @@ textarea {
   background: transparent;
   height: 28px;
   padding: 0 10px;
+  white-space: nowrap;
   border-radius: 6px;
   cursor: pointer;
   color: var(--muted);
@@ -417,6 +418,8 @@ kbd {
 
 .menu-wrap {
   position: relative;
+  /* As a flex box it's exactly as tall as its button, with no text baseline nudging the button up. */
+  display: flex;
 }
 
 .menu {

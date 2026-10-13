@@ -299,7 +299,7 @@ export function App(props: { initial?: Doc }) {
         <div class="island view-controls">
           <div class="seg" role="group" aria-label="Layout">
             <button aria-pressed={m.mode() === "auto"} onClick={() => ed.dispatch({ kind: "layout/set", mode: "auto" })} title="Lay the net out automatically">
-              Auto layout
+              Auto
             </button>
             <button aria-pressed={m.mode() === "manual"} onClick={() => ed.dispatch({ kind: "layout/set", mode: "manual" })} title="Place agents yourself; wires still route themselves">
               Manual
@@ -337,15 +337,6 @@ export function App(props: { initial?: Doc }) {
                   }
                   onClick={() => {
                     prefs.setWireTypes(!prefs.wireTypes());
-                    close();
-                  }}
-                />
-                <MenuItem
-                  lead={ed.turnResults() ? <I.Check /> : <span class="mi-blank" />}
-                  title="Turn step results to fit"
-                  note="Trial: a rule's result may be drawn upside down when that suits the pair. Otherwise it's drawn exactly as in the rule editor"
-                  onClick={() => {
-                    ed.setTurnResults(!ed.turnResults());
                     close();
                   }}
                 />

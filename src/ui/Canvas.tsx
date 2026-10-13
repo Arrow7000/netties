@@ -336,7 +336,10 @@ export function Canvas(props: CanvasProps) {
     }
     const wireEl = target.closest("[data-wire]");
     if (wireEl) {
-      setDrag({ kind: "click-wire", id: Number(wireEl.getAttribute("data-wire")), alt: e.altKey });
+      const id = Number(wireEl.getAttribute("data-wire"));
+      setDrag({ kind: "click-wire", id, alt: e.altKey });
+      // Still pointing at it: keep its preview up while the button is down.
+      ed.setHover({ kind: "wire", id });
       return;
     }
     setDrag({ kind: "marquee", start: w, cur: w, additive: e.shiftKey, moved: false });
@@ -529,7 +532,7 @@ export function Canvas(props: CanvasProps) {
    */
   const targets = createMemo(
     (): WireId[] | undefined => {
-      if (drag()) return undefined;
+      if (drag() && drag()!.kind !== "click-wire") return undefined;
       const asked = props.previewing?.();
       if (asked) return asked;
       const h = ed.hover();
@@ -666,7 +669,7 @@ export function Canvas(props: CanvasProps) {
             </g>
             <StepPreview ed={ed} hidden={!!drag() || !props.onFire || !!props.preview} />
             <Show when={firing()?.preview}>{(p) => <RulePreview preview={p()} system={sys} />}</Show>
-            <HoverPill ed={ed} hidden={!!drag()} canFire={!!props.onFire} />
+            <HoverPill ed={ed} hidden={!!drag() && drag()!.kind !== "click-wire"} canFire={!!props.onFire} />
           </g>
           <Show when={wireDrag()}>
             {(d) => {

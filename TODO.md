@@ -9,7 +9,9 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
 
 - **Steps shown as rule applications** (from the user's sketches, 2026-10-13).
   Pointing at an active pair highlights it and shows the rule's result,
-  agents placed as in the rule editor, in a frame in free space next to it
+  agents placed as in the rule editor (turned a half turn when that suits
+  the pair better; never mirrored, which would reverse the aux ports), in a
+  frame in free space next to it
   (`src/layout/replace.ts`). The preview fires the step on a copy of the
   net, keeps every other agent where it's drawn, and routes the wires as
   usual: each new wire is drawn from where it leaves its old wire, dashed
@@ -18,12 +20,6 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
   Step previews the next pair, Step all every pair (up to 24), and Run
   flashes each step's preview for 0.8 of a step's animation time first.
   Open:
-  - The user wants to compare "exactly as in the rule editor" (default) with
-    "turned to fit" (a half turn when it suits the pair; a mirror would
-    reverse the aux ports, so it isn't allowed). It's a trial setting in the
-    view menu, "Turn step results to fit". Drop whichever loses.
-  - Free ports can move in the preview (they sit on lines above and below
-    the whole net), so a wire to one may be drawn dashed all the way.
   - Rules that only reconnect wires now use the same routed preview, with
     no frame, instead of straight lines (except on the translation screen).
   - Is the Run flash right at high speeds, where it's under 100 ms?
