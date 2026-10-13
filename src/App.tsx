@@ -61,6 +61,26 @@ export function App(props: { initial?: Doc }) {
   };
 
   onMount(() => {
+    let hashNavigation = 0;
+    const onHashChange = async () => {
+      const hash = location.hash;
+      const navigation = ++hashNavigation;
+      if (!hash.startsWith("#n=")) return;
+      const doc = await fromShareHash(hash);
+      if (navigation !== hashNavigation || location.hash !== hash) return;
+      if (!doc) {
+        ed.setMessage("Couldn't load this shared net.");
+        return;
+      }
+      try {
+        ed.load(doc);
+      } catch {
+        ed.setMessage("Couldn't load this shared net.");
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    onCleanup(() => window.removeEventListener("hashchange", onHashChange));
+
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as Element).closest("input, textarea, select")) return;
       const mod = e.metaKey || e.ctrlKey;
