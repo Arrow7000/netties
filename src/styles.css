@@ -2691,3 +2691,22 @@ button.select.open {
 .typing-line .nowrap {
   white-space: nowrap;
 }
+
+/* Tooltips (src/ui/Tooltip.tsx) */
+
+.tooltip {
+  position: fixed;
+  z-index: 100;
+  max-width: 280px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--chrome);
+  font: 500 12px/1.35 var(--ui-font);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.tooltip.placed {
+  visibility: visible;
+}

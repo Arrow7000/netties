@@ -9,6 +9,7 @@ import { Palette } from "./ui/Palette";
 import { Counters, HoverPanel, SelectionPanel } from "./ui/Panels";
 import { RuleEditor } from "./ui/RuleEditor";
 import { TextView } from "./ui/TextView";
+import { Tooltips } from "./ui/Tooltip";
 import { TranslateView } from "./ui/TranslateView";
 import { TypesSheet } from "./ui/TypesSheet";
 import * as I from "./ui/icons";
@@ -60,6 +61,11 @@ export function App(props: { initial?: Doc }) {
     return kind !== "net" && kind !== "agent";
   };
 
+  // The undo and redo buttons light up when their shortcuts are used.
+  let undoBtn!: HTMLButtonElement;
+  let redoBtn!: HTMLButtonElement;
+  const flash = (b: HTMLElement) => b.animate([{ background: "var(--accent-soft)", color: "var(--accent)" }, {}], { duration: 450, easing: "ease-out" });
+
   onMount(() => {
     let hashNavigation = 0;
     const onHashChange = async () => {
@@ -89,7 +95,9 @@ export function App(props: { initial?: Doc }) {
       if (overlayOpen() && !(sheetOnly && mod && e.key.toLowerCase() === "z")) return;
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        ed.dispatch({ kind: e.shiftKey ? "history/redo" : "history/undo" });
+        const redo = e.shiftKey;
+        if (m.historySize()[redo ? "redo" : "undo"]) flash(redo ? redoBtn : undoBtn);
+        ed.dispatch({ kind: redo ? "history/redo" : "history/undo" });
       } else if (mod) return;
       else if (e.key === "Delete" || e.key === "Backspace") ed.dispatch({ kind: "selection/delete" });
       else if (e.key === "Escape") ed.dispatch({ kind: "selection/clear" });
@@ -238,10 +246,10 @@ export function App(props: { initial?: Doc }) {
       </div>
 
       <div class="island top-right">
-        <button class="btn icon" onClick={() => ed.dispatch({ kind: "history/undo" })} disabled={!m.historySize().undo} title="Undo (⌘Z)">
+        <button ref={undoBtn} class="btn icon" onClick={() => ed.dispatch({ kind: "history/undo" })} disabled={!m.historySize().undo} title="Undo (⌘Z)">
           <I.Undo />
         </button>
-        <button class="btn icon" onClick={() => ed.dispatch({ kind: "history/redo" })} disabled={!m.historySize().redo} title="Redo (⇧⌘Z)">
+        <button ref={redoBtn} class="btn icon" onClick={() => ed.dispatch({ kind: "history/redo" })} disabled={!m.historySize().redo} title="Redo (⇧⌘Z)">
           <I.Redo />
         </button>
         <span class="sep" />
@@ -389,6 +397,7 @@ export function App(props: { initial?: Doc }) {
       <Show when={ed.screen().kind === "rule" ? ed.screen() as Extract<ReturnType<typeof ed.screen>, { kind: "rule" }> : undefined} keyed>
         {(screen) => <RuleEditor ed={ed} left={screen.left} right={screen.right} />}
       </Show>
+      <Tooltips />
       <Show when={ed.message()}>
         <div class="toast" role="status">
           <span>{ed.message()}</span>
