@@ -25,7 +25,6 @@
   --active-op: 0.55;
   --on-active: #2a1b00;
   --stuck: #d9472b;
-  --consume: #ec6a12;
   --dot: rgba(0, 0, 0, 0.1);
   --scrim: rgba(10, 12, 16, 0.28);
   --shadow: 0 1px 2px rgba(16, 20, 28, 0.06), 0 8px 24px rgba(16, 20, 28, 0.08);
@@ -52,7 +51,6 @@
     --active: #ffb321;
     --active-op: 0.85;
     --stuck: #ff6a4d;
-    --consume: #ff7d33;
     --dot: rgba(255, 255, 255, 0.13);
     --scrim: rgba(0, 0, 0, 0.5);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
@@ -76,7 +74,6 @@
   --active: #ffb321;
   --active-op: 0.85;
   --stuck: #ff6a4d;
-  --consume: #ff7d33;
   --dot: rgba(255, 255, 255, 0.13);
   --scrim: rgba(0, 0, 0, 0.5);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
@@ -2161,28 +2158,11 @@ kbd {
   }
 }
 
-/* What firing the pair under the pointer takes away, and what it puts in its place. */
+/* A step being previewed: what it takes away fades, what it puts in its place is drawn in the active colour. */
 
-.agent.consumed .body {
-  stroke: var(--consume);
-  stroke-width: 1.8;
-}
-
-.agent.consumed.filled .body {
-  fill: var(--consume);
-}
-
-.agent.consumed .symbol {
-  fill: var(--consume);
-}
-
-.agent.consumed.filled .symbol {
-  fill: var(--paper);
-}
-
-.wire.consumed .line {
-  stroke: var(--consume);
-  stroke-width: 1.8;
+.agent.fading,
+.wire.fading {
+  opacity: 0.22;
 }
 
 .rule-preview {
@@ -2191,8 +2171,23 @@ kbd {
 
 .rule-preview .frame {
   fill: var(--paper);
-  fill-opacity: 0.92;
-  stroke: var(--active);
+  fill-opacity: 0.85;
+  stroke: var(--accent);
+  stroke-opacity: 0.4;
+  stroke-width: 1;
+}
+
+/* A soft glow round the frame, so its edge reads as a hint rather than a line. */
+.rule-preview .frame-halo {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.12;
+  stroke-width: 9;
+}
+
+.rule-preview .kept {
+  fill: none;
+  stroke: var(--ink);
   stroke-width: 1.4;
 }
 

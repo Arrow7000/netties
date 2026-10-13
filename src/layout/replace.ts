@@ -203,7 +203,12 @@ export interface StepPreview {
   plans: Map<WireId, StepPlan>;
   /** The pairs that fire. */
   wires: WireId[];
+  /** The agents the steps take away. */
   agents: AgentId[];
+  /** Wires drawn now that the steps take away or reroute, all or in part. */
+  fading: WireId[];
+  /** The stretches of those wires that stay as they are. */
+  kept: Pt[][];
   /** The new stretches of wire: dashed outside a frame, solid inside one. */
   strokes: { pts: Pt[]; dashed: boolean }[];
 }
@@ -240,6 +245,7 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], 
   }
   const frames = [...plans.values()].map((p) => p.frame);
   const strokes: StepPreview["strokes"] = [];
+  const kept: Pt[][] = [];
   const oldAt = (e: End): Pt | undefined => endAt(net, drawn.placement, drawn.routed, e);
   for (const [id, from] of origin) {
     if (!tmp.wires.has(id)) continue;
@@ -260,14 +266,20 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], 
       if (!at || !oldPts) return 0;
       let o = flattenPath(oldPts, G.radius);
       if (dist(o[o.length - 1]!, at) < dist(o[0]!, at)) o = [...o].reverse();
-      return commonLength(o, ends[0] === e ? path : [...path].reverse());
+      const n = commonLength(o, ends[0] === e ? path : [...path].reverse());
+      if (n > 0) kept.push(slice(o, 0, n));
+      return n;
     });
     const len = length(path);
     if (shared[0]! + shared[1]! >= len - 1) continue;
     const fresh = slice(path, shared[0]!, len - shared[1]!);
     strokes.push(...splitByFrames(fresh, frames));
   }
-  return { plans, wires: fired, agents, strokes };
+  const gone = new Set(agents);
+  const fading = [...net.wires.values()]
+    .filter((x) => x.ends.some((e) => e.kind === "port" && gone.has(e.agent)))
+    .map((x) => x.id);
+  return { plans, wires: fired, agents, fading, kept, strokes };
 }
 
 /** Where an end is drawn. */

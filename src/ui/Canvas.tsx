@@ -543,7 +543,7 @@ export function Canvas(props: CanvasProps) {
     const ws = targets();
     if (!ws?.length || !props.preview) return undefined;
     const p = props.preview(ws);
-    return { wires: new Set(p.wires), agents: new Set(p.agents), preview: p };
+    return { wires: new Set(p.fading), agents: new Set(p.agents), preview: p };
   });
 
   /** Whether a wire's type label shows: always, by preference, or when the pointer is on or near it. */
@@ -619,7 +619,7 @@ export function Canvas(props: CanvasProps) {
                   plain={props.readonly}
                   hidden={carried() === id}
                   highlighted={highlighted().has(id)}
-                  consumed={!!firing()?.wires.has(id)}
+                  fading={!!firing()?.wires.has(id)}
                 />
               )}
             </For>
@@ -630,7 +630,7 @@ export function Canvas(props: CanvasProps) {
                   system={sys}
                   id={id}
                   pre={preselected().has(id)}
-                  consumed={!!firing()?.agents.has(id)}
+                  fading={!!firing()?.agents.has(id)}
                   endState={endState}
                   readonly={props.readonly}
                 />
@@ -808,8 +808,14 @@ function RulePreview(props: { preview: StepPreview; system: () => System }) {
   return (
     <g class="rule-preview">
       <For each={plans()}>
-        {(p) => <rect class="frame" x={p.frame.x0} y={p.frame.y0} width={p.frame.x1 - p.frame.x0} height={p.frame.y1 - p.frame.y0} rx={6} />}
+        {(p) => (
+          <>
+            <rect class="frame-halo" x={p.frame.x0} y={p.frame.y0} width={p.frame.x1 - p.frame.x0} height={p.frame.y1 - p.frame.y0} rx={6} />
+            <rect class="frame" x={p.frame.x0} y={p.frame.y0} width={p.frame.x1 - p.frame.x0} height={p.frame.y1 - p.frame.y0} rx={6} />
+          </>
+        )}
       </For>
+      <For each={props.preview.kept}>{(pts) => <path class="kept" d={polylinePath(pts)} />}</For>
       <For each={props.preview.strokes}>{(st) => <path class={st.dashed ? "link" : "inner"} d={polylinePath(st.pts)} />}</For>
       <For each={plans()}>{(plan) => <PlannedAgents plan={plan} system={props.system} />}</For>
     </g>
@@ -960,8 +966,8 @@ function Wire(props: {
   plain?: boolean;
   hidden?: boolean;
   highlighted?: boolean;
-  /** Taken away by the step under the pointer. */
-  consumed?: boolean;
+  /** Taken away, or rerouted, by the step being previewed. */
+  fading?: boolean;
 }) {
   const ed = props.ed;
   const pts = () => ed.layout().routed.wires.get(props.id) ?? [];
@@ -1003,7 +1009,7 @@ function Wire(props: {
         selected: sel(),
         hot: hot(),
         highlighted: !!props.highlighted,
-        consumed: !!props.consumed,
+        fading: !!props.fading,
         xray: xray(),
         doomed: ed.doomed().has(props.id),
       }}
@@ -1024,8 +1030,8 @@ function Agent(props: {
   system: () => System;
   id: AgentId;
   pre: boolean;
-  /** Taken away by the step under the pointer. */
-  consumed?: boolean;
+  /** Taken away, or rerouted, by the step being previewed. */
+  fading?: boolean;
   endState: (e: End) => EndState;
   readonly?: boolean;
 }) {
@@ -1068,7 +1074,7 @@ function Agent(props: {
           box: box(),
           selected: selected(),
           pre: props.pre && !selected(),
-          consumed: !!props.consumed,
+          fading: !!props.fading,
           hot: hot(),
           movable: !props.readonly,
         }}
