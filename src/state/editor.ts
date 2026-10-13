@@ -10,7 +10,7 @@ import { type PortSpec, type Typing, badWires, canMeet, flip, specOf } from "../
 import type { Placement, Pt } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
 import { type Drawn, type StepPlan, type StepPreview, placeCreated, planSteps, previewSteps } from "../layout/replace";
-import { createNetModel } from "./model";
+import { type Attach, createNetModel } from "./model";
 import { type Doc, decode, saveLocal } from "./persist";
 
 export type { Layout, Selection } from "./model";
@@ -41,7 +41,7 @@ export type EditorMsg =
   | { kind: "selection/change-type"; agents: AgentId[]; type: string }
   | { kind: "selection/flip"; agents: AgentId[] }
   | { kind: "component/set-collapsed"; groups: GroupId[]; collapsed: boolean }
-  | { kind: "net/add-agent"; type: string; at?: Pt }
+  | { kind: "net/add-agent"; type: string; at?: Pt; attach?: Attach }
   | { kind: "net/add-component"; id: string; at?: Pt }
   | { kind: "layout/set"; mode: "auto" | "manual" }
   | { kind: "layout/tidy" };
@@ -352,7 +352,7 @@ export function createEditor(initial: Doc | undefined) {
         model.setGroupsCollapsed(msg.groups, msg.collapsed);
         return;
       case "net/add-agent":
-        model.addAgent(msg.type, msg.at);
+        model.addAgent(msg.type, msg.at, msg.attach);
         return;
       case "net/add-component":
         model.addComponent(msg.id, msg.at);

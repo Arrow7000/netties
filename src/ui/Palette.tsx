@@ -48,17 +48,23 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
     const move = (ev: PointerEvent) => {
       if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
       dragging = true;
-      const over = !!props.camera.toWorld(ev.clientX, ev.clientY) && !overChrome(ev);
+      const at = props.camera.toWorld(ev.clientX, ev.clientY);
+      const over = !!at && !overChrome(ev);
       setCarry({ what, x: ev.clientX, y: ev.clientY, over });
+      // Over an agent, or near a port: show what the new agent would plug into.
+      if (what.kind === "type" && at && over) m.setPlacing({ type: what.id, at, attach: m.attachTarget(what.id, at) });
+      else m.setPlacing(undefined);
     };
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       setCarry(undefined);
+      const attach = m.placing()?.attach;
+      m.setPlacing(undefined);
       if (!dragging) return open();
       const at = props.camera.toWorld(ev.clientX, ev.clientY);
       if (!at || overChrome(ev)) return;
-      if (what.kind === "type") ed.dispatch({ kind: "net/add-agent", type: what.id, at });
+      if (what.kind === "type") ed.dispatch({ kind: "net/add-agent", type: what.id, at, attach });
       else ed.dispatch({ kind: "net/add-component", id: what.id, at });
     };
     window.addEventListener("pointermove", move);

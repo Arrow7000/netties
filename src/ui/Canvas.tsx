@@ -512,8 +512,20 @@ export function Canvas(props: CanvasProps) {
     return { at: m.at, dx: m.dx * sgn, dy: m.dy * sgn, class: d.g.kind === "new" ? "drag" : "" };
   };
 
+  /** A new agent carried in from the palette, and the port it would plug into. */
+  const placingLink = () => {
+    const pl = ed.placing();
+    const e = pl?.attach?.end;
+    if (!pl || e?.kind !== "port") return undefined;
+    const p = ed.layout().placement.get(e.agent);
+    if (!p) return undefined;
+    return { from: portPos(p, ed.view().net.agent(e.agent).wires.length - 1, e.slot), to: pl.at };
+  };
+
   /** How a port or free end should look right now. */
   const endState = (e: End): EndState => {
+    const target = ed.placing()?.attach?.end;
+    if (target && sameEnd(e, target)) return "target";
     const d = wireDrag();
     if (d) {
       if (sameEnd(e, d.g.kind === "new" ? d.g.from : d.g.anchor)) return "origin";
@@ -745,6 +757,16 @@ export function Canvas(props: CanvasProps) {
                 </g>
               );
             }}
+          </Show>
+          <Show when={placingLink()}>
+            {(l) => (
+              <g class="drag-wire">
+                <path
+                  class="line"
+                  d={`M${l().from.x} ${l().from.y} C${l().from.x} ${(l().from.y + l().to.y) / 2} ${l().to.x} ${(l().from.y + l().to.y) / 2} ${l().to.x} ${l().to.y}`}
+                />
+              </g>
+            )}
           </Show>
           <Show when={drag()?.kind === "marquee" ? (drag() as Extract<Drag, { kind: "marquee" }>) : undefined}>
             {(d) => (

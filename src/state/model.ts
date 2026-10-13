@@ -5,8 +5,8 @@ import { type Defs, type GroupId, Groups, type GroupsJSON, collapse, instantiate
 import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, port, sameEnd } from "../core/net";
 import { type StepRecord, redexes } from "../core/reduce";
 import type { System } from "../core/system";
-import { type Clash, type Effective, clash, clashText, endSpec } from "../core/types";
-import { G, type Placed, type Placement, type Pt, portPos } from "../layout/geometry";
+import { type Clash, type Effective, clash, clashText, endSpec, specOf } from "../core/types";
+import { G, type Placed, type Placement, type Pt, boxOf, portPos } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
 import { routeHoldingEnds } from "../layout/replace";
 import { type Pins, type Routed, route } from "../layout/route";
@@ -81,6 +81,15 @@ export type Hover =
   /** A port type, from the palette or the types sheet: light up every port of it. */
   | { kind: "porttype"; name: string };
 
+/** Where a new agent being dropped would plug in: an end of the net, and which of its own ports. */
+export interface Attach {
+  end: End;
+  slot: number;
+}
+
+/** How near a port a new agent has to be let go, when it isn't over the port's agent, to plug into it. */
+const REACH = 22;
+
 const HISTORY_LIMIT = 200;
 const noDefs: Defs = new Map();
 
@@ -106,6 +115,8 @@ export function createNetModel(opts: NetModelOptions) {
   const [hover, setHover] = createSignal<Hover>();
   /** Wires an edit being prepared would cut, marked on the canvas until it's saved or dropped. */
   const [doomed, setDoomed] = createSignal<ReadonlySet<WireId>>(new Set());
+  /** A new agent being carried in from the palette: where it is, and what it would plug into. */
+  const [placing, setPlacing] = createSignal<{ type: string; at: Pt; attach?: Attach }>();
   /** Where agents just dropped from the palette were let go, to animate them from there. */
   const spawnAt = new Map<AgentId, Pt>();
   const undoStack: string[] = [];
@@ -716,10 +727,70 @@ export function createNetModel(opts: NetModelOptions) {
       bump();
     },
 
-    addAgent(type: string, at?: Pt) {
+    placing,
+    setPlacing,
+
+    /**
+     * What a new agent of `type` let go at `at` would plug into: the
+     * nearest port, of the agent it's over or within reach, that's empty or
+     * only leads to a loose end and fits one of the new agent's ports
+     * (its principal port if it can).
+     */
+    attachTarget(type: string, at: Pt): Attach | undefined {
+      const sys = opts.system();
+      const t = sys.types.get(type);
+      if (!t) return undefined;
+      const v = view().net;
+      let best: (Attach & { d: number }) | undefined;
+      for (const [id, p] of layout().placement) {
+        if (!v.agents.has(id)) continue;
+        const arity = v.agent(id).wires.length - 1;
+        const b = boxOf(p, arity);
+        const over = at.x >= b.x0 && at.x <= b.x1 && at.y >= b.y0 && at.y <= b.y1;
+        for (let slot = 0; slot <= arity; slot++) {
+          const e = port(id, slot);
+          const w = v.wireAt(e);
+          if (w !== NONE && (opts.fixedInterface || v.partner(e)?.kind !== "free")) continue;
+          const q = portPos(p, arity, slot);
+          const d = Math.hypot(q.x - at.x, q.y - at.y);
+          if ((!over && d > REACH) || (best && d >= best.d)) continue;
+          const there = specAt(e);
+          const mine = Array.from({ length: t.arity + 1 }, (_, i) => i).find((i) => !clash(specOf(sys, type, i), there));
+          if (mine !== undefined) best = { end: e, slot: mine, d };
+        }
+      }
+      return best && { end: best.end, slot: best.slot };
+    },
+
+    addAgent(type: string, at?: Pt, attach?: Attach) {
+      const v = view();
+      const l = layout();
       checkpoint();
-      const id = net.addAgent(opts.system().type(type));
-      if (at && mode() === "manual") positions.set(id, { x: at.x, y: at.y, orient: "down" });
+      const t = opts.system().type(type);
+      const id = net.addAgent(t);
+      let orient: Placed["orient"] = "down";
+      if (attach) {
+        const real = v.toReal(attach.end);
+        const w = net.wireAt(real);
+        const other = w === NONE ? undefined : net.partner(real);
+        // A port that only led to a loose end gives the loose end up.
+        if (w !== NONE && other?.kind === "free" && !opts.fixedInterface) {
+          net.disconnect(w);
+          net.free.delete(other.name);
+        }
+        if (net.wireAt(real) === NONE) net.connect(port(id, attach.slot), real);
+        // Turn the new agent so the port that plugs in faces the one it plugs into.
+        const p = attach.end.kind === "port" ? l.placement.get(attach.end.agent) : undefined;
+        if (at && p && attach.end.kind === "port") {
+          const target = portPos(p, v.net.agent(attach.end.agent).wires.length - 1, attach.end.slot);
+          const dist = (o: Placed["orient"]) => {
+            const q = portPos({ x: at.x, y: at.y, orient: o }, t.arity, attach.slot);
+            return Math.hypot(q.x - target.x, q.y - target.y);
+          };
+          orient = dist("up") < dist("down") ? "up" : "down";
+        }
+      }
+      if (at && mode() === "manual") positions.set(id, { x: at.x, y: at.y, orient });
       else if (at) spawnAt.set(id, at);
       setItems(new Set([id]), new Set());
       bump();

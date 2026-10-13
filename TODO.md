@@ -96,12 +96,18 @@ In order. One design round at a time ("things are overwhelming enough").
          checked first ("one ")" too many", "one "(" is never closed … it
          opens after S on line 3, column 9"), and Load puts the caret there.
 2. **Editing basics**:
-   - [ ] ⌘C/⌘X/⌘V for the selection, via the system clipboard in the text
-         format (paste across tabs, from hand-written text). Pastes at the
-         cursor, selected; wires to outside agents become loose ends.
-   - [ ] Drag selection picks up wires (both ends inside the box).
-   - [ ] Dropping a new agent on an existing one wires it to the nearest
-         compatible free port, shown while dragging. Not random.
+   - [x] ⌘C/⌘X/⌘V for the selection (`src/core/clip.ts`). The clipboard
+         gets JSON for netties and the text format for anywhere else, so
+         hand-written text pastes too. Pastes under the pointer, selected;
+         wires to anything left behind become loose ends. Brings missing
+         agent types, components, and rules for new types only. Not yet in
+         the rule and component editors (design round).
+   - [x] Drag selection picks up wires (both ends inside the box; a loose
+         end counts where it's drawn). Deleting takes them too.
+   - [x] Dropping a new agent from the palette over an agent, or near a
+         port, plugs it into the nearest port that's empty or only leads to
+         a loose end and fits (its principal port first), shown while
+         dragging. Components dropped this way don't plug in yet.
 3. **Design round: the editors**. The rule editor, combinator view and
    component editor become non-modal (click outside to dismiss) and get the
    main canvas's affordances (drag in from the palette, shortcuts). The
