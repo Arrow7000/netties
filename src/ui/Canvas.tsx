@@ -528,7 +528,10 @@ export function Canvas(props: CanvasProps) {
     return new Set(
       v.activePairs().filter((w) => {
         const [a, b] = v.wire(w).ends;
-        return a.kind === "port" && b.kind === "port" && pairKey(v.agent(a.agent).type, v.agent(b.agent).type) === k;
+        if (a.kind !== "port" || b.kind !== "port") return false;
+        const ta = v.agent(a.agent).type;
+        const tb = v.agent(b.agent).type;
+        return pairKey(ta, tb) === k || pairKey(tb, ta) === k;
       }),
     );
   });
