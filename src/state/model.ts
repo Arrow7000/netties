@@ -205,12 +205,15 @@ export function createNetModel(opts: NetModelOptions) {
 
   /** The last automatic layout, so the next one can stay close to it. */
   let lastAuto: Placement | undefined;
+  /** Agents in `lastAuto` the next layout may point either way: ones a step just put down. */
+  let anyWay: ReadonlySet<AgentId> | undefined;
 
   const automatic = createMemo(() => {
     const v = view();
     const pins = opts.pins?.();
-    const l = autoLayout(v.net, { pins, prev: lastAuto });
+    const l = autoLayout(v.net, { pins, prev: lastAuto, anyWay });
     lastAuto = l.placement;
+    anyWay = undefined;
     return l;
   });
 
@@ -602,13 +605,19 @@ export function createNetModel(opts: NetModelOptions) {
     animSnapshot,
     animate,
     settleFrom,
-    /** Positions the next automatic layout should stay close to, on top of the last one. Part of an edit under way. */
-    seedLayout(start: Placement) {
+    /**
+     * Positions the next automatic layout should stay close to, on top of the
+     * last one. Agents in `anyWay` keep their place but not their way of
+     * pointing, so the layout doesn't depend on how a step's result happened
+     * to be drawn. Part of an edit under way.
+     */
+    seedLayout(start: Placement, turnable: ReadonlySet<AgentId> = new Set()) {
       if (mode() === "manual") {
         for (const [id, p] of start) positions.set(id, p);
         return;
       }
       lastAuto = new Map([...(lastAuto ?? []), ...start]);
+      anyWay = turnable;
     },
 
     /** Whether a view agent is selected (a box counts when its instance is). */
