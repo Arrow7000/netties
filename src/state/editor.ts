@@ -7,7 +7,7 @@ import { type Rule, System, type SystemJSON, pairKey } from "../core/system";
 import { type PortSpec, type Typing, badWires, canMeet, flip, specOf } from "../core/types";
 import type { Placement, Pt } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
-import { type StepPlan, placeCreated, planSteps } from "../layout/replace";
+import { type Drawn, type StepPlan, type StepPreview, placeCreated, planSteps, previewSteps } from "../layout/replace";
 import { createNetModel } from "./model";
 import { type Doc, decode, saveLocal } from "./persist";
 
@@ -172,10 +172,26 @@ export function createEditor(initial: Doc | undefined) {
     return missing;
   });
 
-  /** Where firing these active pairs would put what their rules create. */
-  const plan = (ws: WireId[]): Map<WireId, StepPlan> => {
+  const drawn = (): Drawn => {
     const l = model.layout();
-    return planSteps(model.view().net, system, { placement: l.placement, wires: l.routed.wires }, ws, { turn: turnResults() });
+    return { placement: l.placement, routed: l.routed, columns: l.columns };
+  };
+  /** Where firing these active pairs would put what their rules create. */
+  const plan = (ws: WireId[]): Map<WireId, StepPlan> => planSteps(model.view().net, system, drawn(), ws, { turn: turnResults() });
+
+  /**
+   * Which active pairs to preview without the pointer on them: the next
+   * step while pointing at Step, every pair while pointing at Step all, and
+   * every pair for a moment before each step of a run.
+   */
+  const [previewMode, setPreviewMode] = createSignal<"next" | "all">();
+  const previewing = (): WireId[] | undefined => {
+    const m = previewMode();
+    if (!m) return undefined;
+    const ws = [...model.activeWires()];
+    if (m === "next") return ws.slice(0, 1);
+    // Past this many frames at once, a preview is more noise than help.
+    return ws.length && ws.length <= PREVIEW_LIMIT ? ws : undefined;
   };
 
   /**
@@ -198,6 +214,7 @@ export function createEditor(initial: Doc | undefined) {
     const recs: StepRecord[] = [];
     model.checkpoint();
     const before = model.layout().placement;
+    const columns = model.layout().columns;
     const plans = plan([w]);
     try {
       const rec = interact(net, system, w);
@@ -221,7 +238,7 @@ export function createEditor(initial: Doc | undefined) {
     batch(() => {
       model.clearSelection();
       model.bump();
-      model.settleFrom(start, stepDuration());
+      model.settleFrom(start, columns, stepDuration());
     });
   };
 
@@ -235,6 +252,7 @@ export function createEditor(initial: Doc | undefined) {
     const fromExample = inExampleRun();
     if (record) model.checkpoint();
     const before = model.layout().placement;
+    const columns = model.layout().columns;
     const plans = plan([...model.activeWires()]);
     const s: Stats = { ...stats(), byRule: new Map(stats().byRule) };
     const recs = parallelStep(model.net, system, s);
@@ -249,7 +267,7 @@ export function createEditor(initial: Doc | undefined) {
     batch(() => {
       model.clearSelection();
       model.bump();
-      model.settleFrom(start, stepDuration());
+      model.settleFrom(start, columns, stepDuration());
     });
     return recs.length > 0;
   };
@@ -258,6 +276,7 @@ export function createEditor(initial: Doc | undefined) {
   const stop = () => {
     if (timer) clearTimeout(timer);
     timer = undefined;
+    setPreviewMode(undefined);
     setRunning(false);
   };
   const run = () => {
@@ -266,10 +285,18 @@ export function createEditor(initial: Doc | undefined) {
     model.checkpoint();
     setRunning(true);
     let rounds = 0;
-    const tick = () => {
+    const step = () => {
+      setPreviewMode(undefined);
       if (!stepAll(false) || ++rounds >= 2000) return stop();
       // Leave each step a moment on screen once it has finished moving.
       timer = setTimeout(tick, stepDuration() + 140);
+    };
+    // Flash what's about to happen, for longer the slower the run.
+    const tick = () => {
+      if (model.activeWires().size === 0) return stop();
+      setPreviewMode("all");
+      if (!previewing()) return step();
+      timer = setTimeout(step, stepDuration() * FLASH);
     };
     timer = setTimeout(tick, 0);
   };
@@ -453,8 +480,10 @@ export function createEditor(initial: Doc | undefined) {
     setSpeed,
     turnResults,
     setTurnResults,
-    /** What firing an active pair would do, for previewing it. */
-    planFor: (w: WireId) => plan([w]).get(w),
+    /** What firing these active pairs at once would do, for previewing it. */
+    preview: (ws: WireId[]): StepPreview => previewSteps(model.view().net, system, drawn(), ws, { turn: turnResults() }),
+    previewing,
+    setPreviewMode,
     canResetExample,
     resetExample() {
       const start = exampleStart();
@@ -810,6 +839,10 @@ export type Editor = ReturnType<typeof createEditor>;
 
 const SPEED_KEY = "netties:speed";
 const TURN_KEY = "netties:turn-results";
+/** How long a run shows each step's preview, as a share of the time a step takes to animate. */
+const FLASH = 0.8;
+/** Don't preview more active pairs than this at once. */
+const PREVIEW_LIMIT = 24;
 
 function readFlag(key: string): boolean {
   try {

@@ -1,32 +1,37 @@
-import { type AgentId, type Net, type WireId } from "../core/net";
+import { type AgentId, type End, type Net, type WireId, sameEnd } from "../core/net";
+import { type StepRecord, interact, isActive } from "../core/reduce";
 import { ifaceName, interfacePins, ruleToNet } from "../core/ruleNet";
 import type { Rule, System } from "../core/system";
-import { type Box, type Placed, type Placement, type Pt, type Terminal, boxOf, portPos } from "./geometry";
+import { flattenPath } from "../render/path";
+import { type Box, G, type Placed, type Placement, type Pt, type Terminal, boxOf, portPos } from "./geometry";
 import { autoLayout } from "./place";
+import { type Pins, type Routed, route } from "./route";
 
 /**
- * Where firing an active pair puts the agents its rule creates.
+ * What firing active pairs will do, shown before it happens.
  *
  * A step is shown as what it is: the pair is replaced by the rule's
- * right-hand side, drawn exactly as the rule editor draws it, in a frame
- * placed in free space next to the pair. Pointing at the pair previews that
- * frame, with dashed links from each of the pair's aux ports to the
- * interface pin it joins; firing puts the new agents where the preview
- * showed them, and only then does the net settle into its usual layout.
+ * right-hand side, its agents placed exactly as the rule editor places them,
+ * in a frame in free space next to the pair. To preview it we fire the step
+ * on a copy of the net, keep every other agent where it is drawn (as if the
+ * layout were manual), and route the wires as usual. Each new wire starts
+ * from wherever its old wire came from; the stretch it shares with that old
+ * wire is already on screen, so only the rest is drawn, dashed outside the
+ * frame and solid inside it. Firing then starts from exactly that drawing,
+ * and only afterwards does the net settle into its usual layout.
  */
 
 /** A right-hand side as the rule editor draws it, centred on the origin. */
 interface RuleDrawing {
   /** Index-aligned with `rule.agents`. */
   agents: Placed[];
-  wires: Pt[][];
-  /** Interface pins by name (L1, R2, …). */
+  /** Interface pins by name (L1, R2, …), for judging where the frame fits best. */
   pins: Map<string, Terminal>;
-  /** The frame: top pins sit on its top edge, bottom pins on its bottom edge. */
+  /** Around the agents and the wires between them. */
   frame: Box;
 }
 
-const FRAME_PAD = 12;
+const FRAME_PAD = 14;
 
 const drawings = new WeakMap<Rule, RuleDrawing>();
 
@@ -37,24 +42,19 @@ function drawRule(sys: System, rule: Rule): RuleDrawing {
   const pins = interfacePins(sys, rule.left, rule.right);
   const l = autoLayout(net, { pins });
   const ids = [...net.agents.keys()];
-  const b = l.routed.bounds;
-  const pinYs = (names: string[]) => names.map((n) => l.routed.free.get(n)?.y).filter((y): y is number => y !== undefined);
-  const top = pinYs(pins.top);
-  const bottom = pinYs(pins.bottom);
-  const frame = {
-    x0: b.x0 - FRAME_PAD,
-    x1: b.x1 + FRAME_PAD,
-    y0: top.length ? Math.min(...top) : b.y0 - FRAME_PAD,
-    y1: bottom.length ? Math.max(...bottom) : b.y1 + FRAME_PAD,
-  };
-  const cx = (frame.x0 + frame.x1) / 2;
-  const cy = (frame.y0 + frame.y1) / 2;
+  const boxes = ids.map((id) => boxOf(l.placement.get(id)!, net.agent(id).wires.length - 1));
+  for (const [id, pts] of l.routed.wires) {
+    const [a, b] = net.wire(id).ends;
+    if (a.kind === "port" && b.kind === "port") boxes.push(...pts.map(pointBox));
+  }
+  const b = grow(union(boxes), FRAME_PAD);
+  const cx = (b.x0 + b.x1) / 2;
+  const cy = (b.y0 + b.y1) / 2;
   const at = <T extends Pt>(p: T): T => ({ ...p, x: p.x - cx, y: p.y - cy });
   const d: RuleDrawing = {
     agents: ids.map((id) => at(l.placement.get(id)!)),
-    wires: [...l.routed.wires.values()].map((pts) => pts.map(at)),
     pins: new Map([...l.routed.free].map(([n, t]) => [n, at(t)])),
-    frame: { x0: frame.x0 - cx, x1: frame.x1 - cx, y0: frame.y0 - cy, y1: frame.y1 - cy },
+    frame: { x0: b.x0 - cx, x1: b.x1 - cx, y0: b.y0 - cy, y1: b.y1 - cy },
   };
   drawings.set(rule, d);
   return d;
@@ -67,11 +67,7 @@ export interface StepPlan {
   pair: [AgentId, AgentId];
   /** Where each agent the rule creates goes, index-aligned with `rule.agents`. */
   agents: Placed[];
-  /** The right-hand side's own wires, inside the frame. */
-  wires: Pt[][];
   frame: Box;
-  /** From each aux port of the pair to the interface pin it will be joined to, routed round the frame. */
-  links: Pt[][];
   /** Drawn upside down (a half turn) from how the rule editor shows it. */
   turned: boolean;
 }
@@ -81,22 +77,25 @@ export interface PlanOptions {
   turn?: boolean;
 }
 
+/** The net as drawn: what a preview starts from. */
+export interface Drawn {
+  placement: Placement;
+  routed: Routed;
+  /** Columns the layout asked wires to run in, so rerouting keeps them. */
+  columns?: Map<string, number>;
+  pins?: Pins;
+}
+
 /**
  * Plan the firing of some active pairs. Rules that create no agents get no
  * plan (they only reconnect wires). Each frame avoids the agents and wires
  * already drawn, and the frames planned before it.
  */
-export function planSteps(
-  net: Net,
-  sys: System,
-  layout: { placement: Placement; wires: Map<WireId, Pt[]> },
-  ws: WireId[],
-  opts: PlanOptions = {},
-): Map<WireId, StepPlan> {
+export function planSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], opts: PlanOptions = {}): Map<WireId, StepPlan> {
   const plans = new Map<WireId, StepPlan>();
   const taken: Box[] = [];
   for (const w of ws) {
-    const p = planOne(net, sys, layout, w, taken, opts);
+    const p = planOne(net, sys, drawn, w, taken, opts);
     if (!p) continue;
     plans.set(w, p);
     taken.push(p.frame);
@@ -106,22 +105,17 @@ export function planSteps(
 
 /** Frames are tried at points on a grid this fine around the pair. */
 const GRID = 16;
+/** Room left between a pair and its frame. */
+const CLEAR = 22;
 
-function planOne(
-  net: Net,
-  sys: System,
-  layout: { placement: Placement; wires: Map<WireId, Pt[]> },
-  w: WireId,
-  taken: Box[],
-  opts: PlanOptions,
-): StepPlan | undefined {
+function planOne(net: Net, sys: System, drawn: Drawn, w: WireId, taken: Box[], opts: PlanOptions): StepPlan | undefined {
   if (!net.wires.has(w)) return undefined;
   const [a, b] = net.wire(w).ends;
   if (a.kind !== "port" || b.kind !== "port" || a.slot !== 0 || b.slot !== 0) return undefined;
   const found = sys.ruleFor(net.agent(a.agent).type, net.agent(b.agent).type);
   if (!found || !found.rule.agents.length) return undefined;
   const pair: [AgentId, AgentId] = found.swapped ? [b.agent, a.agent] : [a.agent, b.agent];
-  const placed = pair.map((id) => layout.placement.get(id));
+  const placed = pair.map((id) => drawn.placement.get(id));
   if (!placed[0] || !placed[1]) return undefined;
   const d = drawRule(sys, found.rule);
 
@@ -137,26 +131,25 @@ function planOne(
   const near = (bx: Box) =>
     bx.x1 > centre.x - reach && bx.x0 < centre.x + reach && bx.y1 > centre.y - reach && bx.y0 < centre.y + reach;
   const obstacles: Box[] = [];
-  for (const [id, p] of layout.placement) {
+  for (const [id, p] of drawn.placement) {
     if (id === pair[0] || id === pair[1] || !net.agents.has(id)) continue;
     const bx = grow(boxOf(p, arity(id)), 6);
     if (near(bx)) obstacles.push(bx);
   }
   obstacles.push(...taken.map((t) => grow(t, 8)));
   const segments: [Pt, Pt][] = [];
-  for (const pts of layout.wires.values())
+  for (const pts of drawn.routed.wires.values())
     for (let i = 1; i < pts.length; i++) {
       const s: [Pt, Pt] = [pts[i - 1]!, pts[i]!];
       if (near(union([pointBox(s[0]), pointBox(s[1])]))) segments.push(s);
     }
-  // Each aux port of the pair, and the pin it joins.
+  // Each aux port of the pair, and the pin of the rule's interface it stands for.
   const ports: [Terminal, string][] = [];
   pair.forEach((id, side) => {
     for (let slot = 1; slot <= arity(id); slot++)
       ports.push([portPos(placed[side]!, arity(id), slot), ifaceName(side as 0 | 1, slot)]);
   });
-  // Leave room between the pair and its frame for links coming round the side.
-  const keepClear = pairBoxes.map((bx) => grow(bx, 2 * STUB + LANE_GAP * ports.length));
+  const keepClear = pairBoxes.map((bx) => grow(bx, CLEAR));
 
   const steps = Math.min(14, Math.ceil(reach / GRID));
   let best: { cost: number; at: Pt; turned: boolean } | undefined;
@@ -172,6 +165,7 @@ function planOne(
           if (area > 0) cost += 2000 + area;
         }
         for (const [p, q] of segments) if (segmentHitsBox(p, q, frame)) cost += 150;
+        // Short, uncrossed runs from each aux port to where its pin would be.
         const links = ports.map(([t, pin]) => [t, pinAt(d, pin, at, turned)] as const);
         for (const [p, q] of links) if (q) cost += 0.5 * Math.hypot(p.x - q.x, p.y - q.y);
         for (let x = 0; x < links.length; x++)
@@ -192,15 +186,7 @@ function planOne(
     rule: found.rule,
     pair,
     agents: d.agents.map((p) => ({ ...move(p), orient: turned ? (p.orient === "down" ? "up" : "down") : p.orient })),
-    wires: d.wires.map((pts) => pts.map(move)),
     frame: { x0: at.x - fw / 2, x1: at.x + fw / 2, y0: at.y - fh / 2, y1: at.y + fh / 2 },
-    links: routeLinks(
-      ports.flatMap(([t, pin]) => {
-        const q = pinAt(d, pin, at, turned);
-        return q ? [[t, q] as [Terminal, Terminal]] : [];
-      }),
-      { x0: at.x - fw / 2, x1: at.x + fw / 2, y0: at.y - fh / 2, y1: at.y + fh / 2 },
-    ),
     turned,
   };
 }
@@ -213,55 +199,150 @@ function pinAt(d: RuleDrawing, name: string, at: Pt, turned: boolean): Terminal 
     : { x: at.x + p.x, y: at.y + p.y, dir: p.dir };
 }
 
-/** How far a link runs straight out of a port or pin before it turns. */
-const STUB = 12;
-/** Between neighbouring links running down the side of a frame. */
-const LANE_GAP = 6;
+export interface StepPreview {
+  plans: Map<WireId, StepPlan>;
+  /** The pairs that fire. */
+  wires: WireId[];
+  agents: AgentId[];
+  /** The new stretches of wire: dashed outside a frame, solid inside one. */
+  strokes: { pts: Pt[]; dashed: boolean }[];
+}
 
-/**
- * Links run like wires, vertically and horizontally between rounded
- * corners. One that has to come round to the far side of its pin goes down
- * a lane beside the frame, on whichever side its port is.
- */
-function routeLinks(links: [Terminal, Terminal][], frame: Box): Pt[][] {
-  const cx = (frame.x0 + frame.x1) / 2;
-  const lanes = { left: 0, right: 0 };
-  // Outer ports take outer lanes, so the lanes don't cross each other.
-  const order = links.map((_, i) => i).sort((a, b) => Math.abs(links[b]![0].x - cx) - Math.abs(links[a]![0].x - cx));
-  const out: Pt[][] = [];
-  order.forEach((i, k) => {
-    const [p, q] = links[i]!;
-    // Work as if the pin is on the top edge; a bottom pin is the same upside down.
-    const flip = q.dir === "down";
-    const fy = (y: number) => (flip ? -y : y);
-    const P = { x: p.x, y: fy(p.y) };
-    const up = (p.dir === "up") !== flip;
-    const Q = { x: q.x, y: fy(q.y) };
-    const top = flip ? -frame.y1 : frame.y0;
-    // Horizontal runs are staggered so links sharing a level don't overlap.
-    const stagger = k * 5;
-    let pts: Pt[];
-    if (up && !(P.x > frame.x0 && P.x < frame.x1 && P.y > top)) {
-      // Rise to above the pin, cross over, drop in.
-      const y = Math.min(P.y, Q.y) - STUB - stagger;
-      pts = [P, { x: P.x, y }, { x: Q.x, y }, Q];
-    } else if (!up && P.y + 2 * STUB < Q.y) {
-      // Already above the frame: drop partway, cross over, drop in.
-      const y = Q.y - STUB - stagger;
-      pts = [P, { x: P.x, y }, { x: Q.x, y }, Q];
-    } else {
-      // Come round the side of the frame, on the port's side.
-      const side = P.x < cx ? "left" : "right";
-      const n = lanes[side]++;
-      const x = side === "left" ? frame.x0 - STUB - n * LANE_GAP : frame.x1 + STUB + n * LANE_GAP;
-      const y0 = up ? P.y - STUB : P.y + STUB;
-      const y1 = Q.y - STUB - stagger;
-      pts = [P, { x: P.x, y: y0 }, { x, y: y0 }, { x, y: y1 }, { x: Q.x, y: y1 }, Q];
-    }
-    out[i] = pts.map((pt) => ({ x: pt.x, y: fy(pt.y) }));
-  });
+/** Preview firing some active pairs (at once, as in a parallel step). */
+export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], opts: PlanOptions = {}): StepPreview {
+  const plans = planSteps(net, sys, drawn, ws, opts);
+  const tmp = net.clone();
+  const placement = new Map(drawn.placement);
+  const fired: WireId[] = [];
+  const agents: AgentId[] = [];
+  const recs: StepRecord[] = [];
+  for (const w of ws) {
+    if (!tmp.wires.has(w) || !isActive(tmp, w)) continue;
+    const [a, b] = tmp.wire(w).ends as [Extract<End, { kind: "port" }>, Extract<End, { kind: "port" }>];
+    const found = sys.ruleFor(tmp.agent(a.agent).type, tmp.agent(b.agent).type);
+    if (!found || (found.rule.agents.length && !plans.has(w))) continue;
+    const rec = interact(tmp, sys, w);
+    recs.push(rec);
+    fired.push(w);
+    agents.push(...rec.removed);
+    rec.removed.forEach((id) => placement.delete(id));
+    const plan = plans.get(w);
+    if (plan) rec.created.forEach((id, i) => placement.set(id, plan.agents[i]!));
+  }
+  const routed = route(tmp, placement, { columns: drawn.columns, pins: drawn.pins });
+
+  // Which old wires each new wire continues, across every step.
+  const origin = new Map<WireId, WireId[]>();
+  const created = new Set<AgentId>();
+  for (const rec of recs) {
+    rec.created.forEach((id) => created.add(id));
+    for (const c of rec.createdWires) origin.set(c.id, c.from.flatMap((f) => origin.get(f) ?? [f]));
+  }
+  const frames = [...plans.values()].map((p) => p.frame);
+  const strokes: StepPreview["strokes"] = [];
+  const oldAt = (e: End): Pt | undefined => endAt(net, drawn.placement, drawn.routed, e);
+  for (const [id, from] of origin) {
+    if (!tmp.wires.has(id)) continue;
+    const pts = routed.wires.get(id);
+    if (!pts) continue;
+    let path = flattenPath(pts, G.radius);
+    if (path.length < 2) continue;
+    const ends = tmp.wire(id).ends;
+    // Run the path from its first end to its second.
+    const p0 = endAt(tmp, placement, routed, ends[0]);
+    if (p0 && dist(path[path.length - 1]!, p0) < dist(path[0]!, p0)) path = [...path].reverse();
+    // At an end that was there before the step, skip what the old wire already shows.
+    const shared = ends.map((e) => {
+      if (e.kind === "port" && created.has(e.agent)) return 0;
+      const at = oldAt(e);
+      const old = from.find((o) => net.wires.has(o) && net.wire(o).ends.some((x) => sameEnd(x, e)));
+      const oldPts = old === undefined ? undefined : drawn.routed.wires.get(old);
+      if (!at || !oldPts) return 0;
+      let o = flattenPath(oldPts, G.radius);
+      if (dist(o[o.length - 1]!, at) < dist(o[0]!, at)) o = [...o].reverse();
+      return commonLength(o, ends[0] === e ? path : [...path].reverse());
+    });
+    const len = length(path);
+    if (shared[0]! + shared[1]! >= len - 1) continue;
+    const fresh = slice(path, shared[0]!, len - shared[1]!);
+    strokes.push(...splitByFrames(fresh, frames));
+  }
+  return { plans, wires: fired, agents, strokes };
+}
+
+/** Where an end is drawn. */
+function endAt(net: Net, placement: Placement, routed: Routed, e: End): Pt | undefined {
+  if (e.kind === "free") return routed.free.get(e.name);
+  const p = placement.get(e.agent);
+  return p && net.agents.has(e.agent) ? portPos(p, net.agent(e.agent).wires.length - 1, e.slot) : undefined;
+}
+
+/** How far two paths starting at the same point run together. */
+function commonLength(a: Pt[], b: Pt[]): number {
+  if (!a.length || !b.length || dist(a[0]!, b[0]!) > 1) return 0;
+  const la = length(a);
+  const lb = length(b);
+  const end = Math.min(la, lb);
+  const STEP = 1.5;
+  let s = 0;
+  for (; s <= end; s += STEP) if (dist(pointAt(a, s), pointAt(b, s)) > 1) return Math.max(0, s - STEP);
+  return end;
+}
+
+function length(pts: Pt[]): number {
+  let l = 0;
+  for (let i = 1; i < pts.length; i++) l += dist(pts[i - 1]!, pts[i]!);
+  return l;
+}
+
+function pointAt(pts: Pt[], s: number): Pt {
+  let left = s;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const l = dist(a, b);
+    if (left <= l && l > 0) return { x: a.x + ((b.x - a.x) * left) / l, y: a.y + ((b.y - a.y) * left) / l };
+    left -= l;
+  }
+  return pts[pts.length - 1]!;
+}
+
+/** The part of a path between two distances along it. */
+function slice(pts: Pt[], from: number, to: number): Pt[] {
+  const out: Pt[] = [pointAt(pts, from)];
+  let s = 0;
+  for (let i = 1; i < pts.length; i++) {
+    s += dist(pts[i - 1]!, pts[i]!);
+    if (s > from && s < to) out.push(pts[i]!);
+  }
+  out.push(pointAt(pts, to));
   return out;
 }
+
+/** Cut a path where it crosses into or out of a frame. */
+function splitByFrames(pts: Pt[], frames: Box[]): { pts: Pt[]; dashed: boolean }[] {
+  const inside = (p: Pt) => frames.some((f) => p.x >= f.x0 && p.x <= f.x1 && p.y >= f.y0 && p.y <= f.y1);
+  // Fine enough that the cut lands near the frame's edge.
+  const dense: Pt[] = [pts[0]!];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const n = Math.max(1, Math.ceil(dist(a, b) / 2));
+    for (let k = 1; k <= n; k++) dense.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  const out: { pts: Pt[]; dashed: boolean }[] = [];
+  for (let i = 1; i < dense.length; i++) {
+    const a = dense[i - 1]!;
+    const b = dense[i]!;
+    const dashed = !inside({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const last = out[out.length - 1];
+    if (last && last.dashed === dashed) last.pts.push(b);
+    else out.push({ pts: [a, b], dashed });
+  }
+  return out;
+}
+
+const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /**
  * Agents created by fired steps, placed where their plans put them.

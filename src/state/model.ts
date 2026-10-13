@@ -14,6 +14,8 @@ export type LayoutMode = "auto" | "manual";
 export interface Layout {
   placement: Placement;
   routed: Routed;
+  /** Columns the automatic layout asked wires to run in. */
+  columns?: Map<string, number>;
 }
 
 /** Selected agents and component instances, or one wire. */
@@ -217,7 +219,7 @@ export function createNetModel(opts: NetModelOptions) {
     if (mode() === "auto") {
       const base = automatic();
       const drag = autoDrag();
-      if (!drag || (!drag.dx && !drag.dy)) return { placement: base.placement, routed: base.routed };
+      if (!drag || (!drag.dx && !drag.dy)) return { placement: base.placement, routed: base.routed, columns: base.columns };
       const placement = new Map(base.placement);
       for (const id of drag.ids) {
         const p = placement.get(id);
@@ -327,14 +329,16 @@ export function createNetModel(opts: NetModelOptions) {
    * it says (the new ones where their rules put them, the rest where they
    * were), then let it settle into its layout. Call `seedLayout` with the
    * same positions before the change, so the layout stays close to them.
+   * `columns` are the ones the net was drawn with before the change, so the
+   * first frame is routed exactly as the step's preview was.
    */
-  function settleFrom(start: Placement, duration = 420) {
+  function settleFrom(start: Placement, columns?: Map<string, number>, duration = 420) {
     if (mode() === "manual") return noAnimation();
     const v = view();
     const final = layout();
     const placement: Placement = new Map();
     for (const [id, p] of final.placement) placement.set(id, start.get(id) ?? p);
-    const routed = route(v.net, placement, { pins: opts.pins?.() });
+    const routed = route(v.net, placement, { columns, pins: opts.pins?.() });
     animate({ net: v.net.clone(), sys: v.sys, placement, routed }, [], true, duration);
   }
 

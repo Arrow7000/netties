@@ -143,7 +143,8 @@ export function App(props: { initial?: Doc }) {
         m={m}
         camera={camera}
         onFire={(wire) => ed.dispatch({ kind: "run/fire", wire })}
-        plan={ed.planFor}
+        preview={ed.preview}
+        previewing={ed.previewing}
         onStuck={openStuck}
         pad={{ t: 72, r: 270, b: 90, l: 48 }}
         empty={
@@ -238,11 +239,25 @@ export function App(props: { initial?: Doc }) {
         <Counters ed={ed} />
 
         <div class="island transport" aria-label="Run">
-          <button class="btn outline" onClick={() => ed.dispatch({ kind: "run/step-one" })} disabled={!active() || ed.running()} title="Fire one active pair (S)">
+          <button
+            class="btn outline"
+            onClick={() => ed.dispatch({ kind: "run/step-one" })}
+            onPointerEnter={() => !ed.running() && ed.setPreviewMode("next")}
+            onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
+            disabled={!active() || ed.running()}
+            title="Fire one active pair (S)"
+          >
             <I.Step />
             Step
           </button>
-          <button class="btn outline" onClick={() => ed.dispatch({ kind: "run/step-all" })} disabled={!active() || ed.running()} title="Fire every active pair at once (A)">
+          <button
+            class="btn outline"
+            onClick={() => ed.dispatch({ kind: "run/step-all" })}
+            onPointerEnter={() => !ed.running() && ed.setPreviewMode("all")}
+            onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
+            disabled={!active() || ed.running()}
+            title="Fire every active pair at once (A)"
+          >
             <I.StepAll />
             Step all
           </button>

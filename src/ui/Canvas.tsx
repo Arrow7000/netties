@@ -4,7 +4,7 @@ import type { GroupId } from "../core/groups";
 import { type AgentId, type End, NONE, type WireId, free, port, sameEnd } from "../core/net";
 import { type System, pairKey } from "../core/system";
 import { type Box, G, type Pt, boxOf, portPos, shape } from "../layout/geometry";
-import type { StepPlan } from "../layout/replace";
+import type { StepPlan, StepPreview } from "../layout/replace";
 import { flattenPath, polylinePath, resample, roundedPath } from "../render/path";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { DropCheck, NetModel, WireGesture } from "../state/model";
@@ -80,8 +80,10 @@ export interface CanvasProps {
   camera?: Camera;
   /** Called when an active pair's wire is clicked. Without it, active pairs just select. */
   onFire?: (w: WireId) => void;
-  /** What firing an active pair would do, previewed while the pointer is on it. */
-  plan?: (w: WireId) => StepPlan | undefined;
+  /** What firing some active pairs would do, previewed while the pointer is on one. */
+  preview?: (ws: WireId[]) => StepPreview;
+  /** Active pairs to preview regardless of the pointer. */
+  previewing?: () => WireId[] | undefined;
   /** Called when an active pair with no rule is clicked. */
   onStuck?: (w: WireId) => void;
   /** Display names for free ports. */
@@ -520,15 +522,28 @@ export function Canvas(props: CanvasProps) {
     );
   });
 
-  /** The active pair under the pointer, while clicking it would fire it. */
+  /**
+   * The active pairs being previewed: whatever the editor asks for (pointing
+   * at Step or Step all, or a run about to step), or else the pair under the
+   * pointer while clicking it would fire it.
+   */
+  const targets = createMemo(
+    (): WireId[] | undefined => {
+      if (drag()) return undefined;
+      const asked = props.previewing?.();
+      if (asked) return asked;
+      const h = ed.hover();
+      if (held.alt() || !props.onFire || h?.kind !== "wire" || !ed.activeWires().has(h.id)) return undefined;
+      return [h.id];
+    },
+    undefined,
+    { equals: (a, b) => a === b || (!!a && !!b && a.length === b.length && a.every((w, i) => w === b[i])) },
+  );
   const firing = createMemo(() => {
-    const h = ed.hover();
-    if (drag() || held.alt() || !props.onFire || h?.kind !== "wire" || !ed.activeWires().has(h.id)) return undefined;
-    const v = ed.view().net;
-    if (!v.wires.has(h.id)) return undefined;
-    const [a, b] = v.wire(h.id).ends;
-    if (a.kind !== "port" || b.kind !== "port") return undefined;
-    return { wire: h.id, agents: new Set([a.agent, b.agent]), plan: props.plan?.(h.id) };
+    const ws = targets();
+    if (!ws?.length || !props.preview) return undefined;
+    const p = props.preview(ws);
+    return { wires: new Set(p.wires), agents: new Set(p.agents), preview: p };
   });
 
   /** Whether a wire's type label shows: always, by preference, or when the pointer is on or near it. */
@@ -604,7 +619,7 @@ export function Canvas(props: CanvasProps) {
                   plain={props.readonly}
                   hidden={carried() === id}
                   highlighted={highlighted().has(id)}
-                  consumed={firing()?.wire === id}
+                  consumed={!!firing()?.wires.has(id)}
                 />
               )}
             </For>
@@ -649,8 +664,8 @@ export function Canvas(props: CanvasProps) {
                 )}
               </For>
             </g>
-            <StepPreview ed={ed} hidden={!!drag() || !props.onFire} />
-            <Show when={firing()?.plan}>{(p) => <RulePreview plan={p()} system={sys} />}</Show>
+            <StepPreview ed={ed} hidden={!!drag() || !props.onFire || !!props.preview} />
+            <Show when={firing()?.preview}>{(p) => <RulePreview preview={p()} system={sys} />}</Show>
             <HoverPill ed={ed} hidden={!!drag()} canFire={!!props.onFire} />
           </g>
           <Show when={wireDrag()}>
@@ -784,17 +799,26 @@ function StepPreview(props: { ed: NetModel; hidden: boolean }) {
 }
 
 /**
- * For a pair under the pointer whose rule creates agents: what it turns
- * into, framed and drawn exactly where firing will put it, with dashed
- * links from the pair's aux ports to the interface pins they'll join.
+ * What firing some active pairs will do: each rule's result framed exactly
+ * where firing puts it, and the new stretches of wire, dashed outside the
+ * frames, from where they leave the wires already drawn.
  */
-function RulePreview(props: { plan: StepPlan; system: () => System }) {
-  const f = () => props.plan.frame;
+function RulePreview(props: { preview: StepPreview; system: () => System }) {
+  const plans = () => [...props.preview.plans.values()];
   return (
     <g class="rule-preview">
-      <For each={props.plan.links}>{(pts) => <path class="link" d={roundedPath(pts, G.radius)} />}</For>
-      <rect class="frame" x={f().x0} y={f().y0} width={f().x1 - f().x0} height={f().y1 - f().y0} rx={6} />
-      <For each={props.plan.wires}>{(pts) => <path class="inner" d={roundedPath(pts, G.radius)} />}</For>
+      <For each={plans()}>
+        {(p) => <rect class="frame" x={p.frame.x0} y={p.frame.y0} width={p.frame.x1 - p.frame.x0} height={p.frame.y1 - p.frame.y0} rx={6} />}
+      </For>
+      <For each={props.preview.strokes}>{(st) => <path class={st.dashed ? "link" : "inner"} d={polylinePath(st.pts)} />}</For>
+      <For each={plans()}>{(plan) => <PlannedAgents plan={plan} system={props.system} />}</For>
+    </g>
+  );
+}
+
+function PlannedAgents(props: { plan: StepPlan; system: () => System }) {
+  return (
+    <>
       <For each={props.plan.agents}>
         {(p, i) => {
           const type = () => props.system().types.get(props.plan.rule.agents[i()]!);
@@ -826,7 +850,7 @@ function RulePreview(props: { plan: StepPlan; system: () => System }) {
           );
         }}
       </For>
-    </g>
+    </>
   );
 }
 

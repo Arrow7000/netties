@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { examples } from "../core/examples";
 import { type Box, boxOf } from "./geometry";
 import { autoLayout } from "./place";
-import { planSteps } from "./replace";
+import { planSteps, previewSteps } from "./replace";
 
 const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
@@ -17,14 +17,12 @@ describe("step plans", () => {
         return a.kind === "port" && b.kind === "port" && !!system.ruleFor(net.agent(a.agent).type, net.agent(b.agent).type);
       });
       for (const turn of [false, true]) {
-        const plans = planSteps(net, system, { placement: l.placement, wires: l.routed.wires }, ws, { turn });
+        const drawn = { placement: l.placement, routed: l.routed, columns: l.columns };
+        const plans = planSteps(net, system, drawn, ws, { turn });
         const frames = [...plans.values()].map((p) => p.frame);
         for (const p of plans.values()) {
           expect(p.agents.length).toBe(p.rule.agents.length);
           if (!turn) expect(p.turned).toBe(false);
-          // Every aux port of the pair links to its pin.
-          const aux = p.pair.reduce((s, id) => s + net.agent(id).wires.length - 1, 0);
-          expect(p.links.length).toBe(aux);
           // The pair stays visible beside its preview.
           for (const id of p.pair) expect(overlaps(boxOf(l.placement.get(id)!, net.agent(id).wires.length - 1), p.frame)).toBe(false);
           // New agents sit inside their frame.
@@ -37,6 +35,16 @@ describe("step plans", () => {
         }
         // Frames for one parallel step don't cover each other.
         frames.forEach((f, i) => frames.slice(i + 1).forEach((g) => expect(overlaps(f, g)).toBe(false)));
+
+        // Every pair fires in the preview, and its new wires show; solid stretches lie inside frames.
+        const pv = previewSteps(net, system, drawn, ws, { turn });
+        expect(pv.wires).toEqual(ws);
+        const aux = pv.agents.reduce((n, id) => n + net.agent(id).wires.length - 1, 0);
+        if (aux) expect(pv.strokes.length).toBeGreaterThan(0);
+        for (const st of pv.strokes) {
+          if (st.dashed) continue;
+          for (const q of st.pts) expect(frames.some((f) => q.x >= f.x0 - 1 && q.x <= f.x1 + 1 && q.y >= f.y0 - 1 && q.y <= f.y1 + 1)).toBe(true);
+        }
       }
     });
   }
