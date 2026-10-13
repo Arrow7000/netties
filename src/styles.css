@@ -9,6 +9,7 @@
 :root {
   --ui-font: "Geist", system-ui, sans-serif;
   --serif: "STIX Two Text", "Cambria Math", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --paper: #ffffff;
   --ink: #000000;
   --chrome: #ffffff;
@@ -2165,8 +2166,8 @@ kbd {
   background: var(--chrome);
   color: var(--text);
   padding: 12px 14px;
-  font-family: var(--serif);
-  font-size: 15px;
+  font-family: var(--mono);
+  font-size: 13px;
   line-height: 1.6;
   resize: none;
   tab-size: 2;

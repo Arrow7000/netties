@@ -74,4 +74,24 @@ describe("text format", () => {
       expect((e as ParseError).line).toBe(3);
     }
   });
+
+  it("points at the column, and names bracket mistakes", () => {
+    const at = (src: string) => {
+      try {
+        parse(src);
+      } catch (e) {
+        const p = e as ParseError;
+        return { line: p.line, col: p.col, message: p.message };
+      }
+      throw new Error("parsed");
+    };
+    // One ) too many, pointing at the extra one.
+    expect(at("S(S(Z))) ~ x;")).toMatchObject({ line: 1, col: 8, message: expect.stringMatching(/one "\)" too many/) });
+    // A missing ), reported at the ; and naming where the unclosed ( opened.
+    const missing = at("Add(x, y) ~ S(S(S(Z));");
+    expect(missing).toMatchObject({ line: 1, col: 22 });
+    expect(missing.message).toMatch(/one "\(" is never closed before this ";"; it opens after S on line 1, column 14/);
+    // Errors from the parser proper carry a column too.
+    expect(at("x ~ y\nz ~ w;")).toMatchObject({ line: 2, col: 1, message: expect.stringMatching(/line 2, column 1: expected ";"/) });
+  });
 });

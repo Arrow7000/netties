@@ -28,62 +28,95 @@ import { type Level, type PortSpec, typingOn } from "./types";
  * label can follow.
  */
 
-type Term = { kind: "agent"; name: string; args: Term[]; line: number } | { kind: "var"; name: string; line: number };
+type Term =
+  | { kind: "agent"; name: string; args: Term[]; line: number; col: number }
+  | { kind: "var"; name: string; line: number; col: number };
 type Eq = [Term, Term];
 
+/** A problem in the text, at a line and, when known, a column (both from 1). */
 export class ParseError extends Error {
   constructor(
     message: string,
     readonly line: number,
+    readonly col?: number,
   ) {
-    super(`line ${line}: ${message}`);
+    super(`line ${line}${col ? `, column ${col}` : ""}: ${message}`);
   }
 }
 
-type Tok = { t: string; line: number };
+type Tok = { t: string; line: number; col: number };
 
 function tokenize(src: string): Tok[] {
   const out: Tok[] = [];
   let line = 1;
+  let lineStart = 0;
   let i = 0;
+  const tok = (t: string): Tok => ({ t, line, col: i - lineStart + 1 });
   while (i < src.length) {
     const c = src[i]!;
     if (c === "\n") {
       line++;
       i++;
+      lineStart = i;
     } else if (/\s/.test(c)) i++;
     else if (src.startsWith("--", i) || src.startsWith("//", i)) {
       while (i < src.length && src[i] !== "\n") i++;
     } else if (src.startsWith("><", i) || src.startsWith("=>", i)) {
-      out.push({ t: src.slice(i, i + 2), line });
+      out.push(tok(src.slice(i, i + 2)));
       i += 2;
     } else if ("(),;~".includes(c)) {
-      out.push({ t: c, line });
+      out.push(tok(c));
       i++;
     } else if (c === '"') {
       const j = src.indexOf('"', i + 1);
-      if (j < 0) throw new ParseError("unterminated string", line);
-      out.push({ t: src.slice(i, j + 1), line });
+      if (j < 0) throw new ParseError("this string is never closed with a \"", line, i - lineStart + 1);
+      out.push(tok(src.slice(i, j + 1)));
       i = j + 1;
     } else {
       let j = i;
       while (j < src.length && !/[\s(),;~"]/.test(src[j]!) && !src.startsWith("><", j) && !src.startsWith("=>", j)) j++;
-      out.push({ t: src.slice(i, j), line });
+      out.push(tok(src.slice(i, j)));
       i = j;
     }
   }
   return out;
 }
 
+/**
+ * Check that brackets match within each statement, so a miscounted
+ * S(S(S(Z))) is reported as what it is rather than as whatever the parser
+ * trips over next.
+ */
+function checkBrackets(toks: Tok[]) {
+  const open: Tok[] = [];
+  const unclosed = (at: Tok | undefined) => {
+    const first = open[0]!;
+    const n = open.length;
+    const what = n === 1 ? `one "(" is never closed` : `${n} "(" are never closed`;
+    const name = toks[toks.indexOf(first) - 1];
+    const where = `${n === 1 ? "it" : "the first"} opens${name ? ` after ${name.t}` : ""} on line ${first.line}, column ${first.col}`;
+    const end = at ? `before this "${at.t}"` : "by the end of the text";
+    throw new ParseError(`${what} ${end}; ${where}`, at?.line ?? first.line, at?.col ?? first.col);
+  };
+  for (const t of toks) {
+    if (t.t === "(") open.push(t);
+    else if (t.t === ")") {
+      if (!open.length) throw new ParseError(`one ")" too many`, t.line, t.col);
+      open.pop();
+    } else if (t.t === ";" && open.length) unclosed(t);
+  }
+  if (open.length) unclosed(undefined);
+}
+
 const LEVELS = ["off", "optional", "required"];
 
-function parsePort(tok: string, line: number): PortSpec {
+function parsePort({ t: tok, line, col }: Tok): PortSpec {
   if (tok === "_") return {};
   const m = /^([+-]?)(.*)$/.exec(tok)!;
   const spec: PortSpec = {};
   if (m[1]) spec.pol = m[1] === "+" ? "give" : "take";
   if (m[2]) {
-    if (/[^\p{L}\p{N}_'-]/u.test(m[2])) throw new ParseError(`"${tok}" isn't a port: write +type, -type, type, + or -`, line);
+    if (/[^\p{L}\p{N}_'-]/u.test(m[2])) throw new ParseError(`"${tok}" isn't a port: write +type, -type, type, + or -`, line, col);
     spec.type = m[2];
   }
   return spec;
@@ -104,21 +137,24 @@ interface Parsed {
 
 function parseStatements(src: string): Parsed {
   const toks = tokenize(src);
+  checkBrackets(toks);
   let p = 0;
   const peek = () => toks[p];
-  const line = () => toks[Math.min(p, toks.length - 1)]?.line ?? 1;
   const next = () => {
     const t = toks[p++];
-    if (!t) throw new ParseError("unexpected end of input", line());
+    if (!t) {
+      const last = toks[toks.length - 1];
+      throw new ParseError("the text ends in the middle of a statement", last?.line ?? 1, last && last.col + last.t.length);
+    }
     return t;
   };
   const expect = (s: string) => {
     const t = next();
-    if (t.t !== s) throw new ParseError(`expected "${s}" but found "${t.t}"`, t.line);
+    if (t.t !== s) throw new ParseError(`expected "${s}" but found "${t.t}"`, t.line, t.col);
   };
   const term = (): Term => {
     const t = next();
-    if ("(),;~".includes(t.t) || t.t === "><" || t.t === "=>") throw new ParseError(`expected a name but found "${t.t}"`, t.line);
+    if ("(),;~".includes(t.t) || t.t === "><" || t.t === "=>") throw new ParseError(`expected a name but found "${t.t}"`, t.line, t.col);
     if (peek()?.t === "(") {
       next();
       const args: Term[] = [];
@@ -130,9 +166,9 @@ function parseStatements(src: string): Parsed {
         }
       }
       expect(")");
-      return { kind: "agent", name: t.t, args, line: t.line };
+      return { kind: "agent", name: t.t, args, line: t.line, col: t.col };
     }
-    return { kind: "var", name: t.t, line: t.line };
+    return { kind: "var", name: t.t, line: t.line, col: t.col };
   };
   const eqs = (): Eq[] => {
     const out: Eq[] = [];
@@ -159,7 +195,7 @@ function parseStatements(src: string): Parsed {
       const names: string[] = [];
       while (peek() && peek()!.line === t.line && peek()!.t !== ";") names.push(next().t);
       if (t.t === "directions") {
-        if (names.length) throw new ParseError(`unexpected "${names[0]}" after directions ${level}`, t.line);
+        if (names.length) throw new ParseError(`unexpected "${names[0]}" after directions ${level}`, t.line, toks[p - names.length]!.col);
         parsed.dirs = level;
       } else parsed.types = { level, names };
       continue;
@@ -169,7 +205,7 @@ function parseStatements(src: string): Parsed {
       const sym = next();
       const ar = next();
       const arity = Number(ar.t);
-      if (!Number.isInteger(arity) || arity < 0) throw new ParseError(`"${ar.t}" isn't a number of ports`, ar.line);
+      if (!Number.isInteger(arity) || arity < 0) throw new ParseError(`"${ar.t}" isn't a number of ports`, ar.line, ar.col);
       let filled = false;
       let name: string | undefined;
       let ports: PortSpec[] | undefined;
@@ -181,7 +217,7 @@ function parseStatements(src: string): Parsed {
           ports = [];
           for (;;) {
             const pt = next();
-            const spec = parsePort(pt.t, pt.line);
+            const spec = parsePort(pt);
             if (peek()?.t.startsWith('"') && peek()!.line === t.line) spec.label = next().t.slice(1, -1);
             ports.push(spec);
             if (peek()?.t !== "," || peek()!.line !== t.line) break;
@@ -189,7 +225,7 @@ function parseStatements(src: string): Parsed {
           }
           if (ports.length !== arity + 1)
             throw new ParseError(`${sym.t} has ${arity + 1} ports but ${ports.length} are described`, t.line);
-        } else throw new ParseError(`unexpected "${x.t}" in agent declaration`, x.line);
+        } else throw new ParseError(`unexpected "${x.t}" in agent declaration`, x.line, x.col);
       }
       parsed.decls.push({ symbol: sym.t, arity, filled, name, ports, line: t.line });
       continue;
@@ -236,7 +272,7 @@ export function parse(src: string): { system: System; net: Net } {
     if (t.kind === "agent") {
       const known = arity.get(t.name);
       if (known !== undefined && known !== t.args.length)
-        throw new ParseError(`${t.name} has ${known} aux ports but is used with ${t.args.length}`, t.line);
+        throw new ParseError(`${t.name} has ${known} aux ports but is used with ${t.args.length}`, t.line, t.col);
       arity.set(t.name, t.args.length);
       t.args.forEach(visitTerm);
     }
@@ -277,7 +313,7 @@ export function parse(src: string): { system: System; net: Net } {
       if (other !== undefined) {
         alias.delete(t.name);
         alias.delete(other);
-        return plug({ kind: "var", name: other, line: t.line }, at);
+        return plug({ kind: "var", name: other, line: t.line, col: t.col }, at);
       }
       const e = take(t.name);
       if (e) net.connect(e, at);
@@ -319,8 +355,9 @@ export function parse(src: string): { system: System; net: Net } {
     sides.forEach((s, side) => {
       const args = s.kind === "agent" ? s.args : [];
       args.forEach((arg, i) => {
-        if (arg.kind !== "var" || isAgent(arg)) throw new ParseError("the arguments of a rule's left-hand side must be names", r.line);
-        if (bound.has(arg.name)) throw new ParseError(`${arg.name} appears twice on the left`, r.line);
+        if (arg.kind !== "var" || isAgent(arg))
+          throw new ParseError("the arguments of a rule's left-hand side must be names", arg.line, arg.col);
+        if (bound.has(arg.name)) throw new ParseError(`${arg.name} appears twice on the left`, arg.line, arg.col);
         const n = ifaceName(side as 0 | 1, i + 1);
         net.free.set(n, NONE);
         bound.set(arg.name, free(n));

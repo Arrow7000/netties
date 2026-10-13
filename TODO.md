@@ -57,10 +57,9 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
     before relying on accuracy differences. Attempts now fail after 5 minutes
     and are saved as they finish.
 
-  - Parse errors should give a column and name the problem ("one ) too
-    many"): Haiku miscounted the brackets in a deeply nested S(S(...)) and
-    resent the same document twice, because "line 17: expected ;" didn't
-    say where. This would help people using the text view too.
+  - Parse errors now give a column and name bracket mistakes (2026-10-13),
+    after Haiku miscounted the brackets in a deeply nested S(S(...)) and
+    resent the same document twice. Not re-run through the eval yet.
   - Step 2, live since 2026-10-12: `netlify/edge-functions/create.ts`
     (POST /api/create) with the logic in `netlify/lib/create.ts`; the browser
     side is `create()` in `src/create/client.ts`. Haiku 5.5 at medium effort,
@@ -80,19 +79,22 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
 In order. One design round at a time ("things are overwhelming enough").
 
 1. **Polish** (one session):
-   - [ ] Near-instant tooltips everywhere (they're native `title=`, whose
-         ~1 s delay the browser owns; needs our own tooltip).
-   - [ ] Undo/redo buttons flash when their shortcut is pressed.
-   - [ ] "Net" menu becomes "File" and moves left of Examples.
-   - [ ] The combinator translation toggle loses its spot at the top.
+   - [x] Near-instant tooltips everywhere: `src/ui/Tooltip.tsx` takes over
+         every `title` as `data-tip` (120 ms, instant when moving between).
+   - [x] Undo/redo buttons flash when their shortcut is pressed.
+   - [x] "Net" menu becomes "File" and moves left of Examples.
+   - [x] The combinator translation toggle loses its spot at the top: it's
+         in the File menu for now; the editors design round decides its home.
    - [x] Clicking outside an open panel closes it, except an editor with
          unsaved changes, which stays open (`src/ui/dismiss.ts`; the rule
          grid, agent editor and types sheet; pans and drags don't count).
          The full-screen editors wait for the design round.
-   - [ ] Re-collapse an opened component (the model has
-         `component/set-collapsed`; the UI doesn't offer it).
-   - [ ] Text view in monospace; parse errors with a column and the problem
-         named (see the LLM section).
+   - [x] Re-collapse an opened component: it could only be done by
+         double-clicking the 1 px dashed outline. The outline now has a wide
+         hit band and a collapse button at its top right.
+   - [x] Text view in monospace; parse errors give a column, brackets are
+         checked first ("one ")" too many", "one "(" is never closed … it
+         opens after S on line 3, column 9"), and Load puts the caret there.
 2. **Editing basics**:
    - [ ] ⌘C/⌘X/⌘V for the selection, via the system clipboard in the text
          format (paste across tabs, from hand-written text). Pastes at the
@@ -137,7 +139,6 @@ In order. One design round at a time ("things are overwhelming enough").
   collapsed box does take its port types from the ports inside).
 - Nets loaded from text or a link that don't type-check open with the bad
   wires cut and an Undo toast. The user hasn't confirmed this choice.
-- The text view isn't in a monospace font.
 - Rule and component editors keep their own draft undo history while open;
   saving is one step in the main history. Confirm that's what the user wants.
 

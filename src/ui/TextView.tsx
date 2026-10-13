@@ -9,6 +9,7 @@ export function TextView(props: { ed: Editor }) {
   const [error, setError] = createSignal<string>();
   const [note, setNote] = createSignal<string>();
   let fileInput!: HTMLInputElement;
+  let area!: HTMLTextAreaElement;
 
   const load = () => {
     try {
@@ -18,7 +19,21 @@ export function TextView(props: { ed: Editor }) {
       if (cut) ed.notify(`Loaded. Cut ${cut === 1 ? "1 wire" : `${cut} wires`} that didn't fit the types into loose ends.`, true);
     } catch (e) {
       setError(e instanceof ParseError || e instanceof Error ? e.message : String(e));
+      if (e instanceof ParseError) showAt(e.line, e.col ?? 1);
     }
+  };
+
+  /** Put the caret on a line and column of the text, scrolled into view. */
+  const showAt = (line: number, col: number) => {
+    const lines = text().split("\n");
+    let at = 0;
+    for (let i = 0; i < line - 1 && i < lines.length; i++) at += lines[i]!.length + 1;
+    at += Math.min(col - 1, lines[line - 1]?.length ?? 0);
+    area.focus();
+    area.setSelectionRange(at, at);
+    // Scroll so the line sits a little below the top rather than at the very edge.
+    const lh = parseFloat(getComputedStyle(area).lineHeight) || 20;
+    area.scrollTop = Math.max(0, (line - 4) * lh);
   };
 
   const save = () => {
@@ -86,6 +101,7 @@ export function TextView(props: { ed: Editor }) {
         }}
       />
       <textarea
+        ref={area}
         class="text-area"
         spellcheck={false}
         value={text()}
