@@ -20,29 +20,32 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
   Step previews the next pair, Step all every pair (up to 24), and Run
   flashes each step's preview for 0.8 of a step's animation time first.
   Open:
+
   - Rules that only reconnect wires now use the same routed preview, with
     no frame, instead of straight lines (except on the translation screen).
   - Is the Run flash right at high speeds, where it's under 100 ms?
   - The translation screen still animates steps with the old morph.
 
-- **"Create it for me" with an LLM** (the user's top feature request). A
+- **"Create it for me" with an LLM** (low priority as of 2026-10-13; the
+  backend is live, the UI waits). A
   visitor describes a computation; a cheap model writes the whole system
   (agents, directions and types, rules, net) in the text format; the engine
   parses, type-checks, runs and checks the result, feeding errors back for
   a few retries. "Describe/create" first, "explain this" second.
+
   - Step 1, done 2026-10-12: `eval/` (run with `npx vite-node eval/run.ts`;
     options in the file). 13 engine-checked tasks, 3 runs each, up to 3
     tries with netties' error messages fed back:
 
-    | model | pass@3 | first try | median time | worst | $/success |
-    |---|---|---|---|---|---|
-    | Haiku 5.5 | 38/39 | 37 | 27 s | 1.7 min | $0.0037 |
-    | DeepSeek V4.1 Flash | 38/39 | 29 | 59 s | 19 min | $0.012 |
-    | MiMo-V2.6-Pro | 39/39 | 23 | 3.7 min | 27 min | $0.013 |
-    | MiMo-V2.6-Flash | 18/23 (stopped) | 9 | 5 min | 35 min | $0.012 |
-    | Kimi K2.6 | 36/39 | 36 | 2.3 min | over 5 min | $0.054 |
-    | GLM-5.3-Flash | 25/39 | 16 | 2.2 min | over 5 min | $0.0013 |
-    | Qwen3.8-Flash | 7/39 | 6 | over 5 min | over 5 min | $0.0032 |
+    | model               | pass@3          | first try | median time | worst      | $/success |
+    | ------------------- | --------------- | --------- | ----------- | ---------- | --------- |
+    | Haiku 5.5           | 38/39           | 37        | 27 s        | 1.7 min    | $0.0037   |
+    | DeepSeek V4.1 Flash | 38/39           | 29        | 59 s        | 19 min     | $0.012    |
+    | MiMo-V2.6-Pro       | 39/39           | 23        | 3.7 min     | 27 min     | $0.013    |
+    | MiMo-V2.6-Flash     | 18/23 (stopped) | 9         | 5 min       | 35 min     | $0.012    |
+    | Kimi K2.6           | 36/39           | 36        | 2.3 min     | over 5 min | $0.054    |
+    | GLM-5.3-Flash       | 25/39           | 16        | 2.2 min     | over 5 min | $0.0013   |
+    | Qwen3.8-Flash       | 7/39            | 6         | over 5 min  | over 5 min | $0.0032   |
 
     Haiku 5.5 is the pick: as accurate as the best, 2–8× faster, and the
     cheapest per success except GLM, which fails a third of the time. Kimi
@@ -53,6 +56,7 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
     three on accuracy; add harder ones (fib, map, sorting, two-type systems)
     before relying on accuracy differences. Attempts now fail after 5 minutes
     and are saved as they finish.
+
   - Parse errors should give a column and name the problem ("one ) too
     many"): Haiku miscounted the brackets in a deeply nested S(S(...)) and
     resent the same document twice, because "line 17: expected ;" didn't
@@ -70,6 +74,56 @@ end). Prototypes are in `design/prototypes/` (open `index.html`).
     clickable prototypes, user picks).
   - Research summary (2026-10-09): the cheap models all cost about $1–3 a
     day at 200 creates a day; free tiers can't carry a public site.
+
+## The user's braindump, triaged (2026-10-13)
+
+In order. One design round at a time ("things are overwhelming enough").
+
+1. **Polish** (one session):
+   - [ ] Near-instant tooltips everywhere (they're native `title=`, whose
+         ~1 s delay the browser owns; needs our own tooltip).
+   - [ ] Undo/redo buttons flash when their shortcut is pressed.
+   - [ ] "Net" menu becomes "File" and moves left of Examples.
+   - [ ] The combinator translation toggle loses its spot at the top.
+   - [x] Clicking outside an open panel closes it, except an editor with
+         unsaved changes, which stays open (`src/ui/dismiss.ts`; the rule
+         grid, agent editor and types sheet; pans and drags don't count).
+         The full-screen editors wait for the design round.
+   - [ ] Re-collapse an opened component (the model has
+         `component/set-collapsed`; the UI doesn't offer it).
+   - [ ] Text view in monospace; parse errors with a column and the problem
+         named (see the LLM section).
+2. **Editing basics**:
+   - [ ] ⌘C/⌘X/⌘V for the selection, via the system clipboard in the text
+         format (paste across tabs, from hand-written text). Pastes at the
+         cursor, selected; wires to outside agents become loose ends.
+   - [ ] Drag selection picks up wires (both ends inside the box).
+   - [ ] Dropping a new agent on an existing one wires it to the nearest
+         compatible free port, shown while dragging. Not random.
+3. **Design round: the editors**. The rule editor, combinator view and
+   component editor become non-modal (click outside to dismiss) and get the
+   main canvas's affordances (drag in from the palette, shortcuts). The
+   combinator view needs to explain general vs restricted and why a step is
+   sometimes unavailable, and to let you re-collapse. Absorbs "translation
+   screen still animates with the old morph" and "only restyled".
+4. **Then**:
+   - [ ] Profile large nets before deciding anything. Guess: layout,
+         routing and SVG redraw dominate, not reduction, so WebAssembly
+         would buy little; a worker for layout, or algorithmic fixes in
+         `place.ts`/`route.ts`, more likely.
+   - [ ] Long-press undo/redo for a history list, like the browser's back
+         button. Needs a label on every history entry first.
+   - [ ] Mobile, low priority: start view-only (pick examples, pinch-zoom,
+         tap a pair to preview then fire, Step/Run). Editing eventually.
+5. **Research**: linearity. Nets are already linear (each port has exactly
+   one wire; copying and erasing only through explicit agents like δ and
+   ε). A linear system has no copiers or erasers; affine allows erasers.
+   "The net never grows" is checkable per rule (a result has at most 2
+   agents; at most 1 means it always terminates); a possible teaching
+   feature: mark rules shrink/same/grow. Read Lafont 1990, light/elementary
+   linear logic, Asperti & Guerrini on optimal reduction first.
+6. **Low priority**: the LLM create UI design round (step 3 above). The
+   user, 2026-10-13: "not my main priority. in fact it's quite a low one".
 
 ## Rough edges in directions and types
 

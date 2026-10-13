@@ -5,6 +5,7 @@ import { portPos, shape } from "../layout/geometry";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { Editor } from "../state/editor";
 import { DirectionControl, TypeControl } from "./PortControls";
+import { dismissOnClickOutside } from "./dismiss";
 import { Close, Minus, Plus } from "./icons";
 
 const MAX_AUX = 8;
@@ -92,6 +93,12 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
     props.onClose();
   };
 
+  // A click outside closes the editor unless something has been changed.
+  let form!: HTMLFormElement;
+  const draft = () => JSON.stringify([symbol(), name(), arity(), filled(), ports()]);
+  const pristine = draft();
+  dismissOnClickOutside(() => form, props.onClose, () => draft() !== pristine);
+
   onMount(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -114,7 +121,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
   };
 
   return (
-    <form class="pop type-editor" role="dialog" aria-label="Agent" onSubmit={save}>
+    <form ref={form} class="pop type-editor" role="dialog" aria-label="Agent" onSubmit={save}>
       <div class="te-preview">
         <svg viewBox="-95 -80 190 160" class="te-stage" classList={{ filled: filled() }} aria-hidden="true">
           {(() => {

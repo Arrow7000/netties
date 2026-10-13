@@ -7,6 +7,7 @@ import { GRID_FITS, GridLegend, GridSummary, RuleGrid } from "./RuleGrid";
 import { TypeChips } from "./PortControls";
 import { TypeEditor } from "./TypeEditor";
 import { Chevron, Close, Component, Expand, Plus } from "./icons";
+import { dismissOnClickOutside } from "./dismiss";
 
 interface Carry {
   what: { kind: "type" | "component"; id: string };
@@ -169,7 +170,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
         </section>
       </aside>
       <Show when={gridOpen()}>
-        <div class="pop grid-pop" role="dialog" aria-label="Rule grid">
+        <GridPop onClose={() => setGridOpen(false)}>
           <div class="te-head">
             <h3>Rules for {types().length} agents</h3>
             <button class="btn icon" title="Close" onClick={() => setGridOpen(false)}>
@@ -182,7 +183,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
           <GridSummary ed={ed} />
           <RuleGrid ed={ed} big />
           <GridLegend ed={ed} />
-        </div>
+        </GridPop>
       </Show>
       <Show when={editing()} keyed>
         {(id) => <TypeEditor ed={ed} id={id} onClose={() => setEditing(undefined)} />}
@@ -206,6 +207,17 @@ const LEVEL_WORD = { off: "off", optional: "optional", required: "required" } as
  * How strict the system is, in one line that opens the directions and types
  * sheet, and its types as chips: pointing at one lights up its ports.
  */
+/** The big rule grid, floating beside the palette; a click outside closes it. */
+function GridPop(props: { onClose: () => void; children: JSX.Element }) {
+  let el!: HTMLDivElement;
+  dismissOnClickOutside(() => el, props.onClose);
+  return (
+    <div ref={el} class="pop grid-pop" role="dialog" aria-label="Rule grid">
+      {props.children}
+    </div>
+  );
+}
+
 function TypingSummary(props: { ed: Editor }) {
   const ed = props.ed;
   const t = () => (ed.rev(), ed.system.typing);

@@ -4,6 +4,7 @@ import type { Editor } from "../state/editor";
 import { Glyph, dirsOf } from "./Glyph";
 import { DirectionControl, TypeChips, TypeControl } from "./PortControls";
 import { Close, Pencil } from "./icons";
+import { dismissOnClickOutside } from "./dismiss";
 
 type Dim = "dirs" | "types";
 
@@ -121,6 +122,10 @@ export function TypesSheet(props: { ed: Editor }) {
     </div>
   );
 
+  // Changes apply at once, so a click outside closes the sheet, unless a switch to Required is waiting on ports.
+  let sheet!: HTMLDivElement;
+  dismissOnClickOutside(() => sheet, ed.closeTypes, () => !!pending());
+
   onMount(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !(e.target as Element).closest("input, select")) {
@@ -139,7 +144,7 @@ export function TypesSheet(props: { ed: Editor }) {
   };
 
   return (
-    <div class="pop types-sheet" role="dialog" aria-label="Directions and types">
+    <div ref={sheet} class="pop types-sheet" role="dialog" aria-label="Directions and types">
       <div class="ts-head">
         <h3>
           Directions and types <small>for every agent in this system</small>
