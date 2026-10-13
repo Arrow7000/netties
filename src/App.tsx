@@ -193,8 +193,7 @@ export function App(props: { initial?: Doc }) {
           netties
         </div>
         <span class="sep" />
-        <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
-        <Menu label="Net" title="Text, sharing and export">
+        <Menu label="File" title="Text, translation, sharing and export">
           {(close) => (
             <>
               <MenuItem
@@ -205,6 +204,15 @@ export function App(props: { initial?: Doc }) {
                   close();
                 }}
               />
+              <MenuItem
+                title="Combinator translation"
+                note="See the same computation built from γ, δ and ε alone"
+                onClick={() => {
+                  ed.openTranslate();
+                  close();
+                }}
+              />
+              <hr />
               <MenuItem
                 title="Copy share link"
                 onClick={() => {
@@ -232,17 +240,7 @@ export function App(props: { initial?: Doc }) {
             </>
           )}
         </Menu>
-      </div>
-
-      <div class="island top-mid">
-        <div class="seg" role="tablist" aria-label="Screen">
-          <button role="tab" aria-pressed={ed.screen().kind !== "translation"} onClick={ed.closeTranslate}>
-            Net
-          </button>
-          <button role="tab" aria-pressed={ed.screen().kind === "translation"} onClick={ed.openTranslate}>
-            Combinator translation
-          </button>
-        </div>
+        <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
       </div>
 
       <div class="island top-right">

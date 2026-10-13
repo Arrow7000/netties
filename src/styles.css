@@ -163,12 +163,6 @@ textarea {
   left: 12px;
 }
 
-.top-mid {
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
 .top-right {
   top: 12px;
   right: 12px;
@@ -2150,7 +2144,6 @@ kbd {
 
 @media (max-width: 760px) {
   .palette,
-  .top-mid,
   .counters {
     display: none;
   }
