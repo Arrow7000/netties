@@ -263,6 +263,11 @@ export interface StepPreview {
   kept: Pt[][];
   /** The new stretches of wire: dashed outside a frame, solid inside one. */
   strokes: { pts: Pt[]; dashed: boolean }[];
+  /**
+   * Frames round pairs whose rule creates nothing, where they are now, so
+   * each disappearance reads as a rule of its own rather than a side effect.
+   */
+  vanishing: Box[];
 }
 
 /** Preview firing some active pairs (at once, as in a parallel step). */
@@ -271,6 +276,7 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[]):
   const tmp = net.clone();
   const placement = new Map(drawn.placement);
   const fired: WireId[] = [];
+  const vanishing: Box[] = [];
   const agents: AgentId[] = [];
   const recs: StepRecord[] = [];
   for (const w of ws) {
@@ -285,6 +291,14 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[]):
     rec.removed.forEach((id) => placement.delete(id));
     const plan = plans.get(w);
     if (plan) rec.created.forEach((id, i) => placement.set(id, plan.agents[i]!));
+    else {
+      const boxes = rec.removed.flatMap((id) => {
+        const p = drawn.placement.get(id);
+        return p ? [boxOf(p, net.agent(id).wires.length - 1)] : [];
+      });
+      // Wide enough to take in the ports on the agents' edges.
+      if (boxes.length) vanishing.push(grow(union(boxes), 8));
+    }
   }
   const routed = routeHoldingEnds(tmp, placement, { columns: drawn.columns, pins: drawn.pins }, drawn.routed.free);
 
@@ -331,7 +345,7 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[]):
   const fading = [...net.wires.values()]
     .filter((x) => x.ends.some((e) => e.kind === "port" && gone.has(e.agent)))
     .map((x) => x.id);
-  return { plans, wires: fired, agents, fading, kept, strokes };
+  return { plans, wires: fired, agents, fading, kept, strokes, vanishing };
 }
 
 /**

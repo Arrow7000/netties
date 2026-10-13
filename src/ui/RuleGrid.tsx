@@ -8,6 +8,40 @@ export const GRID_FITS = 8;
 
 type CellState = "has" | "live" | "none" | "stuck" | "never" | "broken";
 
+/** What each cell of the grid shows for a pair of agent types, kept up to date with the net. */
+function cellStates(ed: Editor): (a: string, b: string) => CellState {
+  const m = ed.model;
+  /** Pairs in the net now, by pair key (both ways round): whether they can fire. */
+  const present = createMemo(() => {
+    m.rev();
+    const v = m.view().net;
+    const out = new Map<string, "live" | "stuck">();
+    const add = (ws: Iterable<number>, kind: "live" | "stuck") => {
+      for (const w of ws) {
+        if (!v.wires.has(w)) continue;
+        const [a, b] = v.wire(w).ends;
+        if (a.kind !== "port" || b.kind !== "port") continue;
+        const [ta, tb] = [v.agent(a.agent).type, v.agent(b.agent).type];
+        out.set(pairKey(ta, tb), kind);
+        out.set(pairKey(tb, ta), kind);
+      }
+    };
+    add(m.activeWires(), "live");
+    add(m.stuckWires(), "stuck");
+    return out;
+  });
+  return (a, b) => {
+    ed.rev();
+    if (canMeet(ed.system, a, b)) return "never";
+    const p = present().get(pairKey(a, b));
+    const found = ed.system.ruleFor(a, b);
+    if (found && ed.system.broken(found.rule)) return "broken";
+    if (p === "stuck") return "stuck";
+    if (!found) return "none";
+    return p === "live" ? "live" : "has";
+  };
+}
+
 /**
  * Every pair of agent types, as half of a square: each cell is one pair,
  * and says whether it has a rule, and whether that pair is in the net now.
@@ -33,32 +67,7 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
     return all.map((t, i) => ({ t, i })).sort((x, y) => rank(x.t.id) - rank(y.t.id) || x.i - y.i).map((x) => x.t);
   };
 
-  /** Pairs in the net now, by pair key: whether they can fire. */
-  const present = createMemo(() => {
-    m.rev();
-    const v = m.view().net;
-    const out = new Map<string, "live" | "stuck">();
-    const add = (ws: Iterable<number>, kind: "live" | "stuck") => {
-      for (const w of ws) {
-        if (!v.wires.has(w)) continue;
-        const [a, b] = v.wire(w).ends;
-        if (a.kind === "port" && b.kind === "port") out.set(pairKey(v.agent(a.agent).type, v.agent(b.agent).type), kind);
-      }
-    };
-    add(m.activeWires(), "live");
-    add(m.stuckWires(), "stuck");
-    return out;
-  });
-
-  const state = (a: string, b: string): CellState => {
-    if (canMeet(ed.system, a, b)) return "never";
-    const p = present().get(pairKey(a, b));
-    const found = ed.system.ruleFor(a, b);
-    if (found && ed.system.broken(found.rule)) return "broken";
-    if (p === "stuck") return "stuck";
-    if (!found) return "none";
-    return p === "live" ? "live" : "has";
-  };
+  const state = cellStates(ed);
 
   const n = () => types().length;
   const cell = () => (props.thumb ? 7 : props.big ? 36 : Math.max(17, Math.min(24, Math.floor(188 / Math.max(1, n())))));
@@ -188,30 +197,25 @@ export function GridSummary(props: { ed: Editor }) {
 
 export function GridLegend(props: { ed?: Editor }) {
   const typed = () => !!props.ed && (props.ed.rev(), typingOn(props.ed.system.typing));
+  const state = props.ed ? cellStates(props.ed) : undefined;
+  /** The state of the cell under the pointer, so its entry lights up. */
+  const hot = (): CellState | undefined => {
+    const h = props.ed?.model.hover();
+    return h?.kind === "pair" && state ? state(h.a, h.b) : undefined;
+  };
+  const entry = (kind: CellState, label: string) => (
+    <span classList={{ hl: hot() === kind }}>
+      <i class={kind} />
+      {label}
+    </span>
+  );
   return (
     <div class="grid-legend">
-      <span>
-        <i class="has" />
-        Rule
-      </span>
-      <span>
-        <i class="live" />
-        Rule, pair on canvas
-      </span>
-      <span>
-        <i class="none" />
-        No rule yet
-      </span>
-      <span>
-        <i class="stuck" />
-        Stuck here
-      </span>
-      <Show when={typed()}>
-        <span>
-          <i class="never" />
-          Can never meet
-        </span>
-      </Show>
+      {entry("has", "Rule")}
+      {entry("live", "Rule, pair on canvas")}
+      {entry("none", "No rule yet")}
+      {entry("stuck", "Stuck here")}
+      <Show when={typed()}>{entry("never", "Can never meet")}</Show>
     </div>
   );
 }

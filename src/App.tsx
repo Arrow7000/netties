@@ -145,6 +145,7 @@ export function App(props: { initial?: Doc }) {
         onFire={(wire) => ed.dispatch({ kind: "run/fire", wire })}
         preview={ed.preview}
         previewing={ed.previewing}
+        fitPreviews={ed.running}
         onStuck={openStuck}
         pad={{ t: 72, r: 270, b: 90, l: 48 }}
         empty={

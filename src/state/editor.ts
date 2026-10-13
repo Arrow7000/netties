@@ -191,11 +191,10 @@ export function createEditor(initial: Doc | undefined) {
   const startAfter = (plans: Map<WireId, StepPlan>, recs: StepRecord[], before: Placement): Placement => {
     const start = new Map(before);
     for (const r of recs) r.removed.forEach((id) => start.delete(id));
-    for (const [id, p] of placeCreated(plans, recs)) start.set(id, p);
+    const created = placeCreated(plans, recs);
+    for (const [id, p] of created) start.set(id, p);
     for (const r of recs) r.removed.forEach((id) => model.deletePosition(id));
-    // New agents are placed where their previews were, but may turn as the net settles.
-    const created = new Set(recs.flatMap((r) => r.created));
-    model.seedLayout(new Map([...start].filter(([id]) => model.net.agents.has(id))), created);
+    model.placeCreated(created);
     return start;
   };
 

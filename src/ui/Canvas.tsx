@@ -84,6 +84,8 @@ export interface CanvasProps {
   preview?: (ws: WireId[]) => StepPreview;
   /** Active pairs to preview regardless of the pointer. */
   previewing?: () => WireId[] | undefined;
+  /** Keep previews in view as well as the net (while running). */
+  fitPreviews?: () => boolean;
   /** Called when an active pair with no rule is clicked. */
   onStuck?: (w: WireId) => void;
   /** Display names for free ports. */
@@ -129,6 +131,13 @@ export function Canvas(props: CanvasProps) {
     for (const f of routed.free.values()) {
       b.y0 = Math.min(b.y0, f.y - 16);
       b.y1 = Math.max(b.y1, f.y + 16);
+    }
+    // While running, what's about to happen counts as part of the net too.
+    const pv = props.fitPreviews?.() ? firing()?.preview : undefined;
+    if (pv) {
+      const boxes = [...[...pv.plans.values()].map((p) => p.frame), ...pv.vanishing];
+      for (const st of pv.strokes) for (const q of st.pts) boxes.push({ x0: q.x, y0: q.y, x1: q.x, y1: q.y });
+      for (const x of boxes) [b.x0, b.y0, b.x1, b.y1] = [Math.min(b.x0, x.x0), Math.min(b.y0, x.y0), Math.max(b.x1, x.x1), Math.max(b.y1, x.y1)];
     }
     return b;
   };
@@ -196,12 +205,13 @@ export function Canvas(props: CanvasProps) {
 
   createEffect(on(ed.fitTick, () => queueMicrotask(fit), { defer: true }));
 
-  // In automatic mode, keep the whole net in view as it changes shape. A
-  // change being animated keeps the camera still until it has settled, so a
-  // step's result appears exactly where its preview was.
+  // In automatic mode, keep the whole net in view as it changes shape, and
+  // while running, the previews of the next step too. A change being
+  // animated keeps the camera still until it has settled, so a step's result
+  // appears exactly where its preview was.
   createEffect(
     on(
-      () => (tooBig() || ed.frame() ? undefined : ed.layout()),
+      () => (tooBig() || ed.frame() ? undefined : [ed.layout(), props.fitPreviews?.() && firing()]),
       (l) => {
         if (!l || ed.mode() !== "auto" || drag() || tooBig()) return;
         const b = contentBounds();
@@ -806,16 +816,16 @@ function StepPreview(props: { ed: NetModel; hidden: boolean }) {
  */
 function RulePreview(props: { preview: StepPreview; system: () => System }) {
   const plans = () => [...props.preview.plans.values()];
+  const frame = (b: Box, empty = false) => (
+    <>
+      <rect class="frame-halo" x={b.x0} y={b.y0} width={b.x1 - b.x0} height={b.y1 - b.y0} rx={6} />
+      <rect class="frame" classList={{ empty }} x={b.x0} y={b.y0} width={b.x1 - b.x0} height={b.y1 - b.y0} rx={6} />
+    </>
+  );
   return (
     <g class="rule-preview">
-      <For each={plans()}>
-        {(p) => (
-          <>
-            <rect class="frame-halo" x={p.frame.x0} y={p.frame.y0} width={p.frame.x1 - p.frame.x0} height={p.frame.y1 - p.frame.y0} rx={6} />
-            <rect class="frame" x={p.frame.x0} y={p.frame.y0} width={p.frame.x1 - p.frame.x0} height={p.frame.y1 - p.frame.y0} rx={6} />
-          </>
-        )}
-      </For>
+      <For each={props.preview.vanishing}>{(b) => frame(b, true)}</For>
+      <For each={plans()}>{(p) => frame(p.frame)}</For>
       <For each={props.preview.kept}>{(pts) => <path class="kept" d={polylinePath(pts)} />}</For>
       <For each={props.preview.strokes}>{(st) => <path class={st.dashed ? "link" : "inner"} d={polylinePath(st.pts)} />}</For>
       <For each={plans()}>{(plan) => <PlannedAgents plan={plan} system={props.system} />}</For>

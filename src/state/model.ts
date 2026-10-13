@@ -205,15 +205,12 @@ export function createNetModel(opts: NetModelOptions) {
 
   /** The last automatic layout, so the next one can stay close to it. */
   let lastAuto: Placement | undefined;
-  /** Agents in `lastAuto` the next layout may point either way: ones a step just put down. */
-  let anyWay: ReadonlySet<AgentId> | undefined;
 
   const automatic = createMemo(() => {
     const v = view();
     const pins = opts.pins?.();
-    const l = autoLayout(v.net, { pins, prev: lastAuto, anyWay });
+    const l = autoLayout(v.net, { pins, prev: lastAuto });
     lastAuto = l.placement;
-    anyWay = undefined;
     return l;
   });
 
@@ -331,8 +328,7 @@ export function createNetModel(opts: NetModelOptions) {
   /**
    * After a step: draw the net as it is now with the agents in `start` where
    * it says (the new ones where their rules put them, the rest where they
-   * were), then let it settle into its layout. Call `seedLayout` with the
-   * same positions before the change, so the layout stays close to them.
+   * were), then let it settle into its layout.
    * `before` is how the net was drawn before the change (its columns and
    * where its loose ends were), so the first frame is routed exactly as the
    * step's preview was.
@@ -606,18 +602,13 @@ export function createNetModel(opts: NetModelOptions) {
     animate,
     settleFrom,
     /**
-     * Positions the next automatic layout should stay close to, on top of the
-     * last one. Agents in `anyWay` keep their place but not their way of
-     * pointing, so the layout doesn't depend on how a step's result happened
-     * to be drawn. Part of an edit under way.
+     * Manual layout: put agents a step created where it says. Automatic
+     * layout places them itself; they only start out there, as the net
+     * settles. Part of an edit under way.
      */
-    seedLayout(start: Placement, turnable: ReadonlySet<AgentId> = new Set()) {
-      if (mode() === "manual") {
-        for (const [id, p] of start) positions.set(id, p);
-        return;
-      }
-      lastAuto = new Map([...(lastAuto ?? []), ...start]);
-      anyWay = turnable;
+    placeCreated(at: Placement) {
+      if (mode() !== "manual") return;
+      for (const [id, p] of at) positions.set(id, p);
     },
 
     /** Whether a view agent is selected (a box counts when its instance is). */

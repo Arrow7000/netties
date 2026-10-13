@@ -97,11 +97,6 @@ export interface AutoLayoutOptions {
    * reshuffle everything around it.
    */
   prev?: Placement;
-  /**
-   * Agents in `prev` whose place counts but whose way of pointing doesn't:
-   * ones a step has just put down, so the layout turns them as it likes.
-   */
-  anyWay?: ReadonlySet<AgentId>;
 }
 
 export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
@@ -173,9 +168,8 @@ export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
   // Keep whatever way surviving units faced before. A pair counts as surviving
   // only if both its agents were already drawn, tip to tip; a pair a step has
   // just made is laid out afresh, whichever way its agents pointed before.
-  const pointed = (id: AgentId) => (opts.anyWay?.has(id) ? undefined : opts.prev?.get(id));
   for (const u of units) {
-    const [a, b] = u.roots.map(pointed);
+    const [a, b] = u.roots.map((id) => opts.prev?.get(id));
     if (!a || (u.roots.length === 2 && (!b || a.orient === b.orient))) continue;
     u.flip = a.orient === "up";
   }
@@ -192,7 +186,7 @@ export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
     if (opts.prev)
       for (const [id, p] of l.placement) {
         const q = opts.prev.get(id);
-        if (q) c += 0.04 * (Math.abs(p.x - q.x) + Math.abs(p.y - q.y)) + (p.orient !== q.orient && !opts.anyWay?.has(id) ? 12 : 0);
+        if (q) c += 0.04 * (Math.abs(p.x - q.x) + Math.abs(p.y - q.y)) + (p.orient !== q.orient ? 12 : 0);
       }
     return c;
   };

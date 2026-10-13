@@ -265,6 +265,8 @@ textarea {
 .btn.icon {
   padding: 0;
   width: 32px;
+  /* Beats the 16px of the .icon rule meant for the icons themselves. */
+  height: 32px;
 }
 
 .btn.small {
@@ -1364,6 +1366,16 @@ kbd {
   display: flex;
   align-items: center;
   gap: 5px;
+  /* Room for the highlight without moving anything. */
+  padding: 1px 5px;
+  margin: -1px -5px;
+  border-radius: 5px;
+}
+
+/* The entry for the cell under the pointer. */
+.grid-legend span.hl {
+  background: var(--accent-soft);
+  color: var(--text);
 }
 
 .grid-legend i {
@@ -2178,6 +2190,11 @@ kbd {
   stroke: var(--accent);
   stroke-opacity: 0.4;
   stroke-width: 1;
+}
+
+/* Round a pair whose rule creates nothing: see-through, so the fading pair shows inside. */
+.rule-preview .frame.empty {
+  fill: none;
 }
 
 /* A soft glow round the frame, so its edge reads as a hint rather than a line. */
