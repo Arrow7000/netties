@@ -133,6 +133,32 @@ In order. One design round at a time ("things are overwhelming enough").
 6. **Low priority**: the LLM create UI design round (step 3 above). The
    user, 2026-10-13: "not my main priority. in fact it's quite a low one".
 
+### The braindump as the user wrote it
+
+Word for word, as added on 2026-10-13 (it was wrongly replaced by the
+triage above at the time, and restored on 2026-10-14). Progress is tracked
+in the triaged list; these checkboxes are left as written.
+
+- [ ] drag selection should select wires too, not just agents
+- [ ] cmd+c/cmd+x should copy/cut the selection! and cmd+v should paste it! atm there's no way to do this other than temporarily making a component or something
+- [ ] dragging an agent into the canvas onto an already existing agent should do something cleverer than just dumping it on the canvas unconnected. maybe we can have some logic where if there is only one port of matching polarity and type to the existing agent's ports, we initialise the new agent already wired up to that port? if more than one match is possible maybe we.. just choose one at random? not sure. but i constantly find myself wanting to drag new agents onto existing ones to connect them
+- [ ] would be good to benchmark what's actually taking up perf in large nets. and would it make sense to outsource that algorithm to a wasm worker or something? how much work would that be, how brittle, and how much perf are we likely to gain for ourselves there
+- [ ] it should be possible to recollapse an opened component, atm doesn't look like it is?
+
+- [ ] i don't think the combinator translation toggle needs to have pride of place right at the top
+- [ ] the combinators view UX needs work. rn it's janky and you can't recollapse a thing after opening it and also it's not clear what general and restricted mean and why you can sometimes step one but not the other or sometimes neither. needs some love basically.
+- [ ] we the button with the share and text view dropdown should probably not be called the nondescriptive "Net". it should probably also go to the left of the examples dropdown. it's more like the "File" toolbar item.
+- [ ] when hovering over the step or run buttons it takes like a full second for the tooltip to appear, let's make it near-instant
+- [ ] generally clicking outside of an opened panel should collapse it
+- [ ] the rule editor – and combinator view for that matter – should not be full-page modes, but popovers or smth. so that it should be possible to click outside of them to dismiss.
+- [ ] the rule editor also needs some love. and actions inside it need to be undoable
+- [ ] the rule editor has different affordances than the main canvas. can't drag an agent into the end state canvas from the panel at the top, but can only click them. the affordances and abstractions and shortcuts etc need to be supported here too, as much as possible
+- [ ] let's make the global undo/redo buttons be able to show lists on long-press. so that we can navigate back several steps in one go. like the chrome back/forward buttons.
+- [ ] when pressing the shortcuts for undo/redo, their corresponding buttons in the UI should flash up
+
+- [ ] maybe look into supporting linearity? is there literature on that? what does that actually entail, that the number of agents needs to be maintained across reductions? is there an affine equivalent, that the number of agents can't increase?
+- [ ] maybe look into how we could have a responsive mobile mode? i feel like that's going to be a lot of work tho.. will it?
+
 ## Rough edges in directions and types
 
 - SVG export omits the direction arrows shown on the canvas, so a directed
