@@ -15,6 +15,8 @@ import { TypesSheet } from "./ui/TypesSheet";
 import * as I from "./ui/icons";
 import { held } from "./ui/keys";
 import { prefs } from "./ui/prefs";
+import { CLIP_TYPE, type Clip } from "./core/clip";
+import { parse } from "./core/text";
 import { typingOn } from "./core/types";
 
 const THEME_KEY = "netties:theme";
@@ -109,7 +111,77 @@ export function App(props: { initial?: Doc }) {
     };
     window.addEventListener("keydown", onKey);
     onCleanup(() => window.removeEventListener("keydown", onKey));
+
+    // Copy, cut and paste the selection. The clipboard gets the piece twice:
+    // as JSON for netties, and in the text format for anywhere else.
+    const editable = (t: EventTarget | null) => !!(t as Element | null)?.closest?.("input, textarea, select, [contenteditable]");
+    const onCopy = (e: ClipboardEvent, cut: boolean) => {
+      if (editable(e.target) || overlayOpen() || !e.clipboardData) return;
+      const c = ed.copySelection();
+      const s = m.selection();
+      if (!c || s?.kind !== "items") return;
+      e.preventDefault();
+      e.clipboardData.setData(CLIP_TYPE, JSON.stringify(c.clip));
+      e.clipboardData.setData("text/plain", c.text);
+      const count = (n: number, one: string) => (n ? `${n} ${one}${n === 1 ? "" : "s"}` : "");
+      const what = [count(s.agents.size, "agent"), count(s.groups.size, "component")].filter(Boolean).join(" and ");
+      if (cut) {
+        ed.dispatch({ kind: "selection/delete" });
+        ed.notify(`Cut ${what}.`, true);
+      } else ed.notify(`Copied ${what}.`);
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      if (editable(e.target) || overlayOpen() || !e.clipboardData) return;
+      const json = e.clipboardData.getData(CLIP_TYPE);
+      const text = e.clipboardData.getData("text/plain");
+      if (!json && !text.trim()) return;
+      e.preventDefault();
+      let src: Parameters<typeof ed.paste>[0];
+      try {
+        src = json ? (JSON.parse(json) as Clip) : parse(text);
+      } catch (err) {
+        ed.notify(`The clipboard doesn't hold a net: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+      try {
+        const problem = ed.paste(src, pasteSpot());
+        if (problem) ed.notify(problem);
+      } catch (err) {
+        console.error("paste failed", err);
+        ed.notify("Couldn't paste that.");
+      }
+    };
+    const copy = (e: ClipboardEvent) => onCopy(e, false);
+    const cut = (e: ClipboardEvent) => onCopy(e, true);
+    document.addEventListener("copy", copy);
+    document.addEventListener("cut", cut);
+    document.addEventListener("paste", onPaste);
+    const track = (e: PointerEvent) => (pointer = { x: e.clientX, y: e.clientY });
+    window.addEventListener("pointermove", track, { passive: true });
+    onCleanup(() => {
+      document.removeEventListener("copy", copy);
+      document.removeEventListener("cut", cut);
+      document.removeEventListener("paste", onPaste);
+      window.removeEventListener("pointermove", track);
+    });
   });
+
+  /**
+   * Where a paste goes: under the pointer when it's over the canvas,
+   * otherwise the middle of the screen. Pasting again at the same spot
+   * steps each copy down and to the right, so they don't pile up.
+   */
+  let pointer: { x: number; y: number } | undefined;
+  let lastPaste: { x: number; y: number; n: number } | undefined;
+  const pasteSpot = () => {
+    const over = pointer && document.elementFromPoint(pointer.x, pointer.y)?.closest(".canvas");
+    const c = over ? pointer! : { x: innerWidth / 2, y: innerHeight / 2 };
+    const at = camera.toWorld(c.x, c.y) ?? { x: 0, y: 0 };
+    const again = lastPaste && Math.hypot(lastPaste.x - at.x, lastPaste.y - at.y) < 1;
+    lastPaste = { x: at.x, y: at.y, n: again ? lastPaste!.n + 1 : 0 };
+    const step = 24 * lastPaste.n;
+    return { x: at.x + step, y: at.y + step };
+  };
 
   createEffect(on(m.fitTick, () => queueMicrotask(camera.fit), { defer: true }));
 

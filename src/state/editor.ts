@@ -1,7 +1,9 @@
 import { batch, createMemo, createSignal } from "solid-js";
 import { type Example, examples } from "../core/examples";
+import { type Clip, componentsFor, mergePlan, systemFor } from "../core/clip";
 import { type ComponentDef, type GroupId, Groups, extract, refresh, uses } from "../core/groups";
 import { type AgentId, type AgentType, Net, type WireId } from "../core/net";
+import { print } from "../core/text";
 import { type Stats, type StepRecord, emptyStats, interact, isActive, parallelStep } from "../core/reduce";
 import { type Rule, System, type SystemJSON, pairKey } from "../core/system";
 import { type PortSpec, type Typing, badWires, canMeet, flip, specOf } from "../core/types";
@@ -761,6 +763,63 @@ export function createEditor(initial: Doc | undefined) {
         for (const g of [...model.groups.groups.values()]) if (g.def === id && model.groups.groups.has(g.id)) model.groups.dissolve(g.id);
         library.delete(id);
       });
+      return undefined;
+    },
+
+    /**
+     * The selection, for the clipboard: as a clip for pasting back into
+     * netties, and as text. Undefined when nothing is selected.
+     */
+    copySelection(): { clip: Clip; text: string } | undefined {
+      const piece = model.copySelection();
+      if (!piece) return undefined;
+      const sys = systemFor(system, piece.net);
+      const clip: Clip = {
+        v: 1,
+        net: piece.net.toJSON(),
+        groups: piece.groups.toJSON(),
+        positions: [...piece.positions],
+        system: sys.toJSON(),
+        components: componentsFor(library, piece.groups),
+      };
+      return { clip, text: print(sys, piece.net) };
+    },
+
+    /**
+     * Paste a clip, or a piece of the text format, with its middle at `at`.
+     * Agent types and rules it brings are added; ones already here are used
+     * as they are. Returns a message when it can't be pasted.
+     */
+    paste(src: Clip | { system: System; net: Net }, at: Pt): string | undefined {
+      const from = "v" in src ? System.fromJSON(src.system) : src.system;
+      const piece = "v" in src ? Net.fromJSON(src.net) : src.net;
+      const pieceGroups = "v" in src ? Groups.fromJSON(src.groups) : new Groups();
+      const rel = new Map("v" in src ? src.positions : []);
+      const components = "v" in src ? src.components : [];
+      if (!piece.agents.size) return "There are no agents to paste.";
+      const plan = mergePlan(system, from);
+      if ("error" in plan) return plan.error;
+      // Instances of components that are neither here nor in the clip become plain agents.
+      const known = (id: string) => library.has(id) || components.some((d) => d.id === id);
+      for (const g of [...pieceGroups.groups.values()]) if (!known(g.def)) pieceGroups.dissolve(g.id);
+      stop();
+      let cut = 0;
+      commitSystemEdit(() => {
+        for (const t of plan.types.values()) {
+          system.addType(t);
+          for (const p of t.ports ?? []) if (p.type && !system.typing.names.includes(p.type)) system.typing.names.push(p.type);
+        }
+        for (const [k, r] of plan.rules) system.rules.set(k, r);
+        for (const d of components) if (!library.has(d.id)) library.set(d.id, d);
+        model.insertPiece(piece, pieceGroups, rel, at);
+        cut = enforceTypes();
+      });
+      const added = [...plan.types.values()].map((t) => t.symbol);
+      const notes = [
+        added.length ? `Added ${added.join(", ")} to the agents.` : "",
+        cut ? cutMessage(cut) : "",
+      ].filter(Boolean);
+      if (notes.length) notify(`Pasted. ${notes.join(" ")}`, true);
       return undefined;
     },
 

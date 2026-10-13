@@ -1,5 +1,6 @@
 import { batch, createMemo, createSignal } from "solid-js";
 import { type Frame, type Snapshot as AnimSnapshot, buildMorph } from "../anim/morph";
+import { cutOut, graft, looseName } from "../core/clip";
 import { type Defs, type GroupId, Groups, type GroupsJSON, collapse, instantiate } from "../core/groups";
 import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, port, sameEnd } from "../core/net";
 import { type StepRecord, redexes } from "../core/reduce";
@@ -281,8 +282,7 @@ export function createNetModel(opts: NetModelOptions) {
 
   const nextFreeName = () => {
     for (let i = 0; ; i++) {
-      const letter = String.fromCharCode(97 + (i % 26));
-      const name = i < 26 ? letter : `${letter}${Math.floor(i / 26)}`;
+      const name = looseName(i);
       if (!net.free.has(name)) return name;
     }
   };
@@ -761,6 +761,43 @@ export function createNetModel(opts: NetModelOptions) {
       net.free.set(name, NONE);
       net.connect(e, free(name));
       bump();
+    },
+
+    /**
+     * The selection as a piece of net to copy: its agents and wires, the
+     * instances wholly inside, and where each agent is drawn relative to
+     * the piece's middle.
+     */
+    copySelection() {
+      const agents = selectedAgents();
+      if (!agents.length) return undefined;
+      const piece = cutOut(net, groups, agents);
+      const shown = mode() === "manual" ? positions : positionsFromAuto(layout().placement);
+      const ps = agents.map((a) => shown.get(a)).filter((p): p is Placed => !!p);
+      const cx = ps.reduce((s, p) => s + p.x, 0) / Math.max(1, ps.length);
+      const cy = ps.reduce((s, p) => s + p.y, 0) / Math.max(1, ps.length);
+      const at = new Map<AgentId, Placed>();
+      for (const a of agents) {
+        const p = shown.get(a);
+        if (p) at.set(a, { ...p, x: p.x - cx, y: p.y - cy });
+      }
+      return { ...piece, positions: at };
+    },
+
+    /**
+     * Add a copied piece with its middle at `at`, and select it. Its agent
+     * types must already be in the system. Part of an edit already under way.
+     */
+    insertPiece(piece: Net, pieceGroups: Groups, rel: ReadonlyMap<AgentId, Placed>, at: Pt) {
+      const { ids, groups: top } = graft(net, groups, opts.system(), piece, pieceGroups, nextFreeName);
+      for (const [old, id] of ids) {
+        const p = rel.get(old) ?? { x: 0, y: 0, orient: "down" as const };
+        const placed = { ...p, x: p.x + at.x, y: p.y + at.y };
+        if (mode() === "manual") positions.set(id, placed);
+        else spawnAt.set(id, placed);
+      }
+      const loose = [...ids.values()].filter((id) => !groups.of.has(id));
+      setSelection({ kind: "items", agents: new Set(loose), groups: new Set(top) });
     },
 
     deleteSelection() {
