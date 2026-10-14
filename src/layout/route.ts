@@ -1,4 +1,4 @@
-import { type End, type Net, NONE, type WireId, endKey } from "../core/net";
+import { type AgentId, type End, type Net, NONE, type WireId, endKey } from "../core/net";
 import {
   type Box,
   G,
@@ -9,6 +9,7 @@ import {
   boxOf,
   portPos,
   segmentHitsPolygon,
+  segmentNearPolygon,
 } from "./geometry";
 
 /**
@@ -101,17 +102,19 @@ interface Span {
 }
 
 const JOG = 12;
+/** How far wires keep from agents they don't connect to. Wires are drawn on a halo about this wide either side. */
+const CLEARANCE = 4;
 
 export function route(net: Net, placement: Placement, opts: RouteOptions = {}): Routed {
   const arity = (id: number) => net.agent(id).wires.length - 1;
   const boxes: Box[] = [];
-  /** Each agent's outline, by its box. */
-  const outlines = new Map<Box, Pt[]>();
+  /** Each agent by its box, with its outline as drawn, and slightly shrunk for the wires at its own ports. */
+  const shapes = new Map<Box, { id: AgentId; outline: Pt[]; inner: Pt[] }>();
   for (const [id, p] of placement) {
     if (!net.agents.has(id)) continue;
     const box = boxOf(p, arity(id));
     boxes.push(box);
-    outlines.set(box, agentOutline(p, arity(id), 0.5));
+    shapes.set(box, { id, outline: agentOutline(p, arity(id)), inner: agentOutline(p, arity(id), 0.5) });
   }
 
   const leg = (e: Extract<End, { kind: "port" }>): Leg => {
@@ -206,12 +209,16 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
   // Draw, then send wires that run through an agent or alongside another wire
   // round as detours, and lanes that turned out badly to be chosen again.
   const agentsByX = new ByX(boxes);
-  const hitsAgent = (pts: Pt[]) => {
+  /** Whether a wire runs through an agent, or too near one other than those at its ends. */
+  const hitsAgent = (id: WireId, pts: Pt[]) => {
+    const own = net.wire(id).ends.flatMap((e) => (e.kind === "port" ? [e.agent] : []));
+    const m = CLEARANCE;
     for (let i = 1; i < pts.length; i++)
       for (const [a, b] of pieces(pts[i - 1]!, pts[i]!))
-        for (const box of agentsByX.over(Math.min(a.x, b.x), Math.max(a.x, b.x) + 0.001)) {
-          if (Math.max(a.y, b.y) < box.y0 || Math.min(a.y, b.y) > box.y1) continue;
-          if (segmentHitsPolygon(a, b, outlines.get(box)!)) return true;
+        for (const box of agentsByX.over(Math.min(a.x, b.x) - m, Math.max(a.x, b.x) + m)) {
+          if (Math.max(a.y, b.y) < box.y0 - m || Math.min(a.y, b.y) > box.y1 + m) continue;
+          const s = shapes.get(box)!;
+          if (own.includes(s.id) ? segmentHitsPolygon(a, b, s.inner) : segmentNearPolygon(a, b, s.outline, CLEARANCE)) return true;
         }
     return false;
   };
@@ -230,13 +237,15 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
         const [lo, hi] = drawn.lanes.get(job.id)!;
         const x = detour.get(job.id)!;
         if (
-          agentsByX.over(x, x + 0.001).some((b) => b.x0 < x && b.y0 < hi - 0.5 && b.y1 > lo + 0.5) ||
+          agentsByX
+            .over(x - CLEARANCE, x + CLEARANCE)
+            .some((b) => b.x0 - CLEARANCE < x && b.x1 + CLEARANCE > x && b.y0 < hi - 0.5 && b.y1 > lo + 0.5) ||
           beside(job.id, (c) => Math.abs(c.x - x) < 0.01 && c.gap < G.wireGap - 0.5 && c.overlap > 1)
         )
           redo.add(job.id);
         return;
       }
-      if (!hitsAgent(drawn.wires.get(job.id)!) && !beside(job.id, (c) => c.gap < G.wireGap * 0.7 && c.overlap > 14)) return;
+      if (!hitsAgent(job.id, drawn.wires.get(job.id)!) && !beside(job.id, (c) => c.gap < G.wireGap * 0.7 && c.overlap > 14)) return;
       if (job.kind === "direct" || job.kind === "cap" || job.kind === "cup") {
         jobs[i] = { kind: "detour", id: job.id, a: job.a, b: job.b };
         redo.add(job.id);
@@ -285,9 +294,9 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       y: from,
       legs,
     });
-    /** A run from a port out to x, on the side the port faces. */
-    const out = (key: string, t: Terminal, x: number) => {
-      if (Math.abs(x - t.x) > 0.5) (t.dir === "up" ? caps : cups).set(key, span(t.x, x, t.y, [t.x]));
+    /** A run from a port out to x, on the side the port faces, unless the wire gets there by a jog. */
+    const out = (key: string, t: Terminal, x: number, towards: number) => {
+      if (Math.abs(x - t.x) > 0.5 && !jogs(t, x, towards)) (t.dir === "up" ? caps : cups).set(key, span(t.x, x, t.y, [t.x]));
     };
     for (const job of jobs) {
       if (job.kind === "cap") caps.set(`${job.id}`, span(job.a.t.x, job.b.t.x, Math.min(job.a.t.y, job.b.t.y)));
@@ -302,10 +311,11 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
         (job.leg.t.dir === "up" ? caps : cups).set(`${job.id}`, sp);
       }
       if (job.kind === "detour") {
-        out(`${job.id}a`, job.a.t, detour.get(job.id)!);
-        out(`${job.id}b`, job.b.t, detour.get(job.id)!);
+        out(`${job.id}a`, job.a.t, detour.get(job.id)!, job.b.t.y);
+        out(`${job.id}b`, job.b.t, detour.get(job.id)!, job.a.t.y);
       }
-      if ((job.kind === "drop" || job.kind === "rise") && detour.has(job.id)) out(`${job.id}a`, job.leg.t, detour.get(job.id)!);
+      if ((job.kind === "drop" || job.kind === "rise") && detour.has(job.id))
+        out(`${job.id}a`, job.leg.t, detour.get(job.id)!, job.kind === "drop" ? Infinity : -Infinity);
     }
     // Cups keep clear of the caps too, so the two never run along each other.
     const capRuns = settle(caps, agentsByX, -1);
@@ -372,12 +382,15 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
           const lx = detour.get(job.id)!;
           const ya = outY(`${job.id}a`, job.a.t);
           const yb = outY(`${job.id}b`, job.b.t);
+          const [ja, jb] = [jogs(job.a.t, lx, job.b.t.y), jogs(job.b.t, lx, job.a.t.y)];
           const mid: Pt[] = [];
           if (ya !== undefined) mid.push({ x: job.a.t.x, y: ya }, { x: lx, y: ya });
+          if (ja) mid.push({ x: lx, y: jogEnd(job.a.t), s: true });
           if (yb !== undefined) mid.push({ x: lx, y: yb }, { x: job.b.t.x, y: yb });
-          const ends = [ya ?? job.a.t.y, yb ?? job.b.t.y];
+          if (jb) mid.push({ x: lx, y: jogEnd(job.b.t) });
+          const ends = [ya ?? (ja ? jogEnd(job.a.t) : job.a.t.y), yb ?? (jb ? jogEnd(job.b.t) : job.b.t.y)];
           lanes.set(job.id, [Math.min(...ends), Math.max(...ends)]);
-          wires.set(job.id, join(job.a, mid, job.b));
+          wires.set(job.id, join(job.a, mid, job.b, jb));
           break;
         }
         case "around": {
@@ -405,8 +418,10 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
           const lx = detour.get(job.id);
           if (lx === undefined) pts.push({ x: t.x, y: edge });
           else {
-            const y = outY(`${job.id}a`, t);
-            if (y !== undefined) pts.push({ x: t.x, y }, { x: lx, y });
+            const jog = jogs(t, lx, edge);
+            const y = outY(`${job.id}a`, t) ?? (jog ? jogEnd(t) : undefined);
+            if (jog) pts.push({ x: lx, y: y!, s: true });
+            else if (y !== undefined) pts.push({ x: t.x, y }, { x: lx, y });
             pts.push({ x: lx, y: edge });
             lanes.set(job.id, [Math.min(y ?? t.y, edge), Math.max(y ?? t.y, edge)]);
           }
@@ -572,6 +587,19 @@ function pieces(a: Pt, b: Pt): [Pt, Pt][] {
   return out;
 }
 
+/**
+ * Whether a wire leaving a port for a lane at x gets there by a short
+ * S-curve, as wires reach their columns in automatic layout: when the lane
+ * is near and carries on the way the port faces, past `towards`.
+ */
+function jogs(t: Terminal, x: number, towards: number): boolean {
+  const d = Math.abs(x - t.x);
+  return d > 0.5 && d < 2 * JOG && (t.dir === "up" ? -1 : 1) * (towards - t.y) > 3 * JOG;
+}
+
+/** Where such an S-curve ends. */
+const jogEnd = (t: Terminal) => t.y + (t.dir === "up" ? -1 : 1) * 2 * JOG;
+
 /** How far pinned ports sit beyond the net, leaving room for wires to bend in. */
 const PIN_RISE = 30;
 
@@ -635,12 +663,12 @@ function settle(spans: Map<string, Span>, agents: ByX, dir: -1 | 1, runs: Box[] 
       for (const [lo, hi] of bands) if (at > lo + 0.01 && at < hi - 0.01) at = hi;
       return dir * at;
     };
-    // The nearest agent in front of a leg: going past it would run the leg through it.
+    // The nearest agent in front of a leg: going past it would run the leg through it, or too close by.
     let wall = dir * Infinity;
     for (const b of near) {
       const edge = dir < 0 ? b.y1 : b.y0;
       const ahead = dir * (edge - s.from) > 0.5 && dir * (edge - wall) < 0;
-      if (ahead && (s.legs ?? [s.x0, s.x1]).some((x) => b.x0 < x && b.x1 > x)) wall = edge;
+      if (ahead && (s.legs ?? [s.x0, s.x1]).some((x) => b.x0 - CLEARANCE < x && b.x1 + CLEARANCE > x)) wall = edge;
     }
     let y = push(G.wireGap, G.wireGap);
     // Short of room before it: squeeze in closer to the other runs, or

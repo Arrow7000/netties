@@ -256,6 +256,17 @@ what's done (at the user's request).
    - Checked by eye in the app, manual mode, light and dark: agents dragged
      onto a wire and between a facing pair. Very tight spots (an agent
      jammed between two others) route round it closely but don't cross.
+   - Follow-up the same day: the user found wires in manual mode still
+     grazing agents (an `if` whose third port's wire ran down the corner of
+     the S below it). Switching to manual keeps the automatic positions but
+     drops the columns wires jog out to, and the check only asked whether a
+     wire went *through* an agent. Wires now keep 4 units clear of agents
+     they don't connect to (`CLEARANCE`; they're drawn on a halo about that
+     wide), and a detour whose lane is close to its port reaches it with
+     the same S-curve as automatic layout's columns. A new test routes
+     every example step without columns. This also fixed near misses in
+     automatic mode (every step of Runs forever, Add two list lengths
+     step 2).
    - Not covered: wires to rule-interface pins (`pin` jobs) don't detour
      yet, and agents placed overlapping each other can still leave a wire
      through one.

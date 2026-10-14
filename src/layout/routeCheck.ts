@@ -1,6 +1,6 @@
 import type { AgentId, Net, WireId } from "../core/net";
 import { flattenPath } from "../render/path";
-import { G, type Placement, type Pt, agentOutline, insidePolygon } from "./geometry";
+import { G, type Placement, type Pt, agentOutline, distanceToSegment, insidePolygon } from "./geometry";
 import type { Routed } from "./route";
 
 /**
@@ -32,19 +32,24 @@ function samples(pts: Pt[], step = 2): Pt[] {
   return out;
 }
 
-/** Wires drawn through an agent. A wire may touch the agents at its own ends only at their ports. */
-export function wiresThroughAgents(net: Net, placement: Placement, routed: Routed): Hit[] {
+/**
+ * Wires drawn through an agent, or within `clearance` of one they don't
+ * connect to. A wire may touch the agents at its own ends only at their ports.
+ */
+export function wiresThroughAgents(net: Net, placement: Placement, routed: Routed, clearance = 0): Hit[] {
   const hits: Hit[] = [];
   const shapes = [...placement.keys()]
     .filter((id) => net.agents.has(id))
-    .map((id) => ({ id, poly: outline(net, placement, id) }));
+    .map((id) => ({ id, poly: outline(net, placement, id), drawn: outline(net, placement, id, 0) }));
   for (const [w, pts] of routed.wires) {
     const ends = new Set(net.wire(w).ends.flatMap((e) => (e.kind === "port" ? [e.agent] : [])));
     const ss = samples(pts);
-    for (const { id, poly } of shapes) {
+    const near = (q: Pt, poly: Pt[]) =>
+      insidePolygon(q, poly) || poly.some((p, i) => distanceToSegment(q, p, poly[(i + 1) % poly.length]!) < clearance);
+    for (const { id, poly, drawn } of shapes) {
       // A wire's own agents: allow the stretch next to the port.
-      const inside = ss.filter((q) => insidePolygon(q, poly));
-      if (ends.has(id) ? inside.length > 4 : inside.length > 0) hits.push({ wire: w, agent: id });
+      if (ends.has(id) ? ss.filter((q) => insidePolygon(q, poly)).length > 4 : ss.some((q) => near(q, drawn)))
+        hits.push({ wire: w, agent: id });
     }
   }
   return hits;

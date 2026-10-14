@@ -29,7 +29,7 @@ if (dir) mkdirSync(dir, { recursive: true });
 function svgOf(net: Net, placement: Placement, routed: Routed, title: string): string {
   const b = routed.bounds;
   const [x0, y0, w, h] = [b.x0 - 30, b.y0 - 44, b.x1 - b.x0 + 60, b.y1 - b.y0 + 74];
-  const through = new Set(wiresThroughAgents(net, placement, routed).map((h) => h.wire));
+  const through = new Set(wiresThroughAgents(net, placement, routed, 3).map((h) => h.wire));
   const close = new Set(wiresTooClose(routed).flatMap((c) => [c.a, c.b]));
   const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${y0} ${w} ${h}" width="${w * 2}" height="${h * 2}">`];
   out.push(`<rect x="${x0}" y="${y0}" width="${w}" height="${h}" fill="white"/>`);
@@ -54,7 +54,7 @@ function svgOf(net: Net, placement: Placement, routed: Routed, title: string): s
 
 /** Tallies problems in one drawing, and writes it out if asked to. */
 function tally(totals: Record<string, number>, net: Net, placement: Placement, routed: Routed, name: string, file: string) {
-  const through = wiresThroughAgents(net, placement, routed);
+  const through = wiresThroughAgents(net, placement, routed, 3);
   const close = wiresTooClose(routed);
   totals.drawings!++;
   totals.through! += through.length;

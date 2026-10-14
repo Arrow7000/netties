@@ -148,6 +148,25 @@ export function segmentHitsPolygon(a: Pt, b: Pt, poly: Pt[]): boolean {
   return true;
 }
 
+/** How far a point is from the segment from `a` to `b`. */
+export function distanceToSegment(p: Pt, a: Pt, b: Pt): number {
+  const [dx, dy] = [b.x - a.x, b.y - a.y];
+  const len = dx * dx + dy * dy;
+  const t = len ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len)) : 0;
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+
+/** Whether the segment from `a` to `b` passes through a convex polygon or comes within `d` of it. */
+export function segmentNearPolygon(a: Pt, b: Pt, poly: Pt[], d: number): boolean {
+  if (segmentHitsPolygon(a, b, poly)) return true;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [p, q] = [poly[j]!, poly[i]!];
+    if (Math.min(distanceToSegment(a, p, q), distanceToSegment(b, p, q), distanceToSegment(p, a, b), distanceToSegment(q, a, b)) < d)
+      return true;
+  }
+  return false;
+}
+
 /** Whether a point lies inside a polygon (even-odd rule). */
 export function insidePolygon(p: Pt, poly: Pt[]): boolean {
   let inside = false;

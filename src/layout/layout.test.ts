@@ -109,7 +109,23 @@ describe("routing", () => {
       for (let i = 0; i < 40; i++) {
         const { placement, routed } = autoLayout(net, { prev });
         prev = placement;
-        expect(wiresThroughAgents(net, placement, routed), `${ex.name}, step ${i}`).toEqual([]);
+        expect(wiresThroughAgents(net, placement, routed, 3), `${ex.name}, step ${i}`).toEqual([]);
+        expect(wiresTooClose(routed), `${ex.name}, step ${i}`).toEqual([]);
+        if (!parallelStep(net, s).length) break;
+      }
+    }
+  });
+
+  it("routes the examples as well once switched to manual, where wires lose their columns", () => {
+    for (const ex of examples) {
+      const s = ex.system();
+      const net = ex.net(s);
+      let prev: Placement | undefined;
+      for (let i = 0; i < 40; i++) {
+        const { placement } = autoLayout(net, { prev });
+        prev = placement;
+        const routed = route(net, placement);
+        expect(wiresThroughAgents(net, placement, routed, 3), `${ex.name}, step ${i}`).toEqual([]);
         expect(wiresTooClose(routed), `${ex.name}, step ${i}`).toEqual([]);
         if (!parallelStep(net, s).length) break;
       }
@@ -137,7 +153,7 @@ describe("routing", () => {
     fc.assert(
       fc.property(arbPlaced, ({ net, placement }) => {
         const routed = route(net, placement);
-        expect(wiresThroughAgents(net, placement, routed)).toEqual([]);
+        expect(wiresThroughAgents(net, placement, routed, 3)).toEqual([]);
         // Where there's no room for the full gap they squeeze up, but not onto each other.
         expect(wiresTooClose(routed, G.wireGap / 4)).toEqual([]);
       }),
