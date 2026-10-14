@@ -180,6 +180,72 @@ in the triaged list; these checkboxes are left as written.
 - Polymorphic port types (a duplicator for any one type).
 - TikZ export.
 
+## The second braindump, triaged (2026-10-14)
+
+The user's list is "Others" below, kept as written; progress is tracked here.
+
+1. **Done** (2026-10-14):
+   - [x] ⌘A selects every agent, box and wire (not the page's text).
+   - [x] A clicked wire shows as selected at once (the hover style was
+         winning while the pointer stayed on it).
+   - [x] Wire highlights run on under the agents they meet, with flat
+         ends, so the outline cuts them off: no rounded end beside a tip.
+         Not under agents drawn see-through during a step preview, where
+         they end flat at the port.
+   - [x] Hover pills are sized to their measured text.
+   - [x] The toast's Undo shows ⌘Z. Shortcuts are written the Mac way in
+         the code and shown as Ctrl/Alt/Shift elsewhere (`shortcuts()` in
+         `src/ui/keys.ts`; tooltips convert automatically).
+   - [x] Drag-select, CAD-style (the user's pick): rightwards is a window
+         (agents inside, wires with both ends inside, solid box); leftwards
+         is a crossing (anything touched, dashed box).
+   - [x] Share link button in the top bar, out of the File menu, with a
+         copy icon; "Update link" (accent) once the net differs from the
+         link in the address bar; a check and "Copied" for 0.9 s after.
+2. **Next, small to medium**:
+   - [ ] Shorter share links. They're already deflated JSON (600–1,650
+         characters for the examples). fhm deflates its *source text* with
+         a preset dictionary (`../fhm/editors/web/src/share.mjs`, fflate).
+         Deflating our text format instead is about half the length
+         (measured on the examples: 1,647 → ~690 for the triage example);
+         a dictionary of common words would cut more. The text format
+         doesn't yet carry manual positions, components or groups, so
+         those need adding or a JSON fallback. New links get a version
+         prefix; `#n=` links keep decoding as now.
+   - [ ] Shortcut chords light up: holding ⌘ brightens every button with a
+         ⌘ shortcut, pressing the key shows its button pressed. The user's
+         call: all such buttons, and larger labelled buttons show their
+         chord (small icon buttons can skip it). Needs every shortcut
+         registered in one place first; today each screen has its own
+         keydown handler.
+3. **Not as easy as it looks**:
+   - [ ] Wires in manual mode. Manual mode doesn't change the wires: both
+         modes use the same router (`src/layout/route.ts`). But the router
+         assumes the automatic layout's tidy rows and gaps between them,
+         so with agents placed by hand it runs wires behind agents and
+         across each other. The fix is a router that avoids obstacles for
+         arbitrary placements (e.g. orthogonal routing through a grid of
+         free space), a real piece of work.
+4. **Waiting on the user**: the taking/giving wave animation (a drawing
+   is coming).
+5. **Design and research, one at a time**:
+   - [ ] Reduction strategies. Worth knowing first: interaction nets are
+         strongly confluent, so every order of firing reaches the same
+         result in the same number of interactions. A strategy can't save
+         work on a net that finishes; it changes which pairs fire first,
+         so (a) a weak or outermost-first strategy (fire only pairs
+         connected to a loose end, nearest first) can stop as soon as the
+         answer shows at the loose ends and never touch disconnected
+         garbage, and (b) on a net that runs forever it can still produce
+         the visible part of the answer. The "β-optimal" claim is about
+         λ-calculus encoded with sharing graphs (Lamping, Asperti &
+         Guerrini), not about steps between nets. So the choice is really
+         "everything" vs "only what reaches the loose ends"; Step (one
+         pair) would use the second's order to pick the pair.
+   - [ ] Fading parts of the net with no loose ends. Cheap to compute
+         (connected components). Fits the strategy above: those parts are
+         exactly what "only what reaches the loose ends" never fires.
+
 ## Others
 
 - [ ] cmd+A should select the entire net. currently it selects the whole page text.
