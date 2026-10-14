@@ -11,6 +11,7 @@ import { type Level, type PortSpec, typingOn } from "./types";
  *     types optional number list         -- optional: the types ports can carry
  *     agent S 1 ports +number "the number", -number "the one before"
  *     γ(a, b) >< δ(c, d) => a ~ δ(e, f), b ~ δ(g, h), c ~ γ(e, g), d ~ γ(f, h);
+ *     γ(a, b) >< γ(c, d) "they annihilate" => a ~ c, b ~ d;   -- with a description
  *     γ(x, y) ~ δ(z, w);                 -- a net
  *
  * A term `A(t₁, …, tₙ)` is an agent whose aux ports are plugged into the
@@ -131,7 +132,7 @@ interface Parsed {
   decls: { symbol: string; arity: number; filled: boolean; name?: string; ports?: PortSpec[]; line: number }[];
   dirs?: Level;
   types?: { level: Level; names: string[] };
-  rules: { lhs: [Term, Term]; rhs: Eq[]; line: number }[];
+  rules: { lhs: [Term, Term]; rhs: Eq[]; line: number; description?: string }[];
   net: Eq[];
 }
 
@@ -235,10 +236,11 @@ function parseStatements(src: string): Parsed {
     if (peek()?.t === "><") {
       next();
       const b = term();
+      const description = peek()?.t.startsWith('"') ? next().t.slice(1, -1) : undefined;
       expect("=>");
       const rhs = peek()?.t === ";" ? [] : eqs();
       expect(";");
-      parsed.rules.push({ lhs: [a, b], rhs, line: t.line });
+      parsed.rules.push({ lhs: [a, b], rhs, line: t.line, description });
       continue;
     }
     p = start;
@@ -365,6 +367,7 @@ export function parse(src: string): { system: System; net: Net } {
     });
     build(net, r.rhs, bound, "rule", r.line);
     const rule = netToRule(sides[0].name, sides[1].name, net).rule;
+    if (r.description) rule.description = r.description;
     const problems = sys.validate(rule);
     if (problems.length) throw new ParseError(problems.join("; "), r.line);
     if (sys.ruleFor(rule.left, rule.right)) throw new ParseError(`a second rule for ${rule.left} >< ${rule.right}`, r.line);
@@ -483,5 +486,6 @@ function printRule(sys: System, r: Rule, sym: (id: string) => string): string {
     e.kind === "agent" ? port(ids[e.index]!, e.slot) : free(`${e.side === 0 ? "x" : "y"}${e.slot}`);
   for (const [a, b] of r.wires) net.connect(end(a), end(b));
   const eqs = equations(net, sys, (e) => (e.kind === "free" ? e.name : undefined));
-  return `${side(r.left, xs)} >< ${side(r.right, ys)} =>${eqs.length ? " " + eqs.join(", ") : ""};`;
+  const note = r.description ? ` "${r.description.replaceAll('"', "'")}"` : "";
+  return `${side(r.left, xs)} >< ${side(r.right, ys)}${note} =>${eqs.length ? " " + eqs.join(", ") : ""};`;
 }

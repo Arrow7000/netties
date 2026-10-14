@@ -35,7 +35,7 @@ export interface Pad {
 /** Pan and zoom, shared between a canvas and the controls that drive it. */
 export function createCamera() {
   const [view, setView] = createSignal<View>({ x: 0, y: 0, k: 1.5 });
-  let host: { fit(): void; el(): SVGSVGElement } | undefined;
+  let host: Host | undefined;
   const zoomAround = (k: number, cx: number, cy: number) =>
     setView((v) => {
       const nk = Math.min(8, Math.max(0.15, k));
@@ -58,6 +58,12 @@ export function createCamera() {
       zoomAround(k, c.x, c.y);
     },
     fit: () => host?.fit(),
+    /** The zoom that would fit the net in view. */
+    fitZoom: () => host?.fitZoom() ?? 1,
+    /** Centre the net in view at this zoom. */
+    fitAt: (k: number) => host?.fitAt(k),
+    /** Whether part of the net is out of view (and nothing is being dragged). */
+    spills: () => host?.spills() ?? false,
     /** The world point under a client position, if it's over the canvas. */
     toWorld(clientX: number, clientY: number): Pt | undefined {
       const el = host?.el();
@@ -67,10 +73,23 @@ export function createCamera() {
       const v = view();
       return { x: (clientX - r.left - v.x) / v.k, y: (clientY - r.top - v.y) / v.k };
     },
-    attach(h: { fit(): void; el(): SVGSVGElement }) {
+    /** Whether a client position is over this canvas itself, not something floating over it. */
+    contains(clientX: number, clientY: number): boolean {
+      const el = host?.el();
+      return !!el && document.elementFromPoint(clientX, clientY)?.closest("svg") === el;
+    },
+    attach(h: Host) {
       host = h;
     },
   };
+}
+
+interface Host {
+  fit(): void;
+  fitZoom(): number;
+  fitAt(k: number): void;
+  spills(): boolean;
+  el(): SVGSVGElement;
 }
 
 export type Camera = ReturnType<typeof createCamera>;
@@ -98,6 +117,12 @@ export interface CanvasProps {
   pad?: Pad;
   /** Shown over the canvas while the net is empty. */
   empty?: JSX.Element;
+  /**
+   * A rule's canvas: its loose ends are the rule's interface, drawn weightier
+   * than ordinary loose ends, and empty ports and ends are marked as needing
+   * a wire.
+   */
+  iface?: boolean;
   class?: string;
 }
 
@@ -125,13 +150,40 @@ export function Canvas(props: CanvasProps) {
   const tooBig = () => ed.view().net.agents.size > (props.limit ?? Infinity);
   const pad = () => props.pad ?? NO_PAD;
 
+  /**
+   * The types of a rule's interface ends: once for a row whose ends all
+   * carry the same type, to the left of the row, otherwise beside each end.
+   */
+  const ifaceTypes = createMemo(() => {
+    if (!props.iface || tooBig()) return [];
+    const { routed } = ed.layout();
+    const out: { x: number; y: number; text: string; anchor: "start" | "end" }[] = [];
+    for (const dir of ["up", "down"] as const) {
+      const row = [...routed.free].filter(([, f]) => f.dir === dir).sort((a, b) => a[1].x - b[1].x);
+      if (!row.length) continue;
+      const types = row.map(([name]) => ed.specAt(free(name)).type);
+      const y = row[0]![1].y + (dir === "up" ? -IFACE_LABEL : IFACE_LABEL);
+      if (types.every((t) => t && t === types[0])) out.push({ x: row[0]![1].x - 12, y, text: types[0]!, anchor: "end" });
+      else row.forEach(([, f], i) => types[i] && out.push({ x: f.x + 10, y, text: types[i]!, anchor: "start" }));
+    }
+    return out;
+  });
+
   const contentBounds = () => {
     const { routed } = ed.layout();
     const b = { ...routed.bounds };
+    // A rule's interface ends carry their names, and types, further out.
+    const room = props.iface ? 24 : 16;
     for (const f of routed.free.values()) {
-      b.y0 = Math.min(b.y0, f.y - 16);
-      b.y1 = Math.max(b.y1, f.y + 16);
+      b.y0 = Math.min(b.y0, f.y - room);
+      b.y1 = Math.max(b.y1, f.y + room);
     }
+    if (props.iface)
+      for (const t of ifaceTypes()) {
+        const w = t.text.length * TYPE_CH;
+        b.x0 = Math.min(b.x0, t.anchor === "end" ? t.x - w : t.x);
+        b.x1 = Math.max(b.x1, t.anchor === "end" ? t.x : t.x + w);
+      }
     // While running, what's about to happen counts as part of the net too.
     const pv = props.fitPreviews?.() ? firing()?.preview : undefined;
     if (pv) {
@@ -144,16 +196,21 @@ export function Canvas(props: CanvasProps) {
 
   let glide = 0;
   onCleanup(() => cancelAnimationFrame(glide));
-  /** Fit the net in view, straight away or (`smooth`) gliding there. */
-  const fit = (smooth = false) => {
+  const fitZoom = () => {
+    const b = contentBounds();
+    const { w, h } = size();
+    const p = pad();
+    return Math.min((w - p.l - p.r) / Math.max(b.x1 - b.x0, 60), (h - p.t - p.b) / Math.max(b.y1 - b.y0, 60), 2.4);
+  };
+
+  /** Fit the net in view, straight away or (`smooth`) gliding there, at its own zoom or at `zoom`. */
+  const fit = (smooth = false, zoom?: number) => {
     if (tooBig()) return;
     cancelAnimationFrame(glide);
     const b = contentBounds();
     const { w, h } = size();
     const p = pad();
-    const bw = Math.max(b.x1 - b.x0, 60);
-    const bh = Math.max(b.y1 - b.y0, 60);
-    const k = Math.min((w - p.l - p.r) / bw, (h - p.t - p.b) / bh, 2.4);
+    const k = zoom ?? fitZoom();
     const to = {
       k,
       x: p.l + (w - p.l - p.r) / 2 - ((b.x0 + b.x1) / 2) * k,
@@ -177,7 +234,14 @@ export function Canvas(props: CanvasProps) {
   };
 
   onMount(() => {
-    cam.attach({ fit, el: () => svg });
+    const spills = () => {
+      if (drag() || tooBig()) return false;
+      const b = contentBounds();
+      const v = view();
+      const { w, h } = size();
+      return b.x0 * v.k + v.x < 0 || b.y0 * v.k + v.y < 0 || b.x1 * v.k + v.x > w || b.y1 * v.k + v.y > h;
+    };
+    cam.attach({ fit, fitZoom, fitAt: (k) => fit(false, k), spills, el: () => svg });
     const ro = new ResizeObserver(() => {
       const r = svg.getBoundingClientRect();
       setSize({ w: r.width, h: r.height });
@@ -694,6 +758,7 @@ export function Canvas(props: CanvasProps) {
                   fading={!!firing()?.agents.has(id)}
                   endState={endState}
                   readonly={props.readonly}
+                  need={props.iface && !props.readonly}
                 />
               )}
             </For>
@@ -702,7 +767,10 @@ export function Canvas(props: CanvasProps) {
                 const pt = () => ed.layout().routed.free.get(name);
                 return (
                   <Show when={pt()}>
-                    {(p) => (
+                    {(p) =>
+                      props.iface ? (
+                        <IfaceEnd ed={ed} name={name} at={p()} state={endState(free(name))} label={props.freeLabel?.(name) ?? name} />
+                      ) : (
                       <g class="free-end">
                         <EndMark at={p()} state={endState(free(name))} />
                         <circle class="end-dot" cx={p().x} cy={p().y} r={2.4} />
@@ -711,11 +779,21 @@ export function Canvas(props: CanvasProps) {
                         </text>
                         <circle class="hit" data-free={name} cx={p().x} cy={p().y} r={7} />
                       </g>
-                    )}
+                      )
+                    }
                   </Show>
                 );
               }}
             </For>
+            <Show when={props.iface}>
+              <For each={ifaceTypes()}>
+                {(t) => (
+                  <text class="iface-type" x={t.x} y={t.y} text-anchor={t.anchor}>
+                    {t.text}
+                  </text>
+                )}
+              </For>
+            </Show>
             <g class="wire-labels">
               <For each={wireIds()}>
                 {(id) => (
@@ -805,6 +883,47 @@ function dragStart(ed: NetModel, g: WireGesture): Pt | undefined {
 }
 
 /** The mark on a port or free end, showing what it is and what a drop there would do. */
+/** How far a rule's interface end's name sits from it, and the width of a type label's letters. */
+const IFACE_LABEL = 15;
+const TYPE_CH = 5.9;
+
+/**
+ * An end of a rule's interface: hollow like a loose end, since it can be
+ * empty, but wider and ringed, since it's fixed: it stands for a wire the
+ * pair held. Its ring turns red while it still needs a wire, and an empty
+ * one shows its direction the way an empty port does.
+ */
+function IfaceEnd(props: { ed: NetModel; name: string; at: { x: number; y: number; dir: "up" | "down" }; state: EndState; label: string }) {
+  const empty = () => (props.ed.rev(), props.ed.net.free.get(props.name) === NONE);
+  const out = () => (props.at.dir === "up" ? -1 : 1);
+  const arrow = () => {
+    const pol = props.ed.specAt(free(props.name)).pol;
+    if (!pol || !empty() || props.state === "target" || props.state === "refuse") return undefined;
+    // An end that gives sends its wire into the result.
+    const into = -out();
+    const tone = props.state === "candidate" ? "ok" : props.state === "blocked" ? "dim" : "";
+    return { at: { x: props.at.x, y: props.at.y + into * 11 }, dx: 0, dy: pol === "give" ? into : -into, scale: 0.82, class: `port-arrow ${tone}` };
+  };
+  const c = (cls: string, r: number) => <circle class={cls} cx={props.at.x} cy={props.at.y} r={r} />;
+  return (
+    <g class="free-end iface-end">
+      <circle class="iface-ring" classList={{ need: empty() }} cx={props.at.x} cy={props.at.y} r={6.6} />
+      <Show when={props.state === "hover"}>{c("iface-hover", 9.6)}</Show>
+      <Show when={props.state === "candidate"}>{c("port-candidate", 9)}</Show>
+      <Show when={props.state === "blocked"}>{c("port-blocked", 8)}</Show>
+      <Show when={props.state === "target"}>{c("port-target", 9.6)}</Show>
+      <Show when={props.state === "refuse"}>{c("port-refuse", 9.6)}</Show>
+      <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
+      <circle class="iface-dot" cx={props.at.x} cy={props.at.y} r={3.8} />
+      <Show when={props.state === "origin"}>{c("port-origin", 4.6)}</Show>
+      <text class="iface-label" x={props.at.x} y={props.at.y + out() * IFACE_LABEL}>
+        {props.label}
+      </text>
+      <circle class="hit" data-free={props.name} cx={props.at.x} cy={props.at.y} r={10} />
+    </g>
+  );
+}
+
 function EndMark(props: { at: Pt; state: EndState }) {
   const c = (cls: string, r: number) => <circle class={cls} cx={props.at.x} cy={props.at.y} r={r} />;
   return (
@@ -1107,6 +1226,8 @@ function Agent(props: {
   fading?: boolean;
   endState: (e: End) => EndState;
   readonly?: boolean;
+  /** Mark empty ports as needing a wire (in a rule's result). */
+  need?: boolean;
 }) {
   const ed = props.ed;
   const p = () => ed.layout().placement.get(props.id);
@@ -1197,6 +1318,9 @@ function Agent(props: {
                 <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
                 <Show when={xray()}>
                   <circle class="port-xray" cx={pos().x} cy={pos().y} r={5} />
+                </Show>
+                <Show when={props.need && empty() && props.endState(port(props.id, slot)) === "empty"}>
+                  <circle class="port-need" cx={pos().x} cy={pos().y} r={5.4} />
                 </Show>
                 <EndMark at={pos()} state={props.endState(port(props.id, slot))} />
                 <circle class="hit" data-port={`${props.id}:${slot}`} cx={pos().x} cy={pos().y} r={6.5} />

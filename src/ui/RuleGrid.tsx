@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import { pairKey } from "../core/system";
 import { canMeet, specOf, typingOn } from "../core/types";
 import type { Editor } from "../state/editor";
+import { canLeave } from "./subEditor";
 
 /** Up to this many types, the grid fits in the side panel. */
 export const GRID_FITS = 8;
@@ -47,25 +48,28 @@ function cellStates(ed: Editor): (a: string, b: string) => CellState {
  * and says whether it has a rule, and whether that pair is in the net now.
  * Clicking a cell opens its rule, or starts one.
  */
+/**
+ * The agents in grid order. With directions, types whose principal ports
+ * give come first, then those that take, so the pairs that can never meet
+ * gather into two blocks.
+ */
+export function gridTypes(ed: Editor) {
+  ed.rev();
+  const all = [...ed.system.types.values()];
+  if (ed.system.typing.dirs === "off") return all;
+  const rank = (id: string) => {
+    const pol = specOf(ed.system, id, 0).pol;
+    return pol === "give" ? 0 : pol === "take" ? 1 : 2;
+  };
+  return all.map((t, i) => ({ t, i })).sort((x, y) => rank(x.t.id) - rank(y.t.id) || x.i - y.i).map((x) => x.t);
+}
+
 export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) {
   const ed = props.ed;
   const m = ed.model;
   const [hot, setHot] = createSignal<[number, number]>();
 
-  /**
-   * With directions, types whose principal ports give come first, then those
-   * that take, so the pairs that can never meet gather into two blocks.
-   */
-  const types = () => {
-    ed.rev();
-    const all = [...ed.system.types.values()];
-    if (ed.system.typing.dirs === "off") return all;
-    const rank = (id: string) => {
-      const pol = specOf(ed.system, id, 0).pol;
-      return pol === "give" ? 0 : pol === "take" ? 1 : 2;
-    };
-    return all.map((t, i) => ({ t, i })).sort((x, y) => rank(x.t.id) - rank(y.t.id) || x.i - y.i).map((x) => x.t);
-  };
+  const types = () => gridTypes(ed);
 
   const state = cellStates(ed);
 
@@ -125,7 +129,7 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
                     onClick={(e) => {
                       if (props.thumb) return;
                       e.stopPropagation();
-                      if (state(a.id, b.id) === "never") return;
+                      if (state(a.id, b.id) === "never" || !canLeave()) return;
                       m.setHover(undefined);
                       ed.openRule(a.id, b.id);
                     }}

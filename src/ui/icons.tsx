@@ -53,3 +53,7 @@ export const Eye = icon(() =>
   </>,
 );
 export const Check = icon(() => <path d="M3.5 8.5l3 3 6-7" {...line} />);
+export const Left = icon(() => <path d="M10 4L6 8l4 4" {...line} />);
+export const Right = icon(() => <path d="M6 4l4 4-4 4" {...line} />);
+/** Tidy: three rows lined up. */
+export const Tidy = icon(() => <path d="M3 4h10M5 8h6M4 12h8" {...line} />);

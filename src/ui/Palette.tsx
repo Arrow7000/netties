@@ -1,4 +1,4 @@
-import { For, type JSX, Show, createSignal } from "solid-js";
+import { For, type JSX, Show, createEffect, createSignal } from "solid-js";
 import { Portal } from "solid-js/web";
 import type { Editor } from "../state/editor";
 import type { Camera } from "./Canvas";
@@ -8,6 +8,7 @@ import { TypeChips } from "./PortControls";
 import { TypeEditor } from "./TypeEditor";
 import { Chevron, Close, Component, Expand, Plus } from "./icons";
 import { dismissOnClickOutside } from "./dismiss";
+import { canLeave, subEditor } from "./subEditor";
 
 interface Carry {
   what: { kind: "type" | "component"; id: string };
@@ -27,9 +28,18 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
     const screen = ed.screen();
     return screen.kind === "agent" ? screen.id : undefined;
   };
-  const setEditing = (id: string | undefined) => (id ? ed.openAgent(id) : ed.closeAgent());
+  const setEditing = (id: string | undefined) => (id ? canLeave() && ed.openAgent(id) : ed.closeAgent());
   const [carry, setCarry] = createSignal<Carry>();
-  const [gridOpen, setGridOpen] = createSignal(false);
+  const [gridOpen, setGridOpenSignal] = createSignal(false);
+  // The big grid and a rule editor sit in the same spot: opening one closes the other.
+  const setGridOpen = (open: boolean) => {
+    if (open && subEditor()) {
+      if (!canLeave()) return;
+      ed.closeRule();
+    }
+    setGridOpenSignal(open);
+  };
+  createEffect(() => ed.screen().kind === "rule" && setGridOpenSignal(false));
 
   const types = () => (ed.rev(), [...ed.system.types.values()]);
   const components = () => [...ed.defs().values()];
@@ -45,26 +55,39 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
     const x0 = e.clientX;
     const y0 = e.clientY;
     let dragging = false;
+    // While a rule editor is open, new agents go into it, and only there.
+    const sub = subEditor();
+    const into = sub ?? { m, camera: props.camera };
+    const spot = (ev: PointerEvent) => {
+      const at = into.camera.toWorld(ev.clientX, ev.clientY);
+      const ok = sub ? sub.camera.contains(ev.clientX, ev.clientY) && what.kind === "type" : !overChrome(ev);
+      return at && ok ? at : undefined;
+    };
     const move = (ev: PointerEvent) => {
       if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
       dragging = true;
-      const at = props.camera.toWorld(ev.clientX, ev.clientY);
-      const over = !!at && !overChrome(ev);
-      setCarry({ what, x: ev.clientX, y: ev.clientY, over });
+      const at = spot(ev);
+      setCarry({ what, x: ev.clientX, y: ev.clientY, over: !!at });
       // Over an agent, or near a port: show what the new agent would plug into.
-      if (what.kind === "type" && at && over) m.setPlacing({ type: what.id, at, attach: m.attachTarget(what.id, at) });
-      else m.setPlacing(undefined);
+      if (what.kind === "type" && at) into.m.setPlacing({ type: what.id, at, attach: into.m.attachTarget(what.id, at) });
+      else into.m.setPlacing(undefined);
     };
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       setCarry(undefined);
-      const attach = m.placing()?.attach;
-      m.setPlacing(undefined);
-      if (!dragging) return open();
-      const at = props.camera.toWorld(ev.clientX, ev.clientY);
-      if (!at || overChrome(ev)) return;
-      if (what.kind === "type") ed.dispatch({ kind: "net/add-agent", type: what.id, at, attach });
+      const attach = into.m.placing()?.attach;
+      into.m.setPlacing(undefined);
+      if (!dragging) {
+        // A click drops one into the open rule; otherwise it opens the agent's editor.
+        if (sub && what.kind === "type") return sub.m.addAgent(what.id, sub.centre());
+        if (sub) return;
+        return open();
+      }
+      const at = spot(ev);
+      if (!at) return;
+      if (sub) sub.m.addAgent(what.id, at, attach);
+      else if (what.kind === "type") ed.dispatch({ kind: "net/add-agent", type: what.id, at, attach });
       else ed.dispatch({ kind: "net/add-component", id: what.id, at });
     };
     window.addEventListener("pointermove", move);

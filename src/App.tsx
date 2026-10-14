@@ -8,6 +8,7 @@ import { Menu, MenuItem } from "./ui/Menu";
 import { Palette } from "./ui/Palette";
 import { Counters, HoverPanel, SelectionPanel } from "./ui/Panels";
 import { RuleEditor } from "./ui/RuleEditor";
+import { canLeave, subEditor } from "./ui/subEditor";
 import { TextView } from "./ui/TextView";
 import { Tooltips } from "./ui/Tooltip";
 import { TranslateView } from "./ui/TranslateView";
@@ -187,6 +188,7 @@ export function App(props: { initial?: Doc }) {
 
   /** Clicking a pair with no rule opens the rule editor for it. */
   const openStuck = (w: number) => {
+    if (!canLeave()) return;
     const [a, b] = ed.net.wire(w).ends;
     if (a.kind === "port" && b.kind === "port") ed.openRule(ed.net.agent(a.agent).type, ed.net.agent(b.agent).type);
   };
@@ -316,10 +318,23 @@ export function App(props: { initial?: Doc }) {
       </div>
 
       <div class="island top-right">
-        <button ref={undoBtn} class="btn icon" onClick={() => ed.dispatch({ kind: "history/undo" })} disabled={!m.historySize().undo} title="Undo (⌘Z)">
+        {/* While a rule is open, undo and redo act on it. */}
+        <button
+          ref={undoBtn}
+          class="btn icon"
+          onClick={() => (subEditor() ? subEditor()!.m.undo() : ed.dispatch({ kind: "history/undo" }))}
+          disabled={!(subEditor()?.m ?? m).historySize().undo}
+          title={subEditor() ? "Undo in the rule (⌘Z)" : "Undo (⌘Z)"}
+        >
           <I.Undo />
         </button>
-        <button ref={redoBtn} class="btn icon" onClick={() => ed.dispatch({ kind: "history/redo" })} disabled={!m.historySize().redo} title="Redo (⇧⌘Z)">
+        <button
+          ref={redoBtn}
+          class="btn icon"
+          onClick={() => (subEditor() ? subEditor()!.m.redo() : ed.dispatch({ kind: "history/redo" }))}
+          disabled={!(subEditor()?.m ?? m).historySize().redo}
+          title={subEditor() ? "Redo in the rule (⇧⌘Z)" : "Redo (⇧⌘Z)"}
+        >
           <I.Redo />
         </button>
         <span class="sep" />
@@ -330,7 +345,7 @@ export function App(props: { initial?: Doc }) {
 
       <Palette ed={ed} camera={camera} />
 
-      <div class="panel-stack">
+      <div class="panel-stack" classList={{ hidden: !!subEditor() }}>
         <HoverPanel ed={ed} />
         <SelectionPanel ed={ed} />
       </div>

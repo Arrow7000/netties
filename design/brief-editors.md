@@ -227,3 +227,40 @@ at the top right do while a panel is open?
   vite-node script if needed). Hand-drawn is fine for the combinator cells.
 - The user isn't an expert in interaction nets, so explain terms in the
   interface, briefly.
+
+## Outcome: the rule editor (2026-10-14)
+
+The user chose **A**, revised twice (`prototypes/editors-a2/`, then
+`editors-a3/`), and it's built into the app. The combinator view and the
+component editor are reviewed later, from the same prototypes. Decisions:
+
+- **Placement:** a panel between the net and the palette, movable and
+  resizable. The palette stays live: drag agents in, or click a tile to drop
+  one beside the result. ⌘C from the net and ⌘V into a rule works.
+- **Before and after side by side,** at one zoom, so an agent is the same
+  size on both sides. B (one canvas with a Before/After switch) "obscures
+  way more than it helps"; C's dashed links between matching ends "aren't
+  helpful", since that part is clear as it is.
+- **What counts as a change:** wiring, agents and the description, compared
+  by structure. Moving agents isn't a change (rules don't store positions),
+  and undoing back to the start is no change. Save is disabled with no
+  changes. The unsaved dot sits by the rule name, with a tooltip.
+- **Unsaved changes:** a click outside, or Escape, keeps the panel open and
+  gives Save and Cancel a brief amber glow (their colours don't change),
+  with a toast in the usual place.
+- **Saving:** the button and ⌘↵ save and close; ⌘S saves and stays open.
+  Each save is one step on the net's history. Delete asks first, in a small
+  popover by the button, which sits on the left of the bottom bar.
+- **Header:** ‹ › to the left of the name (⌥← / ⌥→) step through pairs in
+  grid order; a labelled description field with a pencil; undo and redo; an
+  ⓘ explaining the editor. No combinators button (that view will be reached
+  some other way). Tidy is a small button in the result's corner.
+- **Interface ends:** hollow, wider than loose ends, with a dashed grey ring
+  (red while unwired). They show the direction and type of the port they
+  stand for: one type label per row when the row agrees, else one per end,
+  with the ends spaced so labels don't collide. Hover rings scale with them.
+- **Rule descriptions** are new: saved with the rule, shown when pointing at
+  a pair or its grid cell, written in the text format as
+  `A(x) >< B(y) "description" => …;`.
+- While a rule is open the net's hover and selection panels hide; a
+  selection in the rule shows in the editor's bottom bar.

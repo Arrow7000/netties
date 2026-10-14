@@ -156,7 +156,7 @@ export function HoverPanel(props: { ed: Editor }) {
             return {
               title,
               aside: "active pair",
-              lines: [{ text: what }, { text: "Click to fire. Alt-click selects the wire." }],
+              lines: [{ text: found?.rule.description ?? what }, { text: "Click to fire. Alt-click selects the wire." }],
             };
           }
           const broken = v.sys.ruleFor(n.typeOf(pair[0])!.id, n.typeOf(pair[1])!.id);
@@ -305,7 +305,10 @@ export function HoverPanel(props: { ed: Editor }) {
           ),
           aside: has ? "has a rule" : "no rule yet",
           lines: has
-            ? [{ text: `Says what the pair turns into when they meet.${count}` }, { text: "Click to see or change it." }]
+            ? [
+                { text: `${ed.system.ruleFor(h.a, h.b)!.rule.description ?? "Says what the pair turns into when they meet."}${count}` },
+                { text: "Click to see or change it." },
+              ]
             : [{ text: `Nothing happens when they meet.${count}`, tone: here ? "bad" : undefined }, { text: "Click to write a rule." }],
         };
       }

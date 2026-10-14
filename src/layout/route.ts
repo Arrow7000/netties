@@ -51,6 +51,8 @@ export interface RouteOptions {
 export interface Pins {
   top: string[];
   bottom: string[];
+  /** Room between neighbouring pins along each edge, if more than usual. */
+  gaps?: { top?: number; bottom?: number };
 }
 
 interface Leg {
@@ -210,7 +212,9 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       if (job.kind === "pin") natural.set(job.free, job.around ? laneX.get(job.id)! : job.leg.t.x);
     }
     const mid = boxes.length ? boxes.reduce((s, b) => s + b.x0 + b.x1, 0) / (2 * boxes.length) : 0;
-    for (const side of [opts.pins.top, opts.pins.bottom]) spread(side, natural, mid).forEach((x, n) => pinX.set(n, x));
+    const { top: tops, bottom: bottoms, gaps } = opts.pins;
+    spread(tops, natural, mid, gaps?.top).forEach((x, n) => pinX.set(n, x));
+    spread(bottoms, natural, mid, gaps?.bottom).forEach((x, n) => pinX.set(n, x));
   }
 
   const wires = new Map<WireId, Pt[]>();
@@ -334,8 +338,8 @@ const PIN_RISE = 30;
  * Positions for pins in the given order, each as near its natural x as the
  * order and spacing allow. Pins with no natural position fill in between.
  */
-function spread(names: string[], natural: Map<string, number>, mid: number): Map<string, number> {
-  const gap = G.portGap * 1.5;
+function spread(names: string[], natural: Map<string, number>, mid: number, wide = 0): Map<string, number> {
+  const gap = Math.max(G.portGap * 1.5, wide);
   const out = new Map<string, number>();
   if (!names.length) return out;
   const known = names.filter((n) => natural.has(n));

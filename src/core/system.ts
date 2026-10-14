@@ -17,6 +17,8 @@ export interface Rule {
   /** Types of the agents created by the rule, referenced by index. */
   agents: string[];
   wires: [RuleEnd, RuleEnd][];
+  /** A short note on what the rule does, shown when pointing at the pair. */
+  description?: string;
 }
 
 export const L = (slot: number): RuleEnd => ({ kind: "iface", side: 0, slot });

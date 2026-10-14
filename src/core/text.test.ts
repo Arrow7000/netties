@@ -94,4 +94,13 @@ describe("text format", () => {
     // Errors from the parser proper carry a column too.
     expect(at("x ~ y\nz ~ w;")).toMatchObject({ line: 2, col: 1, message: expect.stringMatching(/line 2, column 1: expected ";"/) });
   });
+
+  it("reads and writes rule descriptions", () => {
+    const src = 'agent S 1\nagent Z 0\nagent Add 2\nAdd(y, r) >< Z "adding zero" => y ~ r;\nAdd(y, r) >< S(x) => r ~ S(w), x ~ Add(y, w);\n';
+    const { system, net } = parse(src);
+    expect(system.ruleFor("Add", "Z")?.rule.description).toBe("adding zero");
+    expect(system.ruleFor("Add", "S")?.rule.description).toBeUndefined();
+    const again = parse(print(system, net)).system;
+    expect(again.ruleFor("Add", "Z")?.rule.description).toBe("adding zero");
+  });
 });
