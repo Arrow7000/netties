@@ -1,64 +1,37 @@
-# netties
+# Netties
 
-A playground for interaction nets and Lafont's interaction combinators, drawn
-in the style of his figures.
+> An interactive playground for interaction nets and Lafont's interaction combinators.
+
+Netties is a visual tool that lets you build, explore, and simulate interaction nets right in your browser. Since this is a full frontend application rather than a library, the best way to understand what it can do is to just try it out!
+
+**[Play with Netties live! 🚀](https://netties.adler.dev/)**
+
+![Netties demo](assets/netties-demo.gif)
+
+## Development
+
+Netties is built with [SolidJS](https://www.solidjs.com/) and powered by [Vite](https://vitejs.dev/).
+
+To run it locally:
 
 ```sh
+# Install dependencies
 npm install
-npm run dev     # http://localhost:5173
+
+# Start the dev server (http://localhost:5173)
+npm run dev
+
+# Run tests
 npm test
 ```
 
-## What it does
+## Codebase Tour
 
-- The net fills the window. Drag agents in from the palette on the
-  right; click one to edit it. The rule grid shows every pair of types,
-  whether it has a rule, and whether it's in the net now; click a cell to
-  draw its rule.
-- Drag from an empty port to draw a wire, or from a wired port to unplug
-  that end and move it. The wire being dragged is routed like the real one;
-  wired ports refuse a drop; letting go on the canvas leaves a loose end (a
-  free port). Left-drag selects, middle- or right-drag or space-drag pans.
-- Click an active pair to fire it (Alt-click selects its wire instead), step
-  every pair at once, or run, at any speed down to slow motion. Steps and
-  edits animate as rewiring. Hovering over a pair whose rule only
-  reconnects wires shows the joins it will make.
-- A hover panel says what's under the pointer and what a click or drag will
-  do; a selection panel holds the actions for what's selected.
-- Directions and types on ports, set per system (each off, optional or
-  required). A port gives, takes or goes either way, and separately carries
-  a type such as number or list, or any type. Wires show their direction
-  with an arrowhead; drops that don't fit are refused with the reason; the
-  rule grid hatches the pairs that can never meet; rules that break the
-  types can't be saved, and won't fire. The examples include typed
-  arithmetic, a list with its length, and Lafont's directed combinators.
-- Auto layout in Lafont's style, or manual placement with automatic wires.
-- Components: make one from a selection; instances collapse to boxes, nest,
-  update when the component is edited, and dissolve when anything inside
-  them interacts.
-- The combinator translation turns the net and its system into γ, δ, ε
-  using Lafont's universality construction (general case, or the restricted
-  code-free case where it applies), and follows the source step by step.
-- Text import/export in an Inpla-like syntax; SVG export; share links. In
-  text, ports are `+type` (gives), `-type` (takes), `type` (either way), or
-  `+`, `-`, `_`, with an optional label: `agent S 1 ports +number, -number`.
+For those interested in how it works under the hood:
 
-The interface started from clickable prototypes in `design/prototypes`,
-from the briefs in `design/brief.md` and `design/brief-types.md`.
-
-## Code
-
-- `src/core`: nets, systems, reduction, port directions and types,
-  components, the combinator translation, the text format. No UI code.
-- `src/layout`: automatic placement and wire routing. Nets are split into
-  trees by following principal ports; trees and active pairs become units,
-  stacked in levels so facing wires meet as S-curves. The router draws the
-  rest as caps, cups and side lanes.
-- `src/anim`: step animation from the engine's wire lineage.
-- `src/render`: SVG paths and standalone SVG export.
-- `src/state`: the net model (shared by every canvas) and the editor store.
-- `src/ui`: Solid components.
-
-Aux ports are numbered clockwise from the principal port, as in Lafont's
-papers, so rotating an agent keeps its port order and nets stay
-planar-oriented.
+- `src/core` — The engine: nets, systems, reduction, port types, components, and the combinator translation.
+- `src/layout` — Automatic placement and wire routing algorithms.
+- `src/anim` — Step animation from the engine's wire lineage.
+- `src/render` — SVG paths and standalone SVG export.
+- `src/state` — The net model and the editor store.
+- `src/ui` — SolidJS UI components.
