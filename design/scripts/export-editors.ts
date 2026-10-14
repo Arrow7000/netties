@@ -16,7 +16,7 @@ import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type AgentId, type End, Net, NONE, free, port } from "../../src/core/net";
-import { arithmetic, combinators, directedCombinators, lists } from "../../src/core/presets";
+import { arithmetic, combinators, directedCombinators, lists, typingLab } from "../../src/core/presets";
 import { interfacePins, pairNet, ruleToNet } from "../../src/core/ruleNet";
 import { interact, parallelStep, redexes } from "../../src/core/reduce";
 import { System, pairKey } from "../../src/core/system";
@@ -309,6 +309,11 @@ const EXAMPLES: Ex[] = [
   { name: "Directed commutation", group: "Directed combinators", about: "γ meets δ*, and each gets copied.", sys: directedCombinators, net: (s) => { const n = new Net(); link(n, build(n, s, t("γ", f("a"), f("b"))), build(n, s, t("δ*", f("c"), f("d")))); return n; } },
   { name: "Two annihilating tokens", group: "Small systems", about: "Two tokens meet and both disappear.", sys: annihilating, net: (s) => { const n = new Net(); link(n, build(n, s, t("A")), build(n, s, t("A"))); return n; } },
   { name: "Erasing without commutation", group: "Small systems", about: "The combinators without the γ–δ rule: nothing can make itself.", sys: noCommutation, net: (s) => { const n = new Net(); link(n, build(n, s, t("ε")), build(n, s, t("γ", t("ε"), t("ε")))); return n; } },
+  { name: "Complete a typed if", group: "Lists", about: "Twelve agents: numbers, lists and booleans. Too many pairs for the small rule grid.", sys: typingLab, net: (s) => {
+    const n = new Net(); const length = new Hole(), isEmpty = new Hole(), whenTrue = new Hole(), whenFalse = new Hole();
+    build(n, s, t("[]")); build(n, s, t("#", length)); link(n, length, build(n, s, t("Z?", isEmpty)));
+    n.free.set("out", NONE); link(n, isEmpty, build(n, s, t("if", f("out"), whenTrue, whenFalse)));
+    link(n, whenTrue, build(n, s, num(1))); link(n, whenFalse, build(n, s, num(2))); return n; } },
   { name: "Length of a list", group: "Lists", about: "Numbers and lists are different types.", sys: lists, net: (s) => { const n = new Net(); const list = t("∷", t("0"), t("∷", t("S", t("0")), t("∷", t("0"), t("[]")))); link(n, build(n, s, t("#", f("out"))), build(n, s, list)); return n; } },
 ];
 
@@ -326,7 +331,7 @@ function exportExample(ex: Ex) {
   return { name: ex.name, group: ex.group, about: ex.about, sysKey: sysKeyOf(sys), states };
 }
 
-const SYSTEMS: Record<string, () => System> = { arith: arithmetic, comb: combinators, directed: directedCombinators, tokens: annihilating, nocomm: noCommutation, lists };
+const SYSTEMS: Record<string, () => System> = { arith: arithmetic, comb: combinators, directed: directedCombinators, tokens: annihilating, nocomm: noCommutation, lists, lab: typingLab };
 function sysKeyOf(sys: System) {
   const ids = [...sys.types.keys()].join(",");
   for (const [k, mk] of Object.entries(SYSTEMS)) {

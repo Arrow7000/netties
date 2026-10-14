@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties editors: A2, the rule editor revised</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=STIX+Two+Text:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/types-chrome.css">
+<link rel="stylesheet" href="../shared/edkit.css">
+<style>
+/* ---- direction A: a panel beside the palette; the palette and the net stay live ---- */
+.ep.dir-a{min-width:560px;min-height:380px}
+.ep.dir-a .ep-head{cursor:grab}
+.ep.dir-a .ep-head.moving{cursor:grabbing}
+.ep.dir-a .ep-head .btn,.ep.dir-a .ep-head input{cursor:pointer}
+.ep-grip{position:absolute;left:0;bottom:0;width:16px;height:16px;cursor:nesw-resize;z-index:5}
+.ep-grip::after{content:"";position:absolute;left:4px;bottom:4px;width:7px;height:7px;border-left:1.5px solid var(--line-2);border-bottom:1.5px solid var(--line-2);border-radius:0 0 0 2px}
+/* rule editor: the pair small on the left, the result large on the right */
+.ra{display:grid;grid-template-columns:minmax(150px,27%) 26px 1fr;flex:1;min-height:0}
+.ra-before{display:flex;flex-direction:column;background:var(--chrome-2);border-right:1px solid var(--line);min-height:0}
+.ra-before .ep-canvas{flex:1;background-color:transparent}
+.ra-cap{padding:10px 12px 0;font-size:12px;color:var(--muted);line-height:1.4}
+.ra-cap b{color:var(--text);display:block;font-size:12px;margin-bottom:2px}
+.ra-teach{padding:0 12px 12px;font-size:11.5px;color:var(--muted);line-height:1.45}
+.ra-teach i{font:italic 13px 'STIX Two Text',serif;color:var(--text)}
+.ra-arrow{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px;background:linear-gradient(90deg,var(--chrome-2),var(--paper));border-right:1px solid var(--line)}
+.ra-after{display:flex;flex-direction:column;min-width:0;min-height:0}
+.ra-after .wrap{position:relative;flex:1;min-height:0;display:flex}
+.ra-after .hint{font-size:11.5px;color:var(--faint);margin-left:auto;white-space:nowrap}
+.pin-hl{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.2}
+/* combinator panel: lesson on the right, the system's verdict on the left */
+.ca{display:grid;grid-template-columns:270px 1fr;flex:1;min-height:0}
+.ca-side{border-right:1px solid var(--line);padding:12px 14px;overflow:auto;display:flex;flex-direction:column;gap:12px;background:var(--chrome)}
+.ca-side h4{margin:0 0 6px;font-size:12px;font-weight:600}
+.ca-main{overflow:auto;padding:12px 16px 16px;background:var(--chrome)}
+.ca-pick{display:flex;flex-wrap:wrap;gap:4px}
+.ca-pick button{height:26px;min-width:30px;border:1px solid var(--line-2);border-radius:7px;background:var(--chrome);padding:0 8px;cursor:pointer;color:var(--text);font:italic 14px 'STIX Two Text',serif}
+.ca-pick button.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.ca-pick button small{font:400 10.5px var(--ui-font);color:var(--muted);font-style:normal;margin-left:4px}
+.ca-tabs .seg button{height:26px}
+details.ca-intro summary{cursor:pointer;font-size:12px;font-weight:600;list-style:none;display:flex;align-items:center;gap:6px}
+details.ca-intro summary::-webkit-details-marker{display:none}
+details.ca-intro summary svg{width:11px;height:11px;transition:transform .15s}
+details.ca-intro[open] summary svg{transform:rotate(90deg)}
+details.ca-intro p{margin:6px 0 0}
+.ca-sizes{font-size:11.5px;color:var(--muted);line-height:1.5}
+.ca-sizes b{color:var(--text);font-weight:600}
+
+/* ---- A2: the rule editor, revised ---- */
+.rtitle{display:flex;flex-direction:column;min-width:0}
+.rtitle h3 .info{display:inline-flex;width:15px;height:15px;border-radius:50%;border:1px solid var(--line-2);font:600 10px var(--ui-font);color:var(--muted);align-items:center;justify-content:center;cursor:help;margin-left:2px}
+.rtitle h3 .info:hover{border-color:var(--accent);color:var(--accent)}
+.rdesc{border:0;background:transparent;font:400 12px var(--ui-font);color:var(--muted);padding:2px 5px;margin:1px 0 0 -5px;border-radius:5px;width:min(380px,36vw);outline:none;cursor:text}
+.rdesc:hover{background:var(--chrome-2)}
+.rdesc:focus{background:var(--chrome);box-shadow:0 0 0 1.5px var(--accent);color:var(--text)}
+.rdesc::placeholder{color:var(--faint)}
+.ep-bar{display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid var(--line);flex:none;background:var(--chrome)}
+.ep-bar .sp{flex:1}
+.ep-bar .btn{height:30px}
+.ep-bar .btn[hidden]{display:none}
+.unsaved{display:none;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px}
+.ep.dirty .unsaved{display:inline-block}
+.ep-flash.a2{top:auto;bottom:54px;right:12px}
+.palhint{position:absolute;top:10px;right:12px;font-size:11.5px;color:var(--faint);pointer-events:none;z-index:2}
+.ra-cap{padding:10px 12px 0}
+.btn.dangerfill{background:var(--stuck);color:#fff}
+.btn.dangerfill:hover{background:color-mix(in srgb,var(--stuck) 85%,#000)}
+.delconfirm{min-width:0;width:270px;padding:11px 12px 10px}
+.delconfirm .dc-t{font-weight:600;font-size:13px}
+.delconfirm .dc-t .sym{font-size:15px}
+.delconfirm .dc-s{font-size:12px;color:var(--muted);margin:2px 0 10px}
+.delconfirm .dc-b{display:flex;justify-content:flex-end;gap:6px}
+.delconfirm .btn{height:28px;font-size:12px;border:1px solid var(--line-2)}
+.delconfirm .btn.dangerfill{border-color:transparent}
+#endsSw{top:12px;left:50%;transform:translateX(-50%);gap:8px;padding:4px 4px 4px 12px;font-size:12px}
+#endsSw .lab{color:var(--muted)}
+#endsSw .pt{font-size:10.5px;color:var(--faint);padding:0 6px 0 2px}
+#endsSw .seg button{height:26px;font-size:12px}
+/* interface ends: (a) filled terminals, or (b) on a rail */
+.nk-free-label.pin{display:none}
+.ek-rlab{font:600 10.5px var(--ui-font);fill:var(--text);text-anchor:middle;dominant-baseline:central;pointer-events:none;paint-order:stroke;stroke:var(--paper);stroke-width:3px;stroke-linejoin:round}
+body[data-ends=filled] .nk-free.pin{r:3.2px;fill:var(--ink);stroke:var(--ink);stroke-width:1}
+.ek-ring{fill:none;stroke:var(--ink);stroke-width:1.6;pointer-events:none}
+body[data-ends=rail] .nk-free.pin{display:none}
+.ek-band{fill:color-mix(in srgb,var(--ink) 6%,transparent);pointer-events:none}
+.ek-rail{stroke:var(--ink);stroke-width:2;pointer-events:none}
+.ek-term{fill:var(--ink);pointer-events:none}
+body[data-ends=rail] .ek-rlab{stroke:none}
+#gridPop .rg.big .hd.col small{font-size:9.5px;line-height:1.1;text-align:center;max-width:36px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.thumb .rg .hd{font-size:7px;overflow:hidden;white-space:nowrap}
+.thumb .rg .c.open{outline-width:1px;outline-offset:0}
+</style>
+</head>
+<body>
+<script src="../shared/netkit3.js"></script>
+<script src="../shared/edkit-app.js"></script>
+<script src="../shared/edkit-panel.js"></script>
+<script src="../shared/edkit-comb.js"></script>
+<script>
+(async function () {
+  /* =====================================================================
+     Direction A: beside the palette.
+     The panel sits between the net and the palette, which both stay live:
+     drag agents in from the palette, drag-select on the net and ⌘C / ⌘V
+     into the rule. The rule editor keeps today's before and after, but the
+     pair shrinks to a narrow column that explains what a rule is. The
+     combinator view is its own panel, opened from an agent or a rule.
+     ===================================================================== */
+  const NK = NetKit, EP = EdPanel, EC = EdComb, esc = NK.esc;
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const app = await EdApp.start({ key: "editors-a2", gridExpand: true, fileItems: () => [{ id: "comb", label: "Combinator translation", sub: "One agent or one rule at a time, in γ, δ and ε", run: () => openComb({}) }] });
+  const { S, view, ICON } = app;
+  const sym = (id) => esc((S.typeById(id) || { symbol: id }).symbol);
+  let place = null; // where the user moved the panel to; kept while the page is open
+
+  /* ---------------------------------------------------------------- the panel */
+  const panel = EP.Panel(app, {
+    cls: "dir-a",
+    attached: "#panel,#selp,#hovp,#top-right,#rulePill,#endsSw",
+    flashStyle: (k) => (k === "rule" ? "warm" : null),
+    frame: (o) => o.kind === "rule" ? ruleFrame(o) : `<div class="ep-head" data-move>
+        <h3><span class="k">${o.kindWord}</span> ${o.title}<span class="dirtydot" data-tip="Unsaved changes"></span></h3>
+        ${o.nav ? `<span style="display:flex;gap:2px;margin-left:4px"><button class="btn navbtn" data-nav="-1">${ICON.left}</button><button class="btn navbtn" data-nav="1">${ICON.right}</button></span>` : ""}
+        <span class="sp"></span>
+        ${o.tools !== false ? `<button class="btn icon" data-ep="undo">${ICON.undo}</button><button class="btn icon" data-ep="redo">${ICON.redo}</button><span class="sep"></span>` : ""}
+        ${o.extra || ""}
+        ${o.del ? `<button class="btn danger" data-ep="delete">${o.del}</button>` : ""}
+        ${o.tools !== false ? `<button class="btn" data-ep="cancel">Cancel</button><button class="btn primary" data-ep="save">Save <span class="kbd">⌘↵</span></button>` : `<button class="btn icon" data-ep="close" data-tip="Close (Esc)">${ICON.x}</button>`}
+      </div>
+      <div class="ep-body" data-slot="body"></div>
+      <div class="ep-flash" data-slot="flashnote"></div>
+      <div class="ep-grip" data-tip="Drag to resize"></div>`,
+    place(P, o) {
+      const el = P.el, pal = $("#panel").getBoundingClientRect();
+      const right = innerWidth - pal.left + 12;
+      const w = place ? place.w : Math.min(o.w || 880, innerWidth - right - 24), h = place ? place.h : Math.min(o.h || 600, innerHeight - 64 - 84);
+      const left = place ? place.left : innerWidth - right - w, top = place ? place.top : 64;
+      Object.assign(el.style, { left: Math.max(12, left) + "px", top: top + "px", width: w + "px", height: h + "px" });
+      bindMove(P);
+    },
+    flashText: (k) => (k === "rule" ? "Unsaved changes: save or cancel them first." : `This ${k === "component" ? "component" : "rule"} has unsaved changes. Save or cancel them first.`),
+    onSync(P, ctl) {
+      // the neighbouring rules, named
+      $$("[data-nav]", P.el).forEach((b) => { const k = neighbour(+b.dataset.nav); b.disabled = !k; b.setAttribute("data-tip", k ? `${+b.dataset.nav < 0 ? "Previous" : "Next"} rule: ${k.split("|").map(sym).join(" with ")}${+b.dataset.nav < 0 ? " (⌥←)" : " (⌥→)"}` : "No more pairs that way"); });
+    },
+  });
+  function bindMove(P) {
+    const head = P.el.querySelector("[data-move]"), grip = P.el.querySelector(".ep-grip");
+    head.onpointerdown = (e) => {
+      if (e.button !== 0 || e.target.closest("button,input")) return;
+      const r = P.el.getBoundingClientRect(), sx = e.clientX, sy = e.clientY; head.classList.add("moving");
+      const mv = (ev) => { P.el.style.left = r.left + ev.clientX - sx + "px"; P.el.style.top = Math.max(8, r.top + ev.clientY - sy) + "px"; };
+      const up = () => { head.classList.remove("moving"); removeEventListener("pointermove", mv); removeEventListener("pointerup", up); remember(P); };
+      addEventListener("pointermove", mv); addEventListener("pointerup", up);
+    };
+    grip.onpointerdown = (e) => {
+      e.preventDefault(); const r = P.el.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+      const mv = (ev) => { const w = Math.max(560, r.width - (ev.clientX - sx)); P.el.style.width = w + "px"; P.el.style.left = r.right - w + "px"; P.el.style.height = Math.max(380, r.height + ev.clientY - sy) + "px"; const c = P.ctl(); c && c.afterOpen && c.afterOpen(); };
+      const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); remember(P); };
+      addEventListener("pointermove", mv); addEventListener("pointerup", up);
+    };
+  }
+  function remember(P) { const r = P.el.getBoundingClientRect(); place = { left: r.left, top: r.top, w: r.width, h: r.height }; }
+
+  // While a panel is open: it gets the keys first, and the global undo / redo act on it.
+  app.keyFirst = (e) => {
+    if (panel.isOpen() && e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight") && panel.kind() === "rule") { e.preventDefault(); goNeighbour(e.key === "ArrowLeft" ? -1 : 1); return true; }
+    return panel.isOpen() && panel.onKey(e);
+  };
+  app.panelWord = () => (panel.kind() === "component" ? "in the component" : "in the rule");
+  app.globalUndo = () => (panel.isOpen() && panel.ctl().history ? panel.undo() : S.undo());
+  app.globalRedo = () => (panel.isOpen() && panel.ctl().history ? panel.redo() : S.redo());
+  app.syncUndo = () => {
+    const H = panel.isOpen() && panel.ctl() && panel.ctl().history ? panel.ctl().history() : null;
+    const u = $("#undo"), r = $("#redo"), where = panel.kind() === "component" ? "in the component" : "in the rule";
+    if (H) {
+      u.disabled = !H.canUndo(); r.disabled = !H.canRedo();
+      u.setAttribute("data-tip", H.canUndo() ? `Undo ${(H.undoLabel() || "").toLowerCase()} ${where} (⌘Z)` : `Nothing to undo ${where} yet`);
+      r.setAttribute("data-tip", H.canRedo() ? `Redo ${(H.redoLabel() || "").toLowerCase()} ${where} (⇧⌘Z)` : `Nothing to redo ${where}`);
+      u.classList.add("scoped"); r.classList.add("scoped");
+    } else {
+      u.classList.remove("scoped"); r.classList.remove("scoped");
+      u.disabled = !S.canUndo(); r.disabled = !S.canRedo();
+      u.setAttribute("data-tip", S.canUndo() ? "Undo " + (S.undoLabel() || "").toLowerCase() + " (⌘Z)" : "Nothing to undo");
+      r.setAttribute("data-tip", S.canRedo() ? "Redo " + (S.redoLabel() || "").toLowerCase() + " (⇧⌘Z)" : "Nothing to redo");
+    }
+  };
+  // The palette stays live: drag into the editor, or click to drop one in.
+  app.onTileClick = (id, el) => {
+    if (panel.isOpen() && (panel.kind() === "rule" || panel.kind() === "component")) {
+      const v = panel.ctl().focusView(), r = v.host.getBoundingClientRect();
+      const n = v.state.agents.length;
+      v.addAgent(id, r.left + r.width * 0.5 + (n % 3) * 30 - 30, r.top + r.height * 0.5 + (n % 2) * 26, { plug: false });
+      app.focusView(v); return;
+    }
+    if (panel.isOpen() && panel.dirty()) { panel.flash(); return; }
+    panel.isOpen() && panel.close();
+    const t = S.typeById(id); if (t.component) openComponent(id, {}); else app.openAgent(id, el);
+  };
+  app.tileHint = (t) => (panel.isOpen() && (panel.kind() === "rule" || panel.kind() === "component") ? `Drag into the ${panel.kind()}, or click to drop it in.` : t.component ? "Drag to add. Click to edit." : "Drag to add. Click to edit.");
+  app.on("panel", (on) => { $("#palHint").textContent = on && panel.kind() !== "comb" ? `Drag into the ${panel.kind()}, or click to drop one in.` : "Drag onto the canvas to add. Click to edit."; app.buildRules(); });
+  app.openKey = () => (panel.kind() === "rule" && panel.ctl() ? panel.ctl().rd.key : null);
+  app.beforeLoad = () => { if (panel.isOpen() && panel.dirty()) { panel.flash(); return false; } panel.close(); };
+
+  /* ---------------------------------------------------------------- the rule editor */
+  function neighbour(d) {
+    const ctl = panel.ctl(); if (!ctl || !ctl.rd) return null;
+    const order = app.pairOrder().filter((k) => { const [a, b] = k.split("|"); return app.cellState(a, b).s !== "never"; });
+    let i = order.findIndex((k) => k === ctl.rd.key || k.split("|").reverse().join("|") === ctl.rd.key);
+    return order[i + d] || null;
+  }
+  panel.el.addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (b && !b.disabled) goNeighbour(+b.dataset.nav); });
+  function goNeighbour(d) { const k = neighbour(d); if (!k) return; if (panel.dirty()) { panel.flash("Save or cancel this rule before moving to the next one."); return; } openRule(k, { keepPlace: true }); }
+  /* ---------------------------------------------------------------- A2: the rule editor, revised */
+  const descOf = (k) => (S.extra.ruleDesc && S.extra.ruleDesc[k]) || "";
+  // What the hover panel says about a rule: its saved description, or nothing.
+  app.ruleSay = (a, b) => { const k = app.pairKey(a, b); return k ? descOf(k) || null : null; };
+  // The built-in "what this rule does" texts become each example's saved descriptions.
+  const GENERIC = NK.effectFor("?", "??").say;
+  for (const ex of app.data.examples) {
+    ex.extra.ruleDesc = {};
+    for (const k of ex.rules) { const [a, b] = k.split("|"), say = NK.effectFor(a, b).say; if (say && say !== GENERIC) ex.extra.ruleDesc[k] = say; }
+  }
+  // Interface ends: two styles to compare (a prototype-only switch, top centre)
+  let ends = "filled";
+  try { ends = localStorage.getItem("a2-ends") || "filled"; } catch (_) {}
+  document.body.dataset.ends = ends;
+  document.body.insertAdjacentHTML("beforeend", `<div class="island" id="endsSw" data-chrome><span class="lab">Interface ends</span><div class="seg"><button data-ends="filled">Filled</button><button data-ends="rail">On a rail</button></div><span class="pt">prototype only</span></div>`);
+  const syncEnds = () => { $$("[data-ends]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.ends === ends)); document.body.dataset.ends = ends; for (const v of app.views) v.render(); };
+  $$("[data-ends]").forEach((b) => (b.onclick = () => { ends = b.dataset.ends; try { localStorage.setItem("a2-ends", ends); } catch (_) {} syncEnds(); }));
+  syncEnds();
+  // Drawn over each canvas of the rule editor: the interface ends in the chosen style.
+  function endsOverlay(v) {
+    const pins = v.state.free.filter((f) => f.pin); if (!pins.length) return "";
+    let s = "";
+    if (ends === "filled") { for (const f of pins) s += `<circle cx="${f.x}" cy="${f.y}" r="5.6" class="ek-ring"/><text class="ek-rlab" x="${f.x}" y="${f.y + (f.dir === "up" ? -14 : 14)}">${app.pinLabel(f.name)}</text>`; return s; }
+    const xs = pins.map((f) => f.x), x0 = Math.min(...xs) - 4000, x1 = Math.max(...xs) + 4000;
+    for (const side of ["up", "down"]) {
+      const row = pins.filter((f) => f.dir === side); if (!row.length) continue;
+      const y = row[0].y, out = side === "up" ? -1 : 1;
+      s += `<rect class="ek-band" x="${x0}" y="${side === "up" ? y - 4000 : y}" width="${x1 - x0}" height="4000"/><line class="ek-rail" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`;
+      for (const f of row) s += `<rect class="ek-term" x="${f.x - 4}" y="${f.y - 3.5}" width="8" height="7" rx="1.5"/><text class="ek-rlab" x="${f.x}" y="${f.y + out * 11}">${app.pinLabel(f.name)}</text>`;
+    }
+    return s;
+  }
+  let showNeed = false, probs = null;
+  function needOverlay(v) {
+    if (!probs) return "";
+    let s = "";
+    for (const o of probs.open) {
+      const [x, y] = o.pos, pin = o.free != null;
+      s += `<circle cx="${x}" cy="${y}" r="${pin ? 8.6 : 5.4}" class="ek-need"/>`;
+      if (showNeed) { const d = o.dir, tx = x + (d[0] || 0) * 14 + (pin ? 11 : 7), ty = y + (d[1] || 0) * 12 + (pin ? 0 : 0); s += `<text x="${tx}" y="${ty}" class="ek-need-t">needs a wire</text>`; }
+    }
+    return s;
+  }
+  // Tidy: lay the result out afresh. Only movement, so it's an undoable step but not a change.
+  function colours(st) {
+    const nodes = new Map(), key = (e) => (e.agent != null ? "a" + e.agent : "f" + e.free);
+    for (const a of st.agents) nodes.set("a" + a.id, { lab: "A:" + a.type, nb: [] });
+    for (const f of st.free) nodes.set("f" + f.name, { lab: "P:" + f.name, nb: [] });
+    for (const w of st.wires) { const [e0, e1] = w.ends, n0 = nodes.get(key(e0)), n1 = nodes.get(key(e1)); if (!n0 || !n1) continue; n0.nb.push([e0.slot ?? -1, key(e1), e1.slot ?? -1]); n1.nb.push([e1.slot ?? -1, key(e0), e0.slot ?? -1]); }
+    let col = new Map([...nodes].map(([k, n]) => [k, n.lab]));
+    for (let r = 0; r < 5; r++) col = new Map([...nodes].map(([k, n]) => [k, col.get(k) + "(" + n.nb.map(([a, o, b]) => a + ">" + col.get(o) + ":" + b).sort().join(",") + ")"]));
+    return col;
+  }
+  function tidy(v, rd) {
+    const st = v.state, T = rd.T;
+    if (!st.agents.length) { st.wires.forEach((w) => v._curveWire(w)); v.render(); return; }
+    // the engine's own drawing, when the result is the rule as it came
+    if (rd.entry.has && rd.entry.rhs) {
+      const eng = NK.hydrate(rd.entry.rhs, T);
+      if (EP.signature(eng, false) === EP.signature(st, false)) {
+        const ca = colours(st), cb = colours(eng), map = new Map(), used = new Set();
+        for (const a of st.agents) { const c = ca.get("a" + a.id), m = eng.agents.find((b) => !used.has(b.id) && cb.get("a" + b.id) === c); if (m) { used.add(m.id); map.set(a.id, m); } }
+        if (map.size === st.agents.length) {
+          st.agents = st.agents.map((a) => { const m = map.get(a.id); return NK.makeAgent(T[a.type], a.id, m.x, m.y, m.orient); });
+          const back = new Map([...map].map(([id, m]) => [m.id, id]));
+          const same = (e, f) => (e.free != null ? e.free === f.free : f.agent != null && back.get(f.agent) === e.agent && f.slot === e.slot);
+          for (const w of st.wires) { const m = eng.wires.find((x) => (same(w.ends[0], x.ends[0]) && same(w.ends[1], x.ends[1])) || (same(w.ends[0], x.ends[1]) && same(w.ends[1], x.ends[0]))); if (m) w.path = same(w.ends[0], m.ends[0]) ? NK.clone(m.path) : NK.clone(m.path).reverse(); else v._curveWire(w); }
+          return;
+        }
+      }
+    }
+    // otherwise: rows between the two rows of ends, each agent under what it's wired to
+    const pins = st.free, ups = pins.filter((f) => f.dir === "up"), downs = pins.filter((f) => f.dir === "down");
+    const topY = ups.length ? ups[0].y : Math.min(...st.agents.map((a) => a.y)) - 60, botY = downs.length ? downs[0].y : Math.max(...st.agents.map((a) => a.y)) + 60;
+    const nb = new Map(st.agents.map((a) => [a.id, []]));
+    for (const w of st.wires) { const [e0, e1] = w.ends; if (e0.agent != null) nb.get(e0.agent).push({ slot: e0.slot, to: e1 }); if (e1.agent != null) nb.get(e1.agent).push({ slot: e1.slot, to: e0 }); }
+    const bfs = (startPins) => { const d = new Map(), q = []; for (const a of st.agents) if (nb.get(a.id).some((n) => n.to.free != null && startPins.includes(n.to.free))) { d.set(a.id, 0); q.push(a.id); } while (q.length) { const id = q.shift(); for (const n of nb.get(id)) if (n.to.agent != null && !d.has(n.to.agent)) { d.set(n.to.agent, d.get(id) + 1); q.push(n.to.agent); } } return d; };
+    const dt = bfs(ups.map((f) => f.name)), db = bfs(downs.map((f) => f.name));
+    const want = new Map(st.agents.map((a) => { const t = dt.get(a.id), b = db.get(a.id); const f = t != null && b != null ? (t + 1) / (t + b + 2) : t != null ? Math.min(0.8, (t + 1) / 4) : b != null ? Math.max(0.2, 1 - (b + 1) / 4) : 0.5; return [a.id, topY + (botY - topY) * f]; }));
+    const order = [...st.agents].sort((p, q) => want.get(p.id) - want.get(q.id)), rows = [];
+    for (const a of order) { const r = rows[rows.length - 1]; if (r && Math.abs(want.get(a.id) - want.get(r[0].id)) < 22) r.push(a); else rows.push([a]); }
+    const span = botY - topY - 80, rowY = (i) => (rows.length === 1 ? (topY + botY) / 2 : topY + 40 + (span * i) / (rows.length - 1));
+    const pos = new Map(st.agents.map((a) => [a.id, { x: a.x, y: a.y }]));
+    rows.forEach((r, i) => r.forEach((a) => (pos.get(a.id).y = rowY(i))));
+    const ptX = (e) => (e.free != null ? (pins.find((f) => f.name === e.free) || { x: 0 }).x : pos.get(e.agent).x);
+    for (let it = 0; it < 10; it++) for (const a of st.agents) { const xs = nb.get(a.id).map((n) => ptX(n.to)); if (xs.length) pos.get(a.id).x = xs.reduce((s2, x) => s2 + x, 0) / xs.length; }
+    for (const r of rows) {
+      r.sort((p, q) => pos.get(p.id).x - pos.get(q.id).x);
+      const mean = r.reduce((s2, a) => s2 + pos.get(a.id).x, 0) / r.length;
+      let x = 0; const xs = r.map((a, i) => { const w = (a.ports.length) * 16 + 10; if (i) x += w; const at = x; x += 0; return at; });
+      // spread so neighbours don't touch, then centre on where they wanted to be
+      let cur = pos.get(r[0].id).x; const placed = [cur];
+      for (let i = 1; i < r.length; i++) { const need = (r[i - 1].ports.length + r[i].ports.length) * 8 + 26; cur = Math.max(pos.get(r[i].id).x, cur + need); placed.push(cur); }
+      const shift = mean - placed.reduce((s2, x2) => s2 + x2, 0) / placed.length;
+      r.forEach((a, i) => (pos.get(a.id).x = Math.round(placed[i] + shift)));
+      void xs;
+    }
+    st.agents = st.agents.map((a) => {
+      const p = nb.get(a.id).find((n) => n.slot === 0), to = p && p.to;
+      let orient = a.orient;
+      if (to) { const ty = to.free != null ? (pins.find((f) => f.name === to.free) || {}).y : pos.get(to.agent).y; if (ty != null && ty !== pos.get(a.id).y) orient = ty < pos.get(a.id).y ? "up" : "down"; }
+      return NK.makeAgent(T[a.type], a.id, pos.get(a.id).x, Math.round(pos.get(a.id).y), orient);
+    });
+    for (const w of st.wires) v._curveWire(w);
+  }
+  function ruleFrame(o) {
+    return `<div class="ep-head" data-move>
+        <div class="rtitle"><h3><span class="k">Rule</span> ${o.title}<span class="info" data-tip="${esc(o.info)}" aria-label="About this editor">i</span></h3>
+          <input class="rdesc" data-desc value="${esc(o.desc)}" placeholder="Add a description" aria-label="Description" spellcheck="false"></div>
+        <span style="display:flex;gap:2px;margin-left:4px;align-self:flex-start;margin-top:2px"><button class="btn navbtn" data-nav="-1">${ICON.left}</button><button class="btn navbtn" data-nav="1">${ICON.right}</button></span>
+        <span class="sp"></span>
+        <button class="btn" data-tidy data-tip="Lay the result out afresh. It only moves agents, so it isn't a change.">Tidy</button>
+        <button class="btn icon" data-ep="undo">${ICON.undo}</button><button class="btn icon" data-ep="redo">${ICON.redo}</button><span class="sep"></span>
+        ${o.extra || ""}
+      </div>
+      <div class="ep-body" data-slot="body"></div>
+      <div class="ep-bar">
+        <button class="btn danger" data-del${o.has ? "" : " hidden"}>Delete rule</button>
+        <span class="sp"></span>
+        <span class="unsaved" data-tip="Unsaved changes"></span>
+        <button class="btn" data-ep="cancel">Cancel</button><button class="btn primary" data-ep="save">Save <span class="kbd">⌘↵</span></button>
+      </div>
+      <div class="ep-flash a2" data-slot="flashnote"></div>
+      <div class="ep-grip" data-tip="Drag to resize"></div>`;
+  }
+  function openRule(key, o = {}) {
+    if (o.never) { app.toast("These two can never meet: " + o.never.replace(/<[^>]+>/g, "")); return; }
+    if (app.agentOpen()) app.closeAgent();
+    app.closeGridPop();
+    const rd = EP.RuleData(app, key); if (!rd) return;
+    const T = rd.T, sym = (id) => esc((T[id] || { symbol: id }).symbol);
+    for (const f of rd.lhs.free) f.pin = true; // drawn as interface ends too
+    const endsList = [...rd.lhs.free].sort((p, q) => p.name.localeCompare(q.name)).map((f) => app.pinLabel(f.name));
+    const info = `Build what this pair turns into. The pair disappears${endsList.length ? `, and every wire it held (${endsList.join(", ")}) must connect to something in the result.` : ". It held no other wires, so the result can be empty or new agents wired to each other."}`;
+    let ctl = null;
+    const build = (body, P) => {
+      body.innerHTML = `<div class="ra">
+          <div class="ra-before"><div class="ra-cap"><b>Before</b></div><div class="ep-canvas ro" data-slot="pair"></div></div>
+          <div class="ra-arrow">→</div>
+          <div class="ra-after"><div class="wrap"><div class="ep-canvas" data-slot="result"></div><div class="ep-cap"><b>After</b>${rd.has ? "" : " · no rule yet"}</div><div class="palhint">Drag agents in from the palette →</div>
+            <div class="symnote" data-slot="symnote"><b>Not symmetric.</b> Two <i class="sym">${sym(rd.left)}</i> meeting have no top and bottom, so the result must look the same turned upside down.</div></div>
+            <div class="ep-foot"><div class="ep-status" data-slot="status"></div></div></div>
+        </div>`;
+      const pair = EP.EditorCanvas(app, body.querySelector("[data-slot=pair]"), { readonly: true, types: () => S.types, rules: () => [rd.key], pinLabels: true, fitPad: { t: 36, r: 24, b: 36, l: 24 }, maxFit: 1.6, overlay: endsOverlay });
+      pair.reset(rd.lhs);
+      let ready = false;
+      const res = EP.EditorCanvas(app, body.querySelector("[data-slot=result]"), {
+        pins: true, types: () => S.types, fitPad: { t: 56, r: 56, b: 56, l: 56 }, maxFit: 1.8,
+        emptyHTML: "Empty. Drag agents in, or wire the ends straight to each other.",
+        overlay: (v) => endsOverlay(v) + needOverlay(v),
+        onChange: () => { if (!ready) return; probs = EP.ruleProblems(app, rd, res.view); res.view.render(); renderStatus(); P.sync(); },
+      });
+      res.reset(NK.clone(rd.rhs0));
+      // the saved rule, to compare against: wiring and agents (not positions or ids), and the description
+      const sig = (st) => EP.signature(st, false);
+      let savedSig = sig(rd.rhs0), savedDesc = descOf(rd.key), desc = savedDesc;
+      const statusEl = body.querySelector("[data-slot=status]");
+      function renderStatus() {
+        const t = EP.problemText(app, probs, rd);
+        statusEl.innerHTML = t ? `<span class="ek-dot"></span>${t}` : `<span class="ek-ok">✓</span>Every port and every end has a wire.`;
+        statusEl.classList.toggle("bad", !!t);
+        body.querySelector("[data-slot=symnote]").classList.toggle("on", !!probs.asym);
+      }
+      statusEl.onpointerenter = () => { showNeed = true; res.view.render(); }; statusEl.onpointerleave = () => { showNeed = false; res.view.render(); };
+      const dirty = () => sig(res.view.state) !== savedSig || desc.trim() !== savedDesc;
+      const problemsWhy = () => { const t = EP.problemText(app, probs, rd); return t ? "Can't save yet: " + (/^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t) : null; };
+      function commit() {
+        S.extra.ruleNets = S.extra.ruleNets || {}; S.extra.ruleDesc = S.extra.ruleDesc || {};
+        const st = NK.clone(res.view.state); for (const f of st.free) delete f.ptype;
+        S.extra.ruleNets[rd.key] = st;
+        if (desc.trim()) S.extra.ruleDesc[rd.key] = desc.trim(); else delete S.extra.ruleDesc[rd.key];
+        const was = S.rules.includes(rd.key); if (!was) S.rules.push(rd.key);
+        app.commit(`${was ? "Edit" : "Add"} rule ${T[rd.left].symbol} with ${T[rd.right].symbol}`);
+        savedSig = sig(res.view.state); savedDesc = desc.trim(); rd.has = true;
+        P.el.querySelector("[data-del]").hidden = false;
+      }
+      function saveKeep() {
+        const w = ctl.saveWhy(); if (w) { if (w.bad) ctl.showProblems(); P.flashNote(w.text, w.bad); return; }
+        commit(); P.sync(); P.flashNote("Saved", "ok", 1100);
+      }
+      ctl = {
+        rd, pair, res, P,
+        history: () => res.history,
+        dirty,
+        saveTip: "Save and close (⌘↵). ⌘S saves and keeps it open.",
+        saveWhy: () => { const pw = problemsWhy(); if (pw) return { text: pw, bad: true }; if (!dirty()) return { text: "Nothing to save: this is the rule as it was saved.", bad: false }; return null; },
+        showProblems: () => { showNeed = true; res.view.render(); setTimeout(() => { showNeed = false; res.view.render(); }, 2600); },
+        save() { commit(); app.toast("Saved the rule. One undo on the net takes it back.", true); },
+        del() {
+          S.rules = S.rules.filter((k) => k !== rd.key); if (S.extra.ruleNets) delete S.extra.ruleNets[rd.key]; if (S.extra.ruleDesc) delete S.extra.ruleDesc[rd.key];
+          P.close(true, true); app.commit(`Delete rule ${T[rd.left].symbol} with ${T[rd.right].symbol}`);
+          app.toast("Deleted the rule. Pairs that used it are stuck now.", true);
+        },
+        focusView: () => res.view,
+        afterOpen() { pair.view.fit(false); res.view.fit(false); },
+        destroy() { pair.destroy(); res.destroy(); closeConfirm(); app.view.setHighlight(null); },
+        onKey(e) {
+          const mod = e.metaKey || e.ctrlKey;
+          if (confirmEl.classList.contains("on") && e.key === "Escape") { closeConfirm(); return true; }
+          if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveKeep(); return true; }
+          if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { e.preventDefault(); goNeighbour(e.key === "ArrowLeft" ? -1 : 1); return true; }
+          return false;
+        },
+      };
+      // the description: plain text until you click it; editing it is a change
+      setTimeout(() => {
+        const d = P.el.querySelector("[data-desc]");
+        d.oninput = () => { desc = d.value; P.sync(); };
+        d.onkeydown = (e) => { if (e.key === "Enter" && !(e.metaKey || e.ctrlKey)) { e.preventDefault(); d.blur(); } };
+        P.el.querySelector("[data-tidy]").onclick = () => { tidy(res.view, rd); res.view.render(); res.view.emit("change", "Tidy"); };
+        P.el.querySelector("[data-del]").onclick = (e) => { e.stopPropagation(); openConfirm(e.currentTarget, rd); };
+      });
+      // point at an interface end: light up the same one on both sides
+      for (const v of [pair.view, res.view]) v.on("hover", (h) => { const t = h && h.target, name = t && t.kind === "free" ? t.name : null; for (const w of [pair.view, res.view]) { w._pinHl = name; w.render(); } });
+      app.view.setHighlight({ wires: app.view.pairs().filter((w) => { const i = app.view.pairInfo(w); return (i.a.type === rd.left && i.b.type === rd.right) || (i.a.type === rd.right && i.b.type === rd.left); }).map((w) => w.id) });
+      ready = true;
+      probs = EP.ruleProblems(app, rd, res.view); renderStatus();
+      return ctl;
+    };
+    panel.open({ kind: "rule", title: `<i class="sym">${sym(rd.left)}</i> with <i class="sym">${sym(rd.right)}</i>`, info, desc: descOf(rd.key), has: rd.has, extra: `<button class="btn" data-comb ${rd.has ? `data-tip="See this rule play out in γ, δ and ε"` : `aria-disabled="true" data-tip="No rule yet, so nothing to translate. Write and save one first."`}>${ICON.comb}In combinators</button>`, build });
+    const cb = panel.el.querySelector("[data-comb]");
+    if (cb) cb.onclick = () => { if (cb.getAttribute("aria-disabled") === "true" && !rd.has) return panel.flashNote("No rule yet, so nothing to translate. Write and save one first.", true); if (panel.dirty()) return panel.flash("Save or cancel this rule first: the combinator view shows the saved rule."); openComb({ rule: rd.key }); };
+  }
+  // Delete asks first, in a small popover on the button.
+  const confirmEl = document.createElement("div");
+  confirmEl.className = "menu delconfirm"; confirmEl.setAttribute("data-chrome", ""); confirmEl.setAttribute("role", "alertdialog");
+  document.body.appendChild(confirmEl);
+  function openConfirm(btn, rd) {
+    const T = rd.T;
+    confirmEl.innerHTML = `<div class="dc-t">Delete the rule for <i class="sym">${esc(T[rd.left].symbol)}</i> and <i class="sym">${esc(T[rd.right].symbol)}</i>?</div><div class="dc-s">When they meet they'll get stuck.</div><div class="dc-b"><button class="btn" data-no>Cancel</button><button class="btn dangerfill" data-yes>Delete</button></div>`;
+    app.closeMenus(); confirmEl.classList.add("on");
+    const r = btn.getBoundingClientRect();
+    confirmEl.style.left = r.left + "px"; confirmEl.style.top = r.top - confirmEl.offsetHeight - 8 + "px";
+    confirmEl.querySelector("[data-no]").onclick = closeConfirm;
+    confirmEl.querySelector("[data-yes]").onclick = () => { closeConfirm(); const c = panel.ctl(); c && c.del(); };
+    confirmEl.querySelector("[data-yes]").focus();
+  }
+  function closeConfirm() { confirmEl.classList.remove("on"); }
+  // keys typed in the description still reach the panel for saving
+  app.keyInField = (e) => {
+    if (!panel.isOpen() || !e.target.closest(".ep")) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && (e.key === "Enter" || e.key.toLowerCase() === "s")) panel.onKey(e);
+    else if (e.key === "Escape") e.target.blur();
+  };
+  app.beforeGridPop = () => { if (panel.isOpen()) { if (panel.dirty()) { panel.flash(); return false; } panel.close(); } };
+  app.openRule = openRule;
+  // interface-end highlight drawn on both canvases
+  const _render = NK.View.prototype.render;
+  NK.View.prototype.render = function () {
+    _render.call(this);
+    if (!this._pinHl) return;
+    const f = this.state.free.find((x) => x.name === this._pinHl); if (!f) return;
+    this.world.insertAdjacentHTML("afterbegin", `<circle cx="${f.x}" cy="${f.y}" r="7" class="pin-hl"/>`);
+  };
+
+  /* ---------------------------------------------------------------- the component editor */
+  function openComponent(id, o = {}) {
+    if (app.agentOpen()) app.closeAgent();
+    const ed = EP.componentEditor(app, id, {
+      bodyHTML: (c, n) => `<div class="ra-after" style="flex:1"><div class="wrap"><div class="ep-canvas" data-slot="def"></div><div class="ep-cap"><b>Definition</b> Its loose ends are its interface: what an instance plugs into.</div></div>
+        <div class="ep-foot"><div class="iflist" data-slot="iface"></div><span class="hint">Saving updates the ${n} instance${n === 1 ? "" : "s"} on the canvas.</span></div></div>`,
+    });
+    const c = S.typeById(id);
+    panel.open({ kind: "component", kindWord: "Component", title: `<span class="ep-fields"><input class="inp" data-slot="name" value="${esc(c.name)}" aria-label="Name" style="width:140px"><input class="inp symbol" data-slot="symbol" value="${esc(c.symbol || "")}" aria-label="Symbol" data-tip="Symbol"></span>`, del: "Delete component", w: 760, h: 520, build: (body, P) => {
+      const ctl = ed.build(body, P);
+      // the name fields live in the head
+      const nm = P.el.querySelector("[data-slot=name]"), sy = P.el.querySelector("[data-slot=symbol]");
+      let name = c.name, symbol = c.symbol || "", fd = false;
+      nm.oninput = () => { name = nm.value; fd = true; P.sync(); }; sy.oninput = () => { symbol = sy.value; fd = true; P.sync(); };
+      const d0 = ctl.dirty, s0 = ctl.save;
+      ctl.dirty = () => d0() || fd;
+      ctl.save = () => { s0(); const t = S.typeById(id); if (t) { t.name = name.trim() || t.name; t.symbol = symbol; app.buildPalette(); view.render(); } };
+      return ctl;
+    } });
+    if (o.instance != null) view.setHighlight({ agents: [o.instance] });
+  }
+  app.openComponent = openComponent;
+
+  /* ---------------------------------------------------------------- the combinator panel */
+  let comb = { tab: "agent", agent: null, rule: null, mode: null };
+  function openComb(o) {
+    if (app.agentOpen()) app.closeAgent();
+    const sysKey = S.ex.family, info = EC.sysInfo(app, sysKey);
+    comb.mode = comb.sysKey === sysKey && comb.mode ? comb.mode : info.restrictedOk ? "restricted" : "general";
+    comb.sysKey = sysKey;
+    if (o.agent) { comb.tab = "agent"; comb.agent = o.agent; }
+    if (o.rule) { comb.tab = "rule"; comb.rule = o.rule; }
+    if (!comb.agent || !info.T[comb.agent]) comb.agent = info.sys.types[1] ? info.sys.types[1].id : info.sys.types[0].id;
+    if (!comb.rule || !info.sys.rules.includes(comb.rule)) comb.rule = info.sys.rules.find((k) => k.split("|").includes(comb.agent)) || info.sys.rules[0];
+    let cell = null, player = null;
+    panel.open({ kind: "comb", kindWord: "In combinators", title: "", tools: false, w: 980, h: Math.min(700, innerHeight - 150), build: (body, P) => {
+      body.innerHTML = `<div class="ca"><div class="ca-side" data-side></div><div class="ca-main" data-main></div></div>`;
+      const side = body.querySelector("[data-side]"), main = body.querySelector("[data-main]");
+      const sizes = S.ex.sizes;
+      function drawSide() {
+        side.innerHTML = `<div class="ca-tabs"><div class="seg" role="tablist"><button aria-pressed="${comb.tab === "agent"}" data-tab="agent">One agent</button><button aria-pressed="${comb.tab === "rule"}" data-tab="rule">One rule</button></div></div>
+          <div><h4>${comb.tab === "agent" ? "Agent" : "Rule"}</h4><div class="ca-pick">${comb.tab === "agent" ? info.sys.types.map((t) => `<button data-agent="${esc(t.id)}" class="${t.id === comb.agent ? "on" : ""}">${esc(t.symbol)}</button>`).join("") : info.sys.rules.map((k) => `<button data-rule="${esc(k)}" class="${k === comb.rule ? "on" : ""}">${k.split("|").map((x) => esc(info.T[x].symbol)).join(" ")}<small>${info.tr.rules && info.tr.rules[k] && info.tr.rules[k][comb.mode] ? EC.fmt(info.tr.rules[k][comb.mode].total) : ""}</small></button>`).join("")}</div></div>
+          <details class="ca-intro" ${localStorage.getItem("a-intro") === "0" ? "" : "open"}><summary>${ICON.right}What is this?</summary><p class="cb-intro">${EC.INTRO}</p></details>
+          <div>${EC.modeSwitchHTML(app, sysKey, comb.mode)}</div>
+          ${sizes ? `<div class="ca-sizes">This net: <b>${sizes.agents}</b> agents → ${sizes.restricted != null ? `<b>${EC.fmt(sizes.restricted)}</b> combinators restricted, ` : ""}<b>${EC.fmt(sizes.general)}</b> general. Too many to draw whole, so this shows one agent or one rule at a time.</div>` : ""}`;
+        $$("[data-tab]", side).forEach((b) => (b.onclick = () => { comb.tab = b.dataset.tab; drawSide(); drawMain(); }));
+        $$("[data-agent]", side).forEach((b) => (b.onclick = () => { comb.agent = b.dataset.agent; drawSide(); drawMain(); }));
+        $$("[data-rule]", side).forEach((b) => (b.onclick = () => { comb.rule = b.dataset.rule; drawSide(); drawMain(); }));
+        EC.bindModeSwitch(side, (m) => { comb.mode = m; drawSide(); drawMain(); });
+        const det = side.querySelector("details"); det.ontoggle = () => { try { localStorage.setItem("a-intro", det.open ? "1" : "0"); } catch (_) {} };
+      }
+      function drawMain() {
+        player && player.destroy(); player = null;
+        if (comb.tab === "agent") cell = EC.CellView(app, main, { sysKey, typeId: comb.agent, mode: comb.mode });
+        else player = EC.RulePlayer(app, main, { sysKey, key: comb.rule, mode: comb.mode });
+      }
+      drawSide(); drawMain();
+      return { dirty: () => false, focusView: () => null, destroy() { player && player.destroy(); }, onKey(e) {
+        if (comb.tab === "rule" && player && (e.key === "ArrowRight" || e.key === "ArrowLeft") && !e.metaKey) { const b = main.querySelector(`[data-c="${e.key === "ArrowRight" ? "step" : "back"}"]`); b && b.click(); return true; }
+        return false; } };
+    } });
+    const h = panel.el.querySelector(".ep-head h3"); h.innerHTML = `<span class="k">In combinators</span> <span style="font-weight:500">${esc(S.ex.name)}</span><span class="muted" style="font-weight:400;font-size:12px">· ${EC.verdict(app, sysKey).short}</span>`;
+  }
+  app.agentActions = (id) => [{ label: "Show as combinators", run: () => openComb({ agent: id }) }];
+  app.pairActions = (k) => [{ label: "In combinators", run: () => openComb({ rule: k }) }];
+  app.agentEdExtra = (t) => ({ below: `<button class="linkbtn" data-keep id="aeComb">${ICON.comb} Show as combinators</button>`, bind: (root) => { root.querySelector("#aeComb").onclick = () => { app.closeAgent(); openComb({ agent: t.id }); }; } });
+
+  app.init();
+})();
+</script>
+<style>
+.linkbtn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:6px;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2)}
+.linkbtn:hover{color:var(--text)}
+.linkbtn svg{width:14px;height:14px}
+#top-right .btn.scoped{color:var(--accent)}
+</style>
+</body>
+</html>

@@ -55,7 +55,7 @@
     <div class="hintline" id="palHint">Drag onto the canvas to add. Click to edit.</div>
   </section>
   <section id="rulesSec">
-    <div class="sec-h"><h2>Rules</h2></div>
+    <div class="sec-h"><h2>Rules</h2><button class="btn ghost" id="gridExpand" data-tip="Open a bigger rule grid" style="display:none">${ICON.expand}Expand</button></div>
     <div id="gridHost"></div>
   </section>
 </aside>
@@ -86,6 +86,7 @@
 <div class="menu" id="exMenu" role="menu" data-chrome></div>
 <div class="menu" id="fileMenu" role="menu" data-chrome></div>
 <div class="pop" id="agentEd" data-chrome role="dialog" aria-label="Agent"></div>
+<div class="pop" id="gridPop" data-chrome role="dialog" aria-label="Rule grid"></div>
 <button id="rulePill" data-chrome>Open rule</button>
 <div id="toast" role="status"><span id="toastText"></span><button id="toastUndo">Undo</button></div>
 <div class="tooltip" id="tooltip"></div>`);
@@ -408,25 +409,43 @@
     app.cellState = cellState;
     // Every pair of agent types in grid order: for moving to the next or previous rule.
     app.pairOrder = () => { const out = []; S.types.forEach((ta, i) => S.types.forEach((tb, j) => { if (j >= i) out.push(cellState(ta.id, tb.id).k); })); return out; };
-    function gridHTML(types, cell) {
+    function gridHTML(types, cell, big) {
       const n = types.length;
-      let h = `<div class="rg" style="grid-template-columns:${cell}px repeat(${n},${cell}px);grid-auto-rows:${cell}px">`;
-      h += `<div></div>` + types.map((t, j) => `<div class="hd col" data-col="${j}">${esc(t.symbol)}</div>`).join("");
+      let h = `<div class="rg${big ? " big" : ""}" style="grid-template-columns:${big ? "auto" : cell + "px"} repeat(${n},${cell}px);grid-auto-rows:${cell}px">`;
+      h += `<div></div>` + types.map((t, j) => `<div class="hd col" data-col="${j}">${esc(t.symbol)}${big ? `<small>${esc(t.name || "")}</small>` : ""}</div>`).join("");
       types.forEach((ta, i) => {
-        h += `<div class="hd row" data-row="${i}">${esc(ta.symbol)}</div>`;
+        h += `<div class="hd row" data-row="${i}">${big ? `<small>${esc(ta.name || "")}</small>` : ""}${esc(ta.symbol)}</div>`;
         types.forEach((tb, j) => {
           if (j < i) { h += "<div></div>"; return; }
           const c = cellState(ta.id, tb.id);
-          h += `<div class="c ${c.s}${c.live ? " live" : ""}${app.openKey && app.openKey() === c.k ? " open" : ""}" data-i="${i}" data-j="${j}" data-a="${esc(ta.id)}" data-b="${esc(tb.id)}" data-k="${esc(c.k)}" role="button" aria-label="${esc(ta.symbol)} with ${esc(tb.symbol)}"></div>`;
+          h += `<div class="c ${c.s}${c.live ? " live" : ""}${app.openKey && app.openKey() === c.k ? " open" : ""}" data-i="${i}" data-j="${j}" data-a="${esc(ta.id)}" data-b="${esc(tb.id)}" data-k="${esc(c.k)}" role="button" aria-label="${esc(ta.symbol)} with ${esc(tb.symbol)}">${big && c.s !== "never" ? esc(ta.symbol) + esc(tb.symbol) : ""}</div>`;
         });
       });
       return h + "</div>";
     }
     const legendHTML = () => `<div class="legend"><span><i class="has"></i>Rule</span><span><i class="live"></i>Rule, pair on canvas</span><span><i class="none"></i>No rule yet</span><span><i class="stuck"></i>Stuck here</span>${TY.on() ? `<span><i class="never"></i>Can never meet</span>` : ""}</div>`;
+    // With directions, agents whose principal ports give come first, then those that take, as in the real app.
+    const gridTypes = () => {
+      if (!opts.gridExpand || !TY.dirsOn()) return S.types;
+      const rank = (t) => { const p = TY.portOf(t.id, 0); return p && p.pol === "give" ? 0 : p && p.pol === "take" ? 1 : 2; };
+      return S.types.map((t, i) => ({ t, i })).sort((x, y) => rank(x.t) - rank(y.t) || x.i - y.i).map((x) => x.t);
+    };
+    const GRID_FITS = 8;
     function buildRules() {
-      const host = $("#gridHost"), n = S.types.length;
+      const host = $("#gridHost"), types = gridTypes(), n = types.length;
+      $("#gridExpand").style.display = opts.gridExpand ? "" : "none";
+      if (opts.gridExpand && n > GRID_FITS) {
+        host.innerHTML = `<div class="hintline" style="margin-top:0">${n} agents make ${(n * (n + 1)) / 2} pairs, too many to edit here.</div><button class="thumb" id="gridThumb" aria-label="Open the rule grid" data-tip="Open the rule grid">${gridHTML(types, 7)}</button>`;
+        $("#gridThumb").onclick = (e) => { e.stopPropagation(); openGridPop(); };
+        if ($("#gridPop").classList.contains("on")) renderGridPop();
+        return;
+      }
       const cell = Math.max(17, Math.min(22, Math.floor(204 / (n + 1)) - 2));
-      host.innerHTML = gridHTML(S.types, cell) + legendHTML() + `<div class="hintline">Each cell is a pair of agents. Click one to see its rule, or to write one.</div>`;
+      host.innerHTML = gridHTML(types, cell) + legendHTML() + `<div class="hintline">Each cell is a pair of agents. Click one to see its rule, or to write one.</div>`;
+      wireCells(host);
+      if ($("#gridPop").classList.contains("on")) renderGridPop();
+    }
+    function wireCells(host) {
       $$(".rg .c", host).forEach((c) => {
         const a = c.dataset.a, b = c.dataset.b, rg = c.closest(".rg");
         c.onpointerenter = () => {
@@ -436,10 +455,23 @@
           setHover({ grid: { a, b } });
         };
         c.onpointerleave = () => { rg.querySelectorAll(".hl").forEach((x) => x.classList.remove("hl")); clearHover(); };
-        c.onclick = () => { const st = cellState(a, b); app.openRule(st.k, { origin: c, never: st.s === "never" ? st.why : null }); };
+        c.onclick = (e) => { e.stopPropagation(); const st = cellState(a, b); const fromPop = !!c.closest("#gridPop"); if (fromPop && st.s !== "never") closeGridPop(); app.openRule(st.k, { origin: c, never: st.s === "never" ? st.why : null }); };
       });
     }
     app.buildRules = buildRules;
+    // The bigger grid, floating beside the palette, as in the real app. Opening a rule from it closes it.
+    function renderGridPop() {
+      const types = gridTypes(), n = types.length;
+      $("#gridPop").innerHTML = `<div class="ed-head"><h3>Rules for ${n} agents</h3><button class="btn icon" id="gpClose" data-tip="Close">${ICON.x}</button></div>
+        <div class="sub">Each cell is one pair of agents; γ with δ is the same rule as δ with γ, so only half the grid is used.</div>${gridHTML(types, 36, true)}${legendHTML()}`;
+      $("#gpClose").onclick = closeGridPop;
+      wireCells($("#gridPop"));
+    }
+    function openGridPop() { if (app.beforeGridPop && app.beforeGridPop() === false) return; renderGridPop(); $("#gridPop").classList.add("on"); }
+    function closeGridPop() { $("#gridPop").classList.remove("on"); }
+    app.closeGridPop = closeGridPop;
+    $("#gridExpand").onclick = (e) => { e.stopPropagation(); $("#gridPop").classList.contains("on") ? closeGridPop() : openGridPop(); };
+    document.addEventListener("pointerdown", (e) => { if ($("#gridPop").classList.contains("on") && !e.target.closest("#gridPop,#gridExpand,#gridThumb,.menu")) closeGridPop(); });
     $("#newType").onclick = (e) => { e.stopPropagation(); toast("New agents aren't part of this prototype. Click an agent to see its editor."); };
     $("#newComp").onclick = () => { const n = view.selection().agents.length; toast(n ? `Would bundle ${n} agents into a component. Not part of this prototype.` : "Select some agents first, then make them a component."); };
 
@@ -463,8 +495,9 @@
       if (h.grid) {
         const { a, b } = h.grid, ta = S.typeById(a), tb = S.typeById(b); if (!ta || !tb) return "";
         const c = cellState(a, b);
-        const line = c.s === "has" ? esc(NK.effectFor(a, b).say) : c.s === "stuck" ? "No rule, and a pair is stuck here." : c.s === "never" ? c.why : "No rule yet. Click to write one.";
-        return Tt(`<span class="sym">${esc(ta.symbol)}</span> with <span class="sym">${esc(tb.symbol)}</span>`, c.s === "never" ? "can never meet" : c.n ? `${c.n} on canvas` : "") + Ln(line, c.s === "stuck" ? "bad" : "");
+        const say = c.s === "has" ? app.ruleSay(a, b) : null;
+        const line = c.s === "has" ? (say ? esc(say) : "") : c.s === "stuck" ? "No rule, and a pair is stuck here." : c.s === "never" ? c.why : "No rule yet. Click to write one.";
+        return Tt(`<span class="sym">${esc(ta.symbol)}</span> with <span class="sym">${esc(tb.symbol)}</span>`, c.s === "never" ? "can never meet" : c.n ? `${c.n} on canvas` : "") + (line ? Ln(line, c.s === "stuck" ? "bad" : "") : "");
       }
       if (h.tile) {
         const t = S.typeById(h.tile); if (!t) return "";
@@ -476,7 +509,7 @@
       if (t.kind === "wire") {
         const w = v.state.wires.find((x) => x.id === t.id); if (!w) return "";
         const st = v.status(w);
-        if (st === "active") { const i = v.pairInfo(w); return Tt(`<span class="sym">${esc(i.ta.symbol)}</span> meets <span class="sym">${esc(i.tb.symbol)}</span>`, "active pair") + Ln(esc(i.effect.say)) + Ln(v === view ? (v.alt ? "Click selects the wire." : "Click fires. Alt-click selects. Open its rule from the tag beside it.") : "Click fires.", "k"); }
+        if (st === "active") { const i = v.pairInfo(w); return Tt(`<span class="sym">${esc(i.ta.symbol)}</span> meets <span class="sym">${esc(i.tb.symbol)}</span>`, "active pair") + (app.ruleSay(i.a.type, i.b.type) ? Ln(esc(app.ruleSay(i.a.type, i.b.type))) : "") + Ln(v === view ? (v.alt ? "Click selects the wire." : "Click fires. Alt-click selects. Open its rule from the tag beside it.") : "Click fires.", "k"); }
         if (st === "stuck") { const i = v.pairInfo(w); return Tt(`<span class="sym">${esc(i.ta.symbol)}</span> meets <span class="sym">${esc(i.tb.symbol)}</span>`, "stuck") + Ln("No rule for this pair. Click to write one.", "bad"); }
         return Tt("Wire") + Ln("Click to select. Drag an end to rewire.", "k");
       }
@@ -505,6 +538,7 @@
       }
       return "";
     }
+    app.ruleSay = app.ruleSay || ((a, b) => NK.effectFor(a, b).say);
     function setHover(h) { hov = h; drawHover(); }
     function clearHover() { hov = null; view.setHighlight(null); drawHover(); }
     app.setHover = setHover; app.clearHover = clearHover;

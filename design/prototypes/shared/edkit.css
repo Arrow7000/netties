@@ -195,3 +195,7 @@
 .ep-head .btn[aria-disabled=true]{opacity:.45;cursor:not-allowed}
 #newComp:disabled{opacity:.45}
 .rg .c.open{outline:2px solid var(--accent);outline-offset:1px;z-index:1}
+/* A2: a brief warm flash on Save and Cancel, then back to normal */
+@keyframes epWarm{0%{box-shadow:0 0 0 0 transparent}22%{box-shadow:0 0 0 4px color-mix(in srgb,var(--active) 45%,transparent);background-color:var(--active);color:var(--on-active)}100%{box-shadow:0 0 0 0 transparent}}
+.btn.flashw{animation:epWarm .6s ease-out 1}
+.ep-flash.ok{background:var(--text);color:var(--chrome)}

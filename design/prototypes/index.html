@@ -33,6 +33,28 @@ code{font-size:13px}
 </section>
 
 <section>
+<h2><a href="editors-a2/">A2. The rule editor, revised</a></h2>
+<p>A, with the rule editor reworked from your feedback. The combinator view and the component editor are as in A.</p>
+<p><b>What counts as a change.</b> A rule is its agents and wiring, plus a description; positions aren't stored. So moving an agent isn't a change: no dot, and a click outside still closes the panel. Going back to how the rule was, by undoing or by rewiring it the same way, counts as no change too. The unsaved dot now sits next to Cancel and Save, and Save is greyed out until there's something to save (as well as while an end still needs a wire).</p>
+<p><b>Buttons.</b> Cancel and Save are at the bottom right, Delete rule at the bottom left, on its own. Delete asks first, in a small popover on the button ("Delete the rule for + and S? When they meet they'll get stuck."). Save and ⌘↵ save and close; ⌘S saves and keeps the panel open, with a short "Saved". A <b>Tidy</b> button lays the result out afresh: it's a step you can undo, but since it only moves agents it isn't a change. A click outside (or Escape) with unsaved changes now gives Save and Cancel a short orange flash that fades back, every time, instead of leaving them outlined. "Drag agents in from the palette →" sits at the top right of the result, pointing at the agents.</p>
+<p><b>Descriptions.</b> Each rule has a short description under its title. It looks like plain text until you click it ("Add a description" when there's none), and editing it is a change. It's what the hover panel shows for a pair on the net or a cell of the rule grid; rules without one show nothing extra. The examples' old built-in texts are now their saved descriptions. The two explanations in the Before column are gone; an ⓘ by the title says what the editor is for, naming the interface ends.</p>
+<p><b>Interface ends</b> (x₁, x₂, y₁) look weightier than loose ends on the net, to show they're fixed. A switch at the top of the page (prototype only) compares two styles: <i>Filled</i>, solid terminals with a heavier ring and upright bold labels; and <i>On a rail</i>, terminals sitting on a fixed line along the top and bottom of the result and of the Before column, with the outside shaded.</p>
+<p><b>Rule grid.</b> The Expand button is back, and with more than 8 agents the small grid becomes a preview ("12 agents make 78 pairs, too many to edit here.") that opens the bigger grid, as in the real app. Opening a rule from the bigger grid closes the grid and opens the rule editor in its place.</p>
+<p class="tr"><b>Try in A2:</b></p>
+<ul>
+<li>In "3 + 2", open <i>S</i> with <i>+</i> and drag the <i>S</i> in the result somewhere else: no dot, and a click outside closes the panel.</li>
+<li>Open it again, drop in an agent: the dot appears next to Cancel and Save. ⌘Z it away: the dot goes and Save greys out again.</li>
+<li>Move things around, then click Tidy: the result goes back to the engine's layout. ⌘Z undoes the Tidy; it never makes the rule unsaved.</li>
+<li>Edit the description under the title, then click outside or press Escape: Save and Cancel flash orange and fade back. Press ⌘S: "Saved", and the panel stays open. Close it and point at the rule's grid cell or the pair on the net: the hover panel shows your description.</li>
+<li>Click Delete rule: a small popover asks first. Escape or Cancel closes it.</li>
+<li>Point at the ⓘ by the title.</li>
+<li>Load "Erasing without commutation", open the empty <i>γ</i> with <i>δ</i>, drop in a <i>γ</i> and a <i>δ</i>, wire a couple of ends to them and click Tidy.</li>
+<li>Switch the interface ends between Filled and On a rail (top of the page), in light and dark.</li>
+<li>Load "Complete a typed if" (12 agents): the Rules section shows the preview and its line; click it or Expand, then click a cell to open its rule.</li>
+</ul>
+</section>
+
+<section>
 <h2><a href="editors-a/">A. Beside the palette</a></h2>
 <p>The panel opens in the space between the net and the palette, and nothing is dimmed: the palette and the net stay live. You drag agents from the main palette into the rule (or click a tile to drop one in), and you can drag-select part of the net and ⌘C / ⌘V it into the rule. The panel can be moved by its title bar and resized from its bottom-left corner, and it stays where you put it. Its title and buttons sit in one slim row: ‹ › move to the previous or next rule (⌥← ⌥→), then Undo and Redo, then Delete, Cancel and Save. While it's open, the Undo and Redo at the top right turn blue and act on the panel. The rule editor keeps a before and an after, but the pair shrinks to a narrow column whose text explains what a rule is: both agents disappear, and the wires they held are left dangling as x₁, x₂, y₁. Pointing at an interface end lights up the same one on both sides. The combinator view is a panel of its own, with a side column for the explanation and the verdict and two tabs, <i>One agent</i> and <i>One rule</i>. It opens from an agent's selection panel or editor ("Show as combinators"), from the rule editor ("In combinators"), and from File.</p>
 <p class="tr"><b>Gains:</b> the most like a desktop tool; everything outside stays usable, so copying from the net and dragging from the palette just work. The combinator view gets the most room. <b>Costs:</b> the panel covers part of the net and doesn't point at what you opened. Two side-by-side drawings still split the space, and a moved panel can end up somewhere odd.</p>

@@ -165,8 +165,8 @@
       const H = ctl.history && ctl.history();
       if (q("undo")) { q("undo").disabled = !H || !H.canUndo(); q("undo").setAttribute("data-tip", H && H.canUndo() ? `Undo ${(H.undoLabel() || "").toLowerCase()} (⌘Z)` : "Nothing to undo in this editor yet"); }
       if (q("redo")) { q("redo").disabled = !H || !H.canRedo(); q("redo").setAttribute("data-tip", H && H.canRedo() ? `Redo ${(H.redoLabel() || "").toLowerCase()} (⇧⌘Z)` : "Nothing to redo"); }
-      const why = ctl.saveWhy ? ctl.saveWhy() : null;
-      if (q("save")) { q("save").setAttribute("aria-disabled", why ? "true" : "false"); q("save").setAttribute("data-tip", why || "Save (⌘↵)"); }
+      const why0 = ctl.saveWhy ? ctl.saveWhy() : null, why = why0 && typeof why0 === "object" ? why0.text : why0;
+      if (q("save")) { q("save").setAttribute("aria-disabled", why ? "true" : "false"); q("save").setAttribute("data-tip", why || ctl.saveTip || "Save (⌘↵)"); }
       if (q("cancel")) q("cancel").setAttribute("data-tip", P.dirty() ? "Throw away these changes (Esc, then confirm)" : "Close (Esc)");
       el.classList.toggle("dirty", P.dirty());
       if (cfg.onSync) cfg.onSync(P, ctl);
@@ -211,19 +211,24 @@
     P.requestClose = () => { if (P.dirty()) P.flash(); else P.close(); };
     P.save = () => {
       if (!ctl) return;
-      const why = ctl.saveWhy ? ctl.saveWhy() : null;
-      if (why) { ctl.showProblems && ctl.showProblems(); P.flashNote(why, true); return; }
+      const why0 = ctl.saveWhy ? ctl.saveWhy() : null, why = why0 && typeof why0 === "object" ? why0.text : why0;
+      if (why) { const bad = !(why0 && typeof why0 === "object" && why0.bad === false); if (bad) ctl.showProblems && ctl.showProblems(); P.flashNote(why, bad); return; }
       if (ctl.save() !== false) P.close(false);
     };
     P.undo = () => { if (ctl && ctl.history && ctl.history().undo() != null) P.sync(); };
     P.redo = () => { if (ctl && ctl.history && ctl.history().redo() != null) P.sync(); };
-    P.flashNote = (text, bad) => {
+    P.flashNote = (text, bad, ms) => {
       const n = el.querySelector("[data-slot=flashnote]"); if (!n) return app.toast(text);
-      n.innerHTML = text; n.classList.toggle("bad", !!bad); n.classList.add("on");
-      clearTimeout(flashT); flashT = setTimeout(() => n.classList.remove("on"), 3200);
+      n.innerHTML = text; n.classList.toggle("bad", !!bad); n.classList.toggle("ok", bad === "ok"); n.classList.add("on");
+      clearTimeout(flashT); flashT = setTimeout(() => n.classList.remove("on"), ms || 3200);
     };
     // "Deal with this first": Save and Cancel pulse, and say why.
     P.flash = (note) => {
+      if (cfg.flashStyle && cfg.flashStyle(kind) === "warm") {
+        $$('[data-ep="save"],[data-ep="cancel"]', el).forEach((b) => { b.classList.remove("flashw"); void b.offsetWidth; b.classList.add("flashw"); clearTimeout(b._fw); b._fw = setTimeout(() => b.classList.remove("flashw"), 650); });
+        if (cfg.flashNoteToo !== false) P.flashNote(note || (cfg.flashText ? cfg.flashText(kind) : "You have unsaved changes. Save or cancel them first."), false, 1800);
+        return;
+      }
       $$('[data-ep="save"],[data-ep="cancel"]', el).forEach((b) => { b.classList.remove("flash"); void b.offsetWidth; b.classList.add("flash"); });
       el.classList.remove("flashing"); void el.offsetWidth; el.classList.add("flashing");
       P.flashNote(note || (cfg.flashText ? cfg.flashText(kind) : "You have unsaved changes. Save or cancel them first."));
@@ -414,5 +419,5 @@
     };
   }
 
-  window.EdPanel = { Panel, EditorCanvas, ruleEditor, componentEditor, RuleData, openEnds };
+  window.EdPanel = { Panel, EditorCanvas, ruleEditor, componentEditor, RuleData, openEnds, ruleProblems, problemText, signature };
 })();
