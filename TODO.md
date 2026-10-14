@@ -143,17 +143,8 @@ Word for word, as added on 2026-10-13 (it was wrongly replaced by the
 triage above at the time, and restored on 2026-10-14). Progress is tracked
 in the triaged list; these checkboxes are left as written.
 
-- [ ] drag selection should select wires too, not just agents
-- [ ] cmd+c/cmd+x should copy/cut the selection! and cmd+v should paste it! atm there's no way to do this other than temporarily making a component or something
-- [ ] dragging an agent into the canvas onto an already existing agent should do something cleverer than just dumping it on the canvas unconnected. maybe we can have some logic where if there is only one port of matching polarity and type to the existing agent's ports, we initialise the new agent already wired up to that port? if more than one match is possible maybe we.. just choose one at random? not sure. but i constantly find myself wanting to drag new agents onto existing ones to connect them
-- [ ] would be good to benchmark what's actually taking up perf in large nets. and would it make sense to outsource that algorithm to a wasm worker or something? how much work would that be, how brittle, and how much perf are we likely to gain for ourselves there
-- [ ] it should be possible to recollapse an opened component, atm doesn't look like it is?
-
 - [ ] i don't think the combinator translation toggle needs to have pride of place right at the top
 - [ ] the combinators view UX needs work. rn it's janky and you can't recollapse a thing after opening it and also it's not clear what general and restricted mean and why you can sometimes step one but not the other or sometimes neither. needs some love basically.
-- [ ] we the button with the share and text view dropdown should probably not be called the nondescriptive "Net". it should probably also go to the left of the examples dropdown. it's more like the "File" toolbar item.
-- [ ] when hovering over the step or run buttons it takes like a full second for the tooltip to appear, let's make it near-instant
-- [ ] generally clicking outside of an opened panel should collapse it
 - [ ] the rule editor – and combinator view for that matter – should not be full-page modes, but popovers or smth. so that it should be possible to click outside of them to dismiss.
 - [ ] the rule editor also needs some love. and actions inside it need to be undoable
 - [ ] the rule editor has different affordances than the main canvas. can't drag an agent into the end state canvas from the panel at the top, but can only click them. the affordances and abstractions and shortcuts etc need to be supported here too, as much as possible
@@ -161,7 +152,6 @@ in the triaged list; these checkboxes are left as written.
 - [ ] when pressing the shortcuts for undo/redo, their corresponding buttons in the UI should flash up
 
 - [ ] maybe look into supporting linearity? is there literature on that? what does that actually entail, that the number of agents needs to be maintained across reductions? is there an affine equivalent, that the number of agents can't increase?
-- [ ] maybe look into how we could have a responsive mobile mode? i feel like that's going to be a lot of work tho.. will it?
 
 ## Rough edges in directions and types
 
@@ -189,3 +179,30 @@ in the triaged list; these checkboxes are left as written.
 - Extensions: native numbers, labelled duplicators, references, amb.
 - Polymorphic port types (a duplicator for any one type).
 - TikZ export.
+
+## Others
+
+- [ ] cmd+A should select the entire net. currently it selects the whole page text.
+- [ ] can we use a compression tool for share links? they're currently huge. let's look into what we use for `../fhm`'s web playground, bc that one seems really efficient
+  - [ ] although would be good to maintain backwards compatibility to still accept the current links
+- [ ] maybe the copy share link button needs to be broken out of the file menu in its own top-level thing?
+  - [ ] and when the system diverges from what is decoded from the share link url it should change to say something like "update share link" or "update url" or something? to make it clear that this is not one of the editors whose url updates live on every keystroke, and that it's possible to get out of sync with the url.
+  - [ ] maybe this button should also show the copy icon to make it clear that we'll not only update the url but will also copy it to your clipboard?
+  - [ ] maybe once you press that button the clipboard should change to a check icon for half a sec or so to indicate success
+- [ ] the undo button in the toasts at the bottom of the canvas should display the undo shortcut alongside it – cmd+Z with the ⌘ symbol; although btw for every shortcut it's only cmd on macos, for windows and linux i think we should be using and displaying ctrl instead, right?
+- [ ] app-wide: pressing the first key of a shortcut should highlight all buttons using that shortcut when the shortcut is visible. so e.g. if we have a button somewhere that says `⌘S` and one that says `⌘C`, pressing cmd down should make both buttons have a little extra brightness as long as you hold it down. and then when the user presses the S, the ⌘C button should revert to normal appearance, but the ⌘S button should appear in its fully depressed state, as if you had clicked it with your mouse.
+  - i think this should work throughout the app. but i think maybe the first part – highlight buttons on the same first half of the shortcut – should only happen if the button actually displays the shortcut. otherwise it might be confusing why that button is highlighted when you don't know that it's a ⌘\_ action? hm.
+  - ok no, on second thought i do think all such shortkeyed buttons should highlight. with a consistent enough affordance the user will quickly learn that the reason that button highlighted is bc it shares the ⌘\_ shortcut.
+  - but: for this to be effective ideally most buttons with such actions would have the shortcut displayed. although we can omit this in the case of where buttons are small, like the undo/redo things in the top right. but when you have a larger button with a proper word label on it, then yes it should display the shortcut chord on it.
+- [ ] maybe instead of the symbols for taking and giving we could have a little wave animation thing moving inward for "taking" and outward for "giving" (i will draw something to explain what i mean)
+- [ ] when i click on a wire it doesn't look any different, it's only when i move my mouse away that i can see that its colour has changed into the selected mode. not sure why this is
+- [ ] when a wire is highlighted (either selected or active) you can see the rounding of the end as it goes into the agent's primary port. i don't like this. makes it look quite amateur svg ish.
+- [ ] i think manual mode should only affect agents, not wires. i think wires should still keep their automatic routing. atm when i switch to manual, the wires no longer avoid intersecting or going behind their agents. i don't think there's a reason for that to happen. seeing as wires can't themselves be moved, i don't think their behaviour should change in manual mode.
+- [ ] there's a big gap after the "click to fire" and "click to select the wire" text in their pills
+- [ ] when select-dragging i think we should include any touched wire, not only if we've included both its ends
+  - there is also the more advanced mode which i vaguely remember from sketchup, which is that if you drag from left to right it selects everything touched, whereas if you drag from rtl it only selects things that are completely in the box. or the other way round. is this a common convention? do programs still do this? worth implementing or nah?
+- [ ] different execution/prioritisation strategies! friend on twitter mentioned a "whnf" strategy, which for graphs translates to prioritising outer executions first – outer meaning closest to a loose/external port. apparently this is beta optimal.
+  - this would affect all three run buttons, so maybe it should be like a little hover menu next to and encompassing all of them, where the strategy can be selected?
+  - hm other than "fully parallel" and whnf is there anything else? worth having a selector for just two strategies? and for the single step, since it only does one thing at a time, what should we choose then, still prioritising external-first? does that mean the strategy only meaningfully affects the other 2, the multi-step buttons?
+- [ ] maybe we should fade out nets that (have no empty ports but) are unconnected to any external ports? because that basically means that whatever computation results from that will be unobservable from the outside? like e.g. the leftovers of a non-chosen if branch, which would ordinarily just result in attaching an eliminator agent and nomnomming its way through whatever remained there. in that case, we may as well show that that subnet is no longer really relevant to us and thus whatever happens there will no longer affect anything else.
+  - this would fit nicely with the whnf strategy, since in that strategy unconnected subnets will never be evaluated. basically i want to make it for that, to show that if a thing is isolated, we don't _need_ to evaluate it anymore, because we're going to get our computation anyway. but may not make so much sense to have this with the other strategies. unless the strats only affect prioritisation, and not exclusion altogether? ok idk, needs some thought.
