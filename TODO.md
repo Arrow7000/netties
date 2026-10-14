@@ -182,7 +182,8 @@ in the triaged list; these checkboxes are left as written.
 
 ## The second braindump, triaged (2026-10-14)
 
-The user's list is "Others" below, kept as written; progress is tracked here.
+The user's list is "Others" below, kept as written apart from ticking off
+what's done (at the user's request).
 
 1. **Done** (2026-10-14):
    - [x] ⌘A selects every agent, box and wire (not the page's text).
@@ -248,24 +249,24 @@ The user's list is "Others" below, kept as written; progress is tracked here.
 
 ## Others
 
-- [ ] cmd+A should select the entire net. currently it selects the whole page text.
+- [x] cmd+A should select the entire net. currently it selects the whole page text.
 - [ ] can we use a compression tool for share links? they're currently huge. let's look into what we use for `../fhm`'s web playground, bc that one seems really efficient
   - [ ] although would be good to maintain backwards compatibility to still accept the current links
-- [ ] maybe the copy share link button needs to be broken out of the file menu in its own top-level thing?
-  - [ ] and when the system diverges from what is decoded from the share link url it should change to say something like "update share link" or "update url" or something? to make it clear that this is not one of the editors whose url updates live on every keystroke, and that it's possible to get out of sync with the url.
-  - [ ] maybe this button should also show the copy icon to make it clear that we'll not only update the url but will also copy it to your clipboard?
-  - [ ] maybe once you press that button the clipboard should change to a check icon for half a sec or so to indicate success
-- [ ] the undo button in the toasts at the bottom of the canvas should display the undo shortcut alongside it – cmd+Z with the ⌘ symbol; although btw for every shortcut it's only cmd on macos, for windows and linux i think we should be using and displaying ctrl instead, right?
+- [x] maybe the copy share link button needs to be broken out of the file menu in its own top-level thing?
+  - [x] and when the system diverges from what is decoded from the share link url it should change to say something like "update share link" or "update url" or something? to make it clear that this is not one of the editors whose url updates live on every keystroke, and that it's possible to get out of sync with the url.
+  - [x] maybe this button should also show the copy icon to make it clear that we'll not only update the url but will also copy it to your clipboard?
+  - [x] maybe once you press that button the clipboard should change to a check icon for half a sec or so to indicate success
+- [x] the undo button in the toasts at the bottom of the canvas should display the undo shortcut alongside it – cmd+Z with the ⌘ symbol; although btw for every shortcut it's only cmd on macos, for windows and linux i think we should be using and displaying ctrl instead, right?
 - [ ] app-wide: pressing the first key of a shortcut should highlight all buttons using that shortcut when the shortcut is visible. so e.g. if we have a button somewhere that says `⌘S` and one that says `⌘C`, pressing cmd down should make both buttons have a little extra brightness as long as you hold it down. and then when the user presses the S, the ⌘C button should revert to normal appearance, but the ⌘S button should appear in its fully depressed state, as if you had clicked it with your mouse.
   - i think this should work throughout the app. but i think maybe the first part – highlight buttons on the same first half of the shortcut – should only happen if the button actually displays the shortcut. otherwise it might be confusing why that button is highlighted when you don't know that it's a ⌘\_ action? hm.
   - ok no, on second thought i do think all such shortkeyed buttons should highlight. with a consistent enough affordance the user will quickly learn that the reason that button highlighted is bc it shares the ⌘\_ shortcut.
   - but: for this to be effective ideally most buttons with such actions would have the shortcut displayed. although we can omit this in the case of where buttons are small, like the undo/redo things in the top right. but when you have a larger button with a proper word label on it, then yes it should display the shortcut chord on it.
 - [ ] maybe instead of the symbols for taking and giving we could have a little wave animation thing moving inward for "taking" and outward for "giving" (i will draw something to explain what i mean)
-- [ ] when i click on a wire it doesn't look any different, it's only when i move my mouse away that i can see that its colour has changed into the selected mode. not sure why this is
-- [ ] when a wire is highlighted (either selected or active) you can see the rounding of the end as it goes into the agent's primary port. i don't like this. makes it look quite amateur svg ish.
+- [x] when i click on a wire it doesn't look any different, it's only when i move my mouse away that i can see that its colour has changed into the selected mode. not sure why this is
+- [x] when a wire is highlighted (either selected or active) you can see the rounding of the end as it goes into the agent's primary port. i don't like this. makes it look quite amateur svg ish.
 - [ ] i think manual mode should only affect agents, not wires. i think wires should still keep their automatic routing. atm when i switch to manual, the wires no longer avoid intersecting or going behind their agents. i don't think there's a reason for that to happen. seeing as wires can't themselves be moved, i don't think their behaviour should change in manual mode.
-- [ ] there's a big gap after the "click to fire" and "click to select the wire" text in their pills
-- [ ] when select-dragging i think we should include any touched wire, not only if we've included both its ends
+- [x] there's a big gap after the "click to fire" and "click to select the wire" text in their pills
+- [x] when select-dragging i think we should include any touched wire, not only if we've included both its ends
   - there is also the more advanced mode which i vaguely remember from sketchup, which is that if you drag from left to right it selects everything touched, whereas if you drag from rtl it only selects things that are completely in the box. or the other way round. is this a common convention? do programs still do this? worth implementing or nah?
 - [ ] different execution/prioritisation strategies! friend on twitter mentioned a "whnf" strategy, which for graphs translates to prioritising outer executions first – outer meaning closest to a loose/external port. apparently this is beta optimal.
   - this would affect all three run buttons, so maybe it should be like a little hover menu next to and encompassing all of them, where the strategy can be selected?
