@@ -227,6 +227,59 @@ what's done (at the user's request).
          across each other. The fix is a router that avoids obstacles for
          arbitrary placements (e.g. orthogonal routing through a grid of
          free space), a real piece of work.
+
+     - [ ] **Option 1, the user's pick (2026-10-14): patch the current
+           router**, about one session. A full obstacle-avoiding router
+           (option 2: visibility grid, fewest-bend paths, then spreading
+           wires that share a channel, or the libavoid WASM port) waits
+           until this has been tried.
+
+           How the router works now (`route()` in `src/layout/route.ts`):
+           every wire gets one of a few fixed shapes. `direct` is an
+           S-curve between facing ports; `cap`/`cup` are arches between
+           ports facing the same way; `around` goes out, along a vertical
+           lane, and back; `drop`/`rise` run straight to a loose end; `pin`
+           goes to a rule interface end. Only the horizontal runs avoid
+           agents (`settle()` pushes caps and cups clear of agents and of
+           each other). Vertical runs and S-curves never check what's in
+           their way, and lanes come from `gapsBetween()`, which only finds
+           strips free of agents over the net's whole height. Automatic
+           layout (`src/layout/place.ts`) makes all that safe; manual
+           placement doesn't. The same happens briefly while dragging an
+           agent in automatic mode (`layout` in `src/state/model.ts` reroutes
+           a moved placement with `route()`).
+
+           The patch:
+           - After choosing each wire's shape, check its vertical runs and
+             S-curves against the agent boxes (not counting the agents at
+             its own ends). A `direct` or `drop`/`rise` that hits an agent
+             becomes an `around`; a cap or cup whose legs hit one moves its
+             legs out to a lane.
+           - Lanes only need to be clear over the height the wire covers:
+             compute gaps per wire from the boxes overlapping its y-range,
+             instead of the one whole-height `gapsBetween()` list (keep that
+             list for automatic layout if it routes the same as before).
+           - Lanes in the same gap still get spaced `G.wireGap` apart, and
+             caps and cups still settle against each other, so wires don't
+             end up drawn on top of each other.
+
+           Keep the Lafont look: wires leave ports vertically, facing ports
+           still get the S-curve when nothing is in the way, rounded
+           corners as now.
+
+           Done when:
+           - Automatic layout draws every example exactly as before
+             (snapshot the routes of every step of every example before
+             changing anything; the existing tests in
+             `src/layout/layout.test.ts` must pass unchanged).
+           - New tests: in hand-placed nets (including random placements
+             with fast-check, as the existing tests do), no wire segment
+             passes through an agent other than the two it connects.
+           - Checked by eye in the app, in manual mode, with agents
+             dragged on top of wires and between facing pairs, in light
+             and dark themes.
+           - Routing stays fast on the largest example (the router runs on
+             every pointer move while dragging).
 4. **Waiting on the user**: the taking/giving wave animation (a drawing
    is coming).
 5. **Design and research, one at a time**:
