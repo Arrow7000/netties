@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties editors: the rule as a step</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=STIX+Two+Text:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/types-chrome.css">
+<link rel="stylesheet" href="../shared/edkit.css">
+<style>
+/* ---- direction C: the editor is the step preview, grown up; it opens in place ---- */
+.ep.dir-c{overflow:visible;background:var(--paper);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 10%,transparent),var(--shadow);border-radius:16px}
+.ep.dir-c .ep-body{border-radius:16px;overflow:hidden}
+.cbar{position:absolute;left:50%;top:-19px;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:2px;padding:3px 4px 3px 12px;background:var(--chrome);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);white-space:nowrap}
+.cbar h3{margin:0 6px 0 0;font-size:13px;font-weight:600;display:flex;gap:5px;align-items:center}
+.cbar h3 .k{font-weight:400;color:var(--muted)}
+.cbar h3 .sym{font-size:16px}
+.cbar .btn{height:30px}
+.cbar .btn.icon{width:30px}
+.cbar .sep{margin:6px 3px}
+.cbar .seg button{height:24px;font-size:12px;padding:0 8px}
+.ep.dir-c .ep-flash{top:24px}
+/* the rule: the pair on the left, its result framed on the right, joined by dashed links like the preview */
+.cr{position:relative;display:grid;grid-template-columns:minmax(170px,30%) 1fr;flex:1;min-height:0;padding:30px 14px 14px;gap:30px}
+.cr-pair,.cr-frame{position:relative;display:flex;flex-direction:column;min-height:0}
+.cr-pair .ep-canvas{flex:1;background:transparent}
+.cr-pair .nk-world{opacity:.42}
+.cr-frame{border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);box-shadow:0 0 0 5px color-mix(in srgb,var(--accent) 8%,transparent);border-radius:12px;overflow:hidden}
+.cr-frame .ep-canvas{flex:1}
+.cr-cap{font-size:11.5px;color:var(--muted);padding:0 2px 6px;line-height:1.35}
+.cr-cap b{color:var(--text);font-weight:600}
+.cr-cap i{font:italic 13px 'STIX Two Text',serif;color:var(--text)}
+.cr-frame .cr-cap{position:absolute;top:8px;left:10px;z-index:2;pointer-events:none}
+.cr-links{position:absolute;inset:0;pointer-events:none;z-index:3;overflow:visible}
+.cr-links path{fill:none;stroke:var(--active);stroke-width:1.5;stroke-dasharray:4 3;opacity:.9}
+.cr-links path.open{stroke:var(--stuck)}
+.cr-links text{font:italic 10px 'STIX Two Text',serif;fill:var(--muted)}
+.cr .ep-foot{border-top:1px solid var(--line);padding:6px 10px;min-height:32px;background:var(--chrome)}
+.cr-lens{flex:1;min-height:0;overflow:auto;padding:30px 18px 16px;background:var(--chrome);border-radius:16px}
+.cr-lens .cb-modes{margin-bottom:2px}
+.lensrow{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.lensrow .cb-verdict{margin:0}
+/* overview of the whole system in combinators */
+.ov{flex:1;overflow:auto;padding:30px 18px 18px;background:var(--chrome);border-radius:16px;display:flex;flex-direction:column;gap:12px}
+.ov table{border-collapse:collapse;width:100%;font-size:12.5px}
+.ov th{text-align:left;font-weight:500;color:var(--muted);font-size:11.5px;padding:4px 8px;border-bottom:1px solid var(--line)}
+.ov td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.ov tr.row{cursor:pointer}
+.ov tr.row:hover td{background:var(--chrome-2)}
+.ov .sym{font-size:15px}
+.ov .num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.ov .kbar{margin:0;height:7px;min-width:140px}
+.ov h4{margin:4px 0 0;font-size:12.5px}
+.ov .go{color:var(--accent);font-size:11.5px;white-space:nowrap}
+.linkbtn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:6px;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2)}
+.linkbtn:hover{color:var(--text)}
+.linkbtn svg{width:14px;height:14px}
+#agentEd.lens{width:min(900px,calc(100vw - 300px))}
+#agentEd .lenswrap{padding:14px 16px;overflow:auto;max-height:calc(100vh - 140px)}
+#agentEd .lenswrap .cb-draw{max-height:none}
+#top-right .btn.scoped{color:var(--accent)}
+</style>
+</head>
+<body>
+<script src="../shared/netkit3.js"></script>
+<script src="../shared/edkit-app.js"></script>
+<script src="../shared/edkit-panel.js"></script>
+<script src="../shared/edkit-comb.js"></script>
+<script>
+(async function () {
+  /* =====================================================================
+     Direction C: the rule as a step.
+     The rule editor is drawn exactly like the step preview on the canvas:
+     the pair, fading, and its result in a frame beside it, joined by dashed
+     links from each dangling wire to the interface end that takes it over.
+     Opened from a pair on the canvas, it opens right beside that pair. The
+     buttons sit in a small bar on the frame's top edge. The combinator view
+     isn't a place of its own: it's a lens (Agents | γ δ ε) in the rule and
+     agent editors, plus an overview of the system in the File menu.
+     ===================================================================== */
+  const NK = NetKit, EP = EdPanel, EC = EdComb, esc = NK.esc;
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const app = await EdApp.start({ key: "editors-c", fileItems: () => [{ id: "comb", label: "Combinator translation", sub: "Every agent and rule of this system, in γ, δ and ε", run: () => openOverview() }] });
+  const { S, view, ICON } = app;
+  const sym = (id) => esc((S.typeById(id) || { symbol: id }).symbol);
+  let combMode = null; // restricted / general, remembered while the page is open
+  const modeFor = (info) => (combMode === "restricted" && !info.restrictedOk ? "general" : combMode || (info.restrictedOk ? "restricted" : "general"));
+
+  /* ---------------------------------------------------------------- the panel: a frame, with its buttons on the top edge */
+  const panel = EP.Panel(app, {
+    cls: "dir-c",
+    attached: "#panel,#selp,#hovp,#top-right,#rulePill,#agentEd",
+    frame: (o) => `<div class="cbar">
+        <h3><span class="k">${o.kindWord}</span> ${o.title}<span class="dirtydot" data-tip="Unsaved changes"></span></h3>
+        ${o.nav ? `<button class="btn navbtn" data-nav="-1">${ICON.left}</button><button class="btn navbtn" data-nav="1">${ICON.right}</button><span class="sep"></span>` : ""}
+        ${o.lens ? `<div class="seg" role="tablist" aria-label="Drawing"><button data-lens="net" aria-pressed="true" data-tip="Draw the rule with your agents">Agents</button><button data-lens="comb" aria-pressed="false">γ δ ε</button></div><span class="sep"></span>` : ""}
+        ${o.tools !== false ? `<button class="btn icon" data-ep="undo">${ICON.undo}</button><button class="btn icon" data-ep="redo">${ICON.redo}</button><span class="sep"></span>` : ""}
+        ${o.del ? `<button class="btn danger" data-ep="delete">${o.del}</button>` : ""}
+        ${o.tools !== false ? `<button class="btn" data-ep="cancel">Cancel</button><button class="btn primary" data-ep="save">Save <span class="kbd">⌘↵</span></button>` : `<button class="btn icon" data-ep="close" data-tip="Close (Esc)">${ICON.x}</button>`}
+      </div>
+      <div class="ep-body" data-slot="body"></div>
+      <div class="ep-flash" data-slot="flashnote"></div>`,
+    place(P, o) {
+      const el = P.el, W = innerWidth, H = innerHeight, pal = $("#panel").getBoundingClientRect();
+      let w = Math.min(o.w || 820, pal.left - 40), h = Math.min(o.h || 520, H - 150);
+      let left = pal.left - 16 - w, top = Math.max(70, (H - h) / 2 - 20);
+      if (o.at) {
+        // in place: beside the pair (or over the instance) it was opened from, never on top of it
+        const [x, y] = o.at;
+        if (o.over) left = x - w / 2;
+        else {
+          const rightSpace = pal.left - 16 - (x + 60), leftSpace = x - 60 - 16;
+          if (rightSpace >= w) left = x + 60;
+          else if (leftSpace >= w) left = x - 60 - w;
+          else if (rightSpace >= leftSpace) { w = Math.max(520, rightSpace); left = x + 60; }
+          else { w = Math.max(520, leftSpace); left = x - 60 - w; }
+        }
+        top = y - h / 2;
+      }
+      left = Math.max(16, Math.min(pal.left - 12 - w, left)); top = Math.max(70, Math.min(H - h - 80, top));
+      Object.assign(el.style, { left: left + "px", top: top + "px", width: w + "px", height: h + "px" });
+    },
+    flashText: (k) => `This ${k === "component" ? "component" : "rule"} has unsaved changes. Save or cancel them first.`,
+    onSync(P) { $$("[data-nav]", P.el).forEach((b) => { const k = neighbour(+b.dataset.nav); b.disabled = !k; b.setAttribute("data-tip", k ? `${+b.dataset.nav < 0 ? "Previous" : "Next"} rule: ${k.split("|").map(sym).join(" with ")}` : "No more pairs that way"); }); },
+  });
+  app.keyFirst = (e) => panel.isOpen() && panel.onKey(e);
+  app.panelWord = () => (panel.kind() === "component" ? "in the component" : "in the rule");
+  app.globalUndo = () => (panel.isOpen() && panel.ctl().history ? panel.undo() : S.undo());
+  app.globalRedo = () => (panel.isOpen() && panel.ctl().history ? panel.redo() : S.redo());
+  app.syncUndo = () => {
+    const H = panel.isOpen() && panel.ctl() && panel.ctl().history ? panel.ctl().history() : null, u = $("#undo"), r = $("#redo"), where = app.panelWord();
+    u.classList.toggle("scoped", !!H); r.classList.toggle("scoped", !!H);
+    if (H) { u.disabled = !H.canUndo(); r.disabled = !H.canRedo(); u.setAttribute("data-tip", H.canUndo() ? `Undo ${(H.undoLabel() || "").toLowerCase()} ${where} (⌘Z)` : `Nothing to undo ${where} yet`); r.setAttribute("data-tip", H.canRedo() ? `Redo ${(H.redoLabel() || "").toLowerCase()} ${where}` : `Nothing to redo ${where}`); return; }
+    u.disabled = !S.canUndo(); r.disabled = !S.canRedo();
+    u.setAttribute("data-tip", S.canUndo() ? "Undo " + (S.undoLabel() || "").toLowerCase() + " (⌘Z)" : "Nothing to undo");
+    r.setAttribute("data-tip", S.canRedo() ? "Redo " + (S.redoLabel() || "").toLowerCase() + " (⇧⌘Z)" : "Nothing to redo");
+  };
+  app.onTileClick = (id, el) => {
+    if (panel.isOpen() && (panel.kind() === "rule" || panel.kind() === "component")) {
+      const v = panel.ctl().focusView(); if (!v) return;
+      const r = v.host.getBoundingClientRect(), n = v.state.agents.length;
+      v.addAgent(id, r.left + r.width * 0.5 + (n % 3) * 30 - 30, r.top + r.height * 0.5 + (n % 2) * 26, { plug: false }); app.focusView(v); return;
+    }
+    if (panel.isOpen() && panel.dirty()) return panel.flash();
+    panel.isOpen() && panel.close();
+    const t = S.typeById(id); if (t.component) openComponent(id, {}); else app.openAgent(id, el);
+  };
+  app.tileHint = (t) => (panel.isOpen() && (panel.kind() === "rule" || panel.kind() === "component") ? `Drag into the ${panel.kind()}, or click to drop it in.` : "Drag to add. Click to edit.");
+  app.openKey = () => (panel.kind() === "rule" && panel.ctl() ? panel.ctl().rd.key : null);
+  app.beforeLoad = () => { if (panel.isOpen() && panel.dirty()) { panel.flash(); return false; } panel.close(); };
+  app.on("panel", (on) => { if (!on) { view.setPreview(null); view.setHighlight(null); } app.buildRules(); });
+
+  /* ---------------------------------------------------------------- the rule editor */
+  function neighbour(d) {
+    const ctl = panel.ctl(); if (!ctl || !ctl.rd) return null;
+    const order = app.pairOrder().filter((k) => { const [a, b] = k.split("|"); return app.cellState(a, b).s !== "never"; });
+    const i = order.findIndex((k) => k === ctl.rd.key || k.split("|").reverse().join("|") === ctl.rd.key);
+    return order[i + d] || null;
+  }
+  function screenOfPair(wid) {
+    const w = view.state.wires.find((x) => x.id === wid); if (!w) return null;
+    const p0 = view.endPos(w.ends[0]), p1 = view.endPos(w.ends[1]), r = $("#canvas").getBoundingClientRect();
+    const [x, y] = view.toScreen((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
+    return { at: [r.left + x, r.top + y], ids: w.ends.map((e) => e.agent) };
+  }
+  function openRule(key, o = {}) {
+    if (o.never) { app.toast("These two can never meet: " + o.never.replace(/<[^>]+>/g, "")); return; }
+    if (app.agentOpen()) app.closeAgent();
+    let lens = o.lens || "net", player = null;
+    const ed = EP.ruleEditor(app, key, {
+      layout: "preview", resPad: { t: 56, r: 40, b: 40, l: 40 }, pairPad: { t: 30, r: 20, b: 30, l: 20 },
+      bodyHTML: (rd) => {
+        const L = rd.T[rd.left], R = rd.T[rd.right];
+        return `<div class="cr" data-cr>
+          <div class="cr-pair"><div class="cr-cap"><b>When these meet</b><br><i>${esc(L.symbol)}</i> and <i>${esc(R.symbol)}</i>, principal port to principal port. Both disappear.</div><div class="ep-canvas ro" data-slot="pair"></div></div>
+          <div class="cr-frame"><div class="ep-canvas" data-slot="result"></div><div class="cr-cap"><b>they become this.</b> Each dashed link is a wire they leave dangling.</div>
+            <div class="symnote" data-slot="symnote" style="top:44px"><b>Not symmetric.</b> Two <i class="sym">${esc(L.symbol)}</i> meeting have no top and bottom, so the result must look the same turned upside down.</div>
+            <div class="ep-foot"><div class="ep-status" data-slot="status"></div><span class="hint" style="margin-left:auto;color:var(--faint);font-size:11.5px">Drag agents in from the palette →</span></div></div>
+          <svg class="cr-links" data-links></svg>
+        </div><div class="cr-lens" data-lens hidden></div>`;
+      },
+      bind(ctl, body) {
+        const links = body.querySelector("[data-links]"), cr = body.querySelector("[data-cr]");
+        // dashed links from each dangling wire on the pair to the interface end in the result, like the step preview
+        const draw = () => {
+          if (cr.style.display === "none") return;
+          const base = cr.getBoundingClientRect(); let s = "";
+          const at = (v, f) => { const r = v.host.getBoundingClientRect(), [x, y] = v.toScreen(f.x, f.y); return [r.left + x - base.left, r.top + y - base.top]; };
+          const open = new Set(EP.openEnds(ctl.res.view).filter((x) => x.free != null).map((x) => x.free));
+          for (const f of ctl.pair.view.state.free) {
+            const g = ctl.res.view.state.free.find((x) => x.name === f.name); if (!g) continue;
+            const a = at(ctl.pair.view, f), b = at(ctl.res.view, g), up = f.dir === "up";
+            const dy = up ? -22 : 22, mx = (a[0] + b[0]) / 2;
+            s += `<path class="${open.has(f.name) ? "open" : ""}" d="M${a[0]},${a[1]} C${a[0]},${a[1] + dy} ${mx},${(up ? Math.min(a[1], b[1]) : Math.max(a[1], b[1])) + dy * 1.6} ${mx},${(up ? Math.min(a[1], b[1]) : Math.max(a[1], b[1])) + dy * 1.6} S${b[0]},${b[1] + dy} ${b[0]},${b[1]}"/>`;
+          }
+          links.innerHTML = s;
+        };
+        ctl.drawLinks = draw;
+        for (const v of [ctl.pair.view, ctl.res.view]) v.on("camera", draw);
+        new ResizeObserver(draw).observe(cr);
+        // lens: the same rule, in γ δ ε
+        const lensEl = body.querySelector("[data-lens]");
+        ctl.setLens = (l) => {
+          if (l === "comb") {
+            const why = !ctl.rd.has ? "There's no rule yet, so there's nothing to translate. Write and save one first." : panel.dirty() ? "The γ δ ε view shows the saved rule. Save or cancel your changes first." : null;
+            if (why) { panel.flashNote(why, true); return; }
+          }
+          lens = l;
+          $$("[data-lens]", panel.el).forEach((b) => b.setAttribute("aria-pressed", b.dataset.lens === l));
+          cr.style.display = l === "comb" ? "none" : ""; lensEl.hidden = l !== "comb";
+          // the lens needs the height: grow downwards and up, back again when it's off
+          const el = panel.el;
+          if (l === "comb") { if (!el.dataset.h) { el.dataset.h = el.style.height; el.dataset.t = el.style.top; } el.style.top = "70px"; el.style.height = innerHeight - 160 + "px"; }
+          else if (el.dataset.h) { el.style.height = el.dataset.h; el.style.top = el.dataset.t; delete el.dataset.h; }
+          player && player.destroy(); player = null;
+          if (l === "comb") {
+            const info = EC.sysInfo(app, S.ex.family), mode = modeFor(info);
+            lensEl.innerHTML = `<div class="lensrow"><div>${EC.modeSwitchHTML(app, S.ex.family, mode)}</div></div><div data-player></div>`;
+            EC.bindModeSwitch(lensEl, (m) => { combMode = m; ctl.setLens("comb"); });
+            player = EC.RulePlayer(app, lensEl.querySelector("[data-player]"), { sysKey: S.ex.family, key: ctl.rd.key, mode, scale: 1.1 });
+          } else { ctl.afterOpen(); }
+        };
+        const lb = panel.el.querySelectorAll("[data-lens]");
+        const sync = () => { const c = panel.el.querySelector('[data-lens="comb"]'); if (c) c.setAttribute("data-tip", !ctl.rd.has ? "Nothing to translate yet: no saved rule" : panel.dirty() ? "Save first: this shows the saved rule" : "See this rule play out in γ, δ and ε"); };
+        ctl.syncLens = sync;
+        setTimeout(() => { $$("[data-lens]", panel.el).forEach((b) => (b.onclick = () => ctl.setLens(b.dataset.lens))); sync(); if (lens === "comb") ctl.setLens("comb"); });
+      },
+      afterOpen(ctl) { requestAnimationFrame(() => ctl.drawLinks && ctl.drawLinks()); ctl.drawLinks && ctl.drawLinks(); },
+      onChange(ctl) { ctl.drawLinks && ctl.drawLinks(); ctl.syncLens && ctl.syncLens(); },
+      destroy() { player && player.destroy(); },
+    });
+    if (!ed) return;
+    const p = o.pairWire != null ? screenOfPair(o.pairWire) : null;
+    panel.open({ kind: "rule", kindWord: "Rule", title: ed.title(), nav: true, lens: true, del: ed.rd.has ? "Delete rule" : null, at: p && p.at, w: 820, h: 500, build: ed.build });
+    // in place: the rest of the net fades, the pair stays marked
+    if (p) { view.setPreview({ fade: view.state.agents.filter((a) => !p.ids.includes(a.id)).map((a) => a.id) }); view.setHighlight({ wires: [o.pairWire] }); }
+  }
+  app.openRule = openRule;
+  panel.el.addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (!b) return; const k = neighbour(+b.dataset.nav); if (!k) return; if (panel.dirty()) return panel.flash("Save or cancel this rule before moving to the next one."); openRule(k); });
+
+  /* ---------------------------------------------------------------- the component editor: in place, over the instance */
+  function openComponent(id, o = {}) {
+    if (app.agentOpen()) app.closeAgent();
+    const c = S.typeById(id);
+    const ed = EP.componentEditor(app, id, {
+      bodyHTML: (c, n) => `<div class="cr" style="grid-template-columns:1fr"><div class="cr-frame"><div class="ep-canvas" data-slot="def"></div><div class="cr-cap"><b>Inside ${esc(c.name)}.</b> Its loose ends are its interface: what each instance plugs into.</div>
+        <div class="ep-foot"><div class="iflist" data-slot="iface"></div><span class="hint" style="margin-left:auto;color:var(--faint);font-size:11.5px">Saving updates the ${n} instance${n === 1 ? "" : "s"} on the canvas.</span></div></div></div>`,
+    });
+    let at = null;
+    const inst = o.instance != null ? view.agent(o.instance) : null;
+    if (inst) { const b = NK.agentBox(inst), r = $("#canvas").getBoundingClientRect(), [x, y] = view.toScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2); at = [r.left + x, r.top + y]; }
+    panel.open({ kind: "component", kindWord: "Component", at, over: true, title: `<span class="ep-fields"><input class="inp" data-slot="name" value="${esc(c.name)}" aria-label="Name" style="width:120px"><input class="inp symbol" data-slot="symbol" value="${esc(c.symbol || "")}" aria-label="Symbol" data-tip="Symbol"></span>`, del: "Delete component", w: 560, h: 440, build: (body, P) => {
+      const ctl = ed.build(body, P);
+      const nm = P.el.querySelector("[data-slot=name]"), sy = P.el.querySelector("[data-slot=symbol]");
+      let name = c.name, symbol = c.symbol || "", fd = false;
+      nm.oninput = () => { name = nm.value; fd = true; P.sync(); }; sy.oninput = () => { symbol = sy.value; fd = true; P.sync(); };
+      const d0 = ctl.dirty, s0 = ctl.save;
+      ctl.dirty = () => d0() || fd;
+      ctl.save = () => { s0(); const t = S.typeById(id); if (t) { t.name = name.trim() || t.name; t.symbol = symbol; app.buildPalette(); view.render(); } };
+      return ctl;
+    } });
+    if (inst) view.setPreview({ fade: view.state.agents.filter((a) => a.id !== inst.id).map((a) => a.id) });
+  }
+  app.openComponent = openComponent;
+
+  /* ---------------------------------------------------------------- the agent editor gets the same lens */
+  let agentLens = false, cellv = null;
+  app.on("agentclose", () => { agentLens = false; $("#agentEd").classList.remove("lens"); });
+  app.agentEdExtra = (t, st) => {
+    const info = EC.sysInfo(app, S.ex.family), mode = modeFor(info);
+    const head = `<div class="seg sm" data-keep><button data-al="net" aria-pressed="${!agentLens}">Agent</button><button data-al="comb" aria-pressed="${agentLens}" data-tip="Its cell: the γ, δ and ε it becomes">γ δ ε</button></div>`;
+    if (!agentLens) return { headBtn: head, bind: bindLens };
+    return { wide: true, headBtn: head, preview: `<div class="lenswrap" style="width:100%"><div data-cell></div></div>`, below: `<div style="font-size:12px">${EC.modeSwitchHTML(app, S.ex.family, mode)}</div>`, bind(root) { bindLens(root); EC.bindModeSwitch(root, (m) => { combMode = m; app.renderAgentEd(); }); cellv = EC.CellView(app, root.querySelector("[data-cell]"), { sysKey: S.ex.family, typeId: t.id, mode, scale: 1 }); } };
+  };
+  function bindLens(root) { root.querySelectorAll("[data-al]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); agentLens = b.dataset.al === "comb"; $("#agentEd").classList.toggle("lens", agentLens); app.renderAgentEd(); const el = $("#agentEd"); el.style.top = Math.max(64, Math.min(parseFloat(el.style.top) || 64, innerHeight - el.offsetHeight - 16)) + "px"; })); }
+  app.agentActions = (id) => [{ label: "Show as combinators", run: () => { agentLens = true; app.openAgent(id); $("#agentEd").classList.add("lens"); app.renderAgentEd(); } }];
+  app.pairActions = (k, w) => [{ label: "In combinators", run: () => openRule(k, { pairWire: w.id, lens: "comb" }) }];
+
+  /* ---------------------------------------------------------------- File → Combinator translation: the whole system at a glance */
+  function openOverview() {
+    if (app.agentOpen()) app.closeAgent();
+    const sysKey = S.ex.family, info = EC.sysInfo(app, sysKey);
+    panel.open({ kind: "comb", kindWord: "In combinators", title: `<span style="font-weight:500">${esc(S.ex.name)}</span>`, tools: false, w: 760, h: Math.min(640, innerHeight - 150), build: (body) => {
+      const draw = () => {
+        const mode = modeFor(info), tr = info.tr, sizes = S.ex.sizes;
+        body.innerHTML = `<div class="ov"><p class="cb-intro">${EC.INTRO}</p><div>${EC.modeSwitchHTML(app, sysKey, mode)}</div>
+          ${sizes ? `<div class="muted" style="font-size:12px">This net: <b style="color:var(--text)">${sizes.agents}</b> agents become <b style="color:var(--text)">${EC.fmt(info.identity ? sizes.agents : sizes[mode] || 0)}</b> combinators.</div>` : ""}
+          ${info.identity ? "" : `<h4>Agents</h4><table><tr><th>Agent</th><th class="num">Its cell</th>${mode === "general" ? `<th class="num">of which the code</th>` : ""}<th></th></tr>${info.sys.types.map((t) => `<tr class="row" data-agent="${esc(t.id)}"><td><span class="sym">${esc(t.symbol)}</span> <span class="muted">${esc(t.name || "")}</span></td><td class="num">${EC.fmt(tr.cells[t.id][mode])}</td>${mode === "general" ? `<td class="num muted">${EC.fmt(tr.parts[t.id][mode].code)}</td>` : ""}<td class="go">Show its cell →</td></tr>`).join("")}</table>
+          <h4>Rules</h4><table><tr><th>Rule</th><th class="num">Combinators</th><th class="num">Interactions</th><th>by kind</th><th></th></tr>${info.sys.rules.map((k) => { const c = tr.rules[k] && tr.rules[k][mode]; return `<tr class="row" data-rule="${esc(k)}"><td>${k.split("|").map((x) => `<span class="sym">${esc(info.T[x].symbol)}</span>`).join(" meets ")}</td><td class="num">${c ? EC.fmt(c.size) : ""}</td><td class="num">${c ? EC.fmt(c.total) : ""}</td><td>${c ? EC.costHTML(c).replace(/<div class="klegend">[\s\S]*$/, "") : ""}</td><td class="go">Play it →</td></tr>`; }).join("")}</table>
+          <div class="klegend">${["annihilate", "erase", "copy"].map((k) => `<span><i class="k-${k}"></i>${{ annihilate: "rewire", erase: "erase", copy: "copy" }[k]}</span>`).join("")}</div>`}</div>`;
+        EC.bindModeSwitch(body, (m) => { combMode = m; draw(); });
+        body.querySelectorAll("[data-agent]").forEach((r) => (r.onclick = () => { panel.close(); agentLens = true; app.openAgent(r.dataset.agent); $("#agentEd").classList.add("lens"); app.renderAgentEd(); }));
+        body.querySelectorAll("[data-rule]").forEach((r) => (r.onclick = () => { panel.close(); openRule(r.dataset.rule, { lens: "comb" }); }));
+      };
+      draw();
+      return { dirty: () => false, focusView: () => null };
+    } });
+  }
+
+  app.init();
+})();
+</script>
+</body>
+</html>

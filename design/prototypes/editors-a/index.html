@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties editors: beside the palette</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=STIX+Two+Text:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/types-chrome.css">
+<link rel="stylesheet" href="../shared/edkit.css">
+<style>
+/* ---- direction A: a panel beside the palette; the palette and the net stay live ---- */
+.ep.dir-a{min-width:560px;min-height:380px}
+.ep.dir-a .ep-head{cursor:grab}
+.ep.dir-a .ep-head.moving{cursor:grabbing}
+.ep.dir-a .ep-head .btn,.ep.dir-a .ep-head input{cursor:pointer}
+.ep-grip{position:absolute;left:0;bottom:0;width:16px;height:16px;cursor:nesw-resize;z-index:5}
+.ep-grip::after{content:"";position:absolute;left:4px;bottom:4px;width:7px;height:7px;border-left:1.5px solid var(--line-2);border-bottom:1.5px solid var(--line-2);border-radius:0 0 0 2px}
+/* rule editor: the pair small on the left, the result large on the right */
+.ra{display:grid;grid-template-columns:minmax(150px,27%) 26px 1fr;flex:1;min-height:0}
+.ra-before{display:flex;flex-direction:column;background:var(--chrome-2);border-right:1px solid var(--line);min-height:0}
+.ra-before .ep-canvas{flex:1;background-color:transparent}
+.ra-cap{padding:10px 12px 0;font-size:12px;color:var(--muted);line-height:1.4}
+.ra-cap b{color:var(--text);display:block;font-size:12px;margin-bottom:2px}
+.ra-teach{padding:0 12px 12px;font-size:11.5px;color:var(--muted);line-height:1.45}
+.ra-teach i{font:italic 13px 'STIX Two Text',serif;color:var(--text)}
+.ra-arrow{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px;background:linear-gradient(90deg,var(--chrome-2),var(--paper));border-right:1px solid var(--line)}
+.ra-after{display:flex;flex-direction:column;min-width:0;min-height:0}
+.ra-after .wrap{position:relative;flex:1;min-height:0;display:flex}
+.ra-after .hint{font-size:11.5px;color:var(--faint);margin-left:auto;white-space:nowrap}
+.pin-hl{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.2}
+/* combinator panel: lesson on the right, the system's verdict on the left */
+.ca{display:grid;grid-template-columns:270px 1fr;flex:1;min-height:0}
+.ca-side{border-right:1px solid var(--line);padding:12px 14px;overflow:auto;display:flex;flex-direction:column;gap:12px;background:var(--chrome)}
+.ca-side h4{margin:0 0 6px;font-size:12px;font-weight:600}
+.ca-main{overflow:auto;padding:12px 16px 16px;background:var(--chrome)}
+.ca-pick{display:flex;flex-wrap:wrap;gap:4px}
+.ca-pick button{height:26px;min-width:30px;border:1px solid var(--line-2);border-radius:7px;background:var(--chrome);padding:0 8px;cursor:pointer;color:var(--text);font:italic 14px 'STIX Two Text',serif}
+.ca-pick button.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.ca-pick button small{font:400 10.5px var(--ui-font);color:var(--muted);font-style:normal;margin-left:4px}
+.ca-tabs .seg button{height:26px}
+details.ca-intro summary{cursor:pointer;font-size:12px;font-weight:600;list-style:none;display:flex;align-items:center;gap:6px}
+details.ca-intro summary::-webkit-details-marker{display:none}
+details.ca-intro summary svg{width:11px;height:11px;transition:transform .15s}
+details.ca-intro[open] summary svg{transform:rotate(90deg)}
+details.ca-intro p{margin:6px 0 0}
+.ca-sizes{font-size:11.5px;color:var(--muted);line-height:1.5}
+.ca-sizes b{color:var(--text);font-weight:600}
+</style>
+</head>
+<body>
+<script src="../shared/netkit3.js"></script>
+<script src="../shared/edkit-app.js"></script>
+<script src="../shared/edkit-panel.js"></script>
+<script src="../shared/edkit-comb.js"></script>
+<script>
+(async function () {
+  /* =====================================================================
+     Direction A: beside the palette.
+     The panel sits between the net and the palette, which both stay live:
+     drag agents in from the palette, drag-select on the net and ⌘C / ⌘V
+     into the rule. The rule editor keeps today's before and after, but the
+     pair shrinks to a narrow column that explains what a rule is. The
+     combinator view is its own panel, opened from an agent or a rule.
+     ===================================================================== */
+  const NK = NetKit, EP = EdPanel, EC = EdComb, esc = NK.esc;
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const app = await EdApp.start({ key: "editors-a", fileItems: () => [{ id: "comb", label: "Combinator translation", sub: "One agent or one rule at a time, in γ, δ and ε", run: () => openComb({}) }] });
+  const { S, view, ICON } = app;
+  const sym = (id) => esc((S.typeById(id) || { symbol: id }).symbol);
+  let place = null; // where the user moved the panel to; kept while the page is open
+
+  /* ---------------------------------------------------------------- the panel */
+  const panel = EP.Panel(app, {
+    cls: "dir-a",
+    attached: "#panel,#selp,#hovp,#top-right,#rulePill",
+    frame: (o) => `<div class="ep-head" data-move>
+        <h3><span class="k">${o.kindWord}</span> ${o.title}<span class="dirtydot" data-tip="Unsaved changes"></span></h3>
+        ${o.nav ? `<span style="display:flex;gap:2px;margin-left:4px"><button class="btn navbtn" data-nav="-1">${ICON.left}</button><button class="btn navbtn" data-nav="1">${ICON.right}</button></span>` : ""}
+        <span class="sp"></span>
+        ${o.tools !== false ? `<button class="btn icon" data-ep="undo">${ICON.undo}</button><button class="btn icon" data-ep="redo">${ICON.redo}</button><span class="sep"></span>` : ""}
+        ${o.extra || ""}
+        ${o.del ? `<button class="btn danger" data-ep="delete">${o.del}</button>` : ""}
+        ${o.tools !== false ? `<button class="btn" data-ep="cancel">Cancel</button><button class="btn primary" data-ep="save">Save <span class="kbd">⌘↵</span></button>` : `<button class="btn icon" data-ep="close" data-tip="Close (Esc)">${ICON.x}</button>`}
+      </div>
+      <div class="ep-body" data-slot="body"></div>
+      <div class="ep-flash" data-slot="flashnote"></div>
+      <div class="ep-grip" data-tip="Drag to resize"></div>`,
+    place(P, o) {
+      const el = P.el, pal = $("#panel").getBoundingClientRect();
+      const right = innerWidth - pal.left + 12;
+      const w = place ? place.w : Math.min(o.w || 880, innerWidth - right - 24), h = place ? place.h : Math.min(o.h || 600, innerHeight - 64 - 84);
+      const left = place ? place.left : innerWidth - right - w, top = place ? place.top : 64;
+      Object.assign(el.style, { left: Math.max(12, left) + "px", top: top + "px", width: w + "px", height: h + "px" });
+      bindMove(P);
+    },
+    flashText: (k) => `This ${k === "component" ? "component" : "rule"} has unsaved changes. Save or cancel them first.`,
+    onSync(P, ctl) {
+      // the neighbouring rules, named
+      $$("[data-nav]", P.el).forEach((b) => { const k = neighbour(+b.dataset.nav); b.disabled = !k; b.setAttribute("data-tip", k ? `${+b.dataset.nav < 0 ? "Previous" : "Next"} rule: ${k.split("|").map(sym).join(" with ")}${+b.dataset.nav < 0 ? " (⌥←)" : " (⌥→)"}` : "No more pairs that way"); });
+    },
+  });
+  function bindMove(P) {
+    const head = P.el.querySelector("[data-move]"), grip = P.el.querySelector(".ep-grip");
+    head.onpointerdown = (e) => {
+      if (e.button !== 0 || e.target.closest("button,input")) return;
+      const r = P.el.getBoundingClientRect(), sx = e.clientX, sy = e.clientY; head.classList.add("moving");
+      const mv = (ev) => { P.el.style.left = r.left + ev.clientX - sx + "px"; P.el.style.top = Math.max(8, r.top + ev.clientY - sy) + "px"; };
+      const up = () => { head.classList.remove("moving"); removeEventListener("pointermove", mv); removeEventListener("pointerup", up); remember(P); };
+      addEventListener("pointermove", mv); addEventListener("pointerup", up);
+    };
+    grip.onpointerdown = (e) => {
+      e.preventDefault(); const r = P.el.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+      const mv = (ev) => { const w = Math.max(560, r.width - (ev.clientX - sx)); P.el.style.width = w + "px"; P.el.style.left = r.right - w + "px"; P.el.style.height = Math.max(380, r.height + ev.clientY - sy) + "px"; const c = P.ctl(); c && c.afterOpen && c.afterOpen(); };
+      const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); remember(P); };
+      addEventListener("pointermove", mv); addEventListener("pointerup", up);
+    };
+  }
+  function remember(P) { const r = P.el.getBoundingClientRect(); place = { left: r.left, top: r.top, w: r.width, h: r.height }; }
+
+  // While a panel is open: it gets the keys first, and the global undo / redo act on it.
+  app.keyFirst = (e) => {
+    if (panel.isOpen() && e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight") && panel.kind() === "rule") { e.preventDefault(); goNeighbour(e.key === "ArrowLeft" ? -1 : 1); return true; }
+    return panel.isOpen() && panel.onKey(e);
+  };
+  app.panelWord = () => (panel.kind() === "component" ? "in the component" : "in the rule");
+  app.globalUndo = () => (panel.isOpen() && panel.ctl().history ? panel.undo() : S.undo());
+  app.globalRedo = () => (panel.isOpen() && panel.ctl().history ? panel.redo() : S.redo());
+  app.syncUndo = () => {
+    const H = panel.isOpen() && panel.ctl() && panel.ctl().history ? panel.ctl().history() : null;
+    const u = $("#undo"), r = $("#redo"), where = panel.kind() === "component" ? "in the component" : "in the rule";
+    if (H) {
+      u.disabled = !H.canUndo(); r.disabled = !H.canRedo();
+      u.setAttribute("data-tip", H.canUndo() ? `Undo ${(H.undoLabel() || "").toLowerCase()} ${where} (⌘Z)` : `Nothing to undo ${where} yet`);
+      r.setAttribute("data-tip", H.canRedo() ? `Redo ${(H.redoLabel() || "").toLowerCase()} ${where} (⇧⌘Z)` : `Nothing to redo ${where}`);
+      u.classList.add("scoped"); r.classList.add("scoped");
+    } else {
+      u.classList.remove("scoped"); r.classList.remove("scoped");
+      u.disabled = !S.canUndo(); r.disabled = !S.canRedo();
+      u.setAttribute("data-tip", S.canUndo() ? "Undo " + (S.undoLabel() || "").toLowerCase() + " (⌘Z)" : "Nothing to undo");
+      r.setAttribute("data-tip", S.canRedo() ? "Redo " + (S.redoLabel() || "").toLowerCase() + " (⇧⌘Z)" : "Nothing to redo");
+    }
+  };
+  // The palette stays live: drag into the editor, or click to drop one in.
+  app.onTileClick = (id, el) => {
+    if (panel.isOpen() && (panel.kind() === "rule" || panel.kind() === "component")) {
+      const v = panel.ctl().focusView(), r = v.host.getBoundingClientRect();
+      const n = v.state.agents.length;
+      v.addAgent(id, r.left + r.width * 0.5 + (n % 3) * 30 - 30, r.top + r.height * 0.5 + (n % 2) * 26, { plug: false });
+      app.focusView(v); return;
+    }
+    if (panel.isOpen() && panel.dirty()) { panel.flash(); return; }
+    panel.isOpen() && panel.close();
+    const t = S.typeById(id); if (t.component) openComponent(id, {}); else app.openAgent(id, el);
+  };
+  app.tileHint = (t) => (panel.isOpen() && (panel.kind() === "rule" || panel.kind() === "component") ? `Drag into the ${panel.kind()}, or click to drop it in.` : t.component ? "Drag to add. Click to edit." : "Drag to add. Click to edit.");
+  app.on("panel", (on) => { $("#palHint").textContent = on && panel.kind() !== "comb" ? `Drag into the ${panel.kind()}, or click to drop one in.` : "Drag onto the canvas to add. Click to edit."; app.buildRules(); });
+  app.openKey = () => (panel.kind() === "rule" && panel.ctl() ? panel.ctl().rd.key : null);
+  app.beforeLoad = () => { if (panel.isOpen() && panel.dirty()) { panel.flash(); return false; } panel.close(); };
+
+  /* ---------------------------------------------------------------- the rule editor */
+  function neighbour(d) {
+    const ctl = panel.ctl(); if (!ctl || !ctl.rd) return null;
+    const order = app.pairOrder().filter((k) => { const [a, b] = k.split("|"); return app.cellState(a, b).s !== "never"; });
+    let i = order.findIndex((k) => k === ctl.rd.key || k.split("|").reverse().join("|") === ctl.rd.key);
+    return order[i + d] || null;
+  }
+  panel.el.addEventListener("click", (e) => { const b = e.target.closest("[data-nav]"); if (b && !b.disabled) goNeighbour(+b.dataset.nav); });
+  function goNeighbour(d) { const k = neighbour(d); if (!k) return; if (panel.dirty()) { panel.flash("Save or cancel this rule before moving to the next one."); return; } openRule(k, { keepPlace: true }); }
+  function openRule(key, o = {}) {
+    if (o.never) { app.toast("These two can never meet: " + o.never.replace(/<[^>]+>/g, "")); return; }
+    if (app.agentOpen()) app.closeAgent();
+    const ed = EP.ruleEditor(app, key, {
+      layout: "side",
+      resPad: { t: 54, r: 50, b: 54, l: 50 },
+      bodyHTML: (rd) => {
+        const L = rd.T[rd.left], R = rd.T[rd.right];
+        const tops = rd.lhs.free.filter((f) => f.name[0] === "L").map((f) => `<i>${app.pinLabel(f.name)}</i>`), bots = rd.lhs.free.filter((f) => f.name[0] === "R").map((f) => `<i>${app.pinLabel(f.name)}</i>`);
+        return `<div class="ra">
+          <div class="ra-before"><div class="ra-cap"><b>Before</b>When <i class="sym">${esc(L.symbol)}</i> and <i class="sym">${esc(R.symbol)}</i> meet, principal port to principal port, both disappear.</div>
+            <div class="ep-canvas ro" data-slot="pair"></div>
+            <div class="ra-teach">${tops.length || bots.length ? `The wires they held are left dangling: ${[...tops, ...bots].join(", ")}. The rule is what you plug into them, on the right. Every end needs a wire.` : "Neither has aux ports, so nothing is left dangling: the rule can only be empty, or new agents wired to each other."}</div></div>
+          <div class="ra-arrow">→</div>
+          <div class="ra-after"><div class="wrap"><div class="ep-canvas" data-slot="result"></div><div class="ep-cap"><b>After</b> what replaces them. ${rd.has ? "" : "Empty: no rule yet."}</div><div class="symnote" data-slot="symnote"><b>Not symmetric.</b> Two <i class="sym">${esc(L.symbol)}</i> meeting have no top and bottom, so the result must look the same turned upside down.</div></div>
+            <div class="ep-foot"><div class="ep-status" data-slot="status"></div><span class="hint">Drag agents in from the palette →</span></div></div>
+        </div>`;
+      },
+      bind(ctl, body) {
+        // point at an interface end: light up the same one in the pair
+        for (const v of [ctl.pair.view, ctl.res.view]) v.on("hover", (h) => {
+          const t = h && h.target, name = t && t.kind === "free" ? t.name : null;
+          for (const w of [ctl.pair.view, ctl.res.view]) { w._pinHl = name; w.render(); }
+        });
+        // pairs on the canvas that use this rule stay marked while it's open
+        app.view.setHighlight({ wires: app.view.pairs().filter((w) => { const i = app.view.pairInfo(w); return (i.a.type === ctl.rd.left && i.b.type === ctl.rd.right) || (i.a.type === ctl.rd.right && i.b.type === ctl.rd.left); }).map((w) => w.id) });
+      },
+      destroy() { app.view.setHighlight(null); },
+    });
+    if (!ed) return;
+    panel.open({ kind: "rule", kindWord: "Rule", title: ed.title(), nav: true, del: ed.rd.has ? "Delete rule" : null, extra: `<button class="btn" data-comb ${ed.rd.has ? `data-tip="See this rule play out in γ, δ and ε"` : `aria-disabled="true" data-tip="No rule yet, so nothing to translate. Write and save one first."`}>${ICON.comb}In combinators</button>`, build: ed.build });
+    const cb = panel.el.querySelector("[data-comb]");
+    if (cb) cb.onclick = () => { if (cb.getAttribute("aria-disabled") === "true") return panel.flashNote("No rule yet, so nothing to translate. Write and save one first.", true); if (panel.dirty()) return panel.flash("Save or cancel this rule first: the combinator view shows the saved rule."); openComb({ rule: ed.rd.key }); };
+  }
+  app.openRule = openRule;
+  // interface-end highlight drawn on both canvases
+  const _render = NK.View.prototype.render;
+  NK.View.prototype.render = function () {
+    _render.call(this);
+    if (!this._pinHl) return;
+    const f = this.state.free.find((x) => x.name === this._pinHl); if (!f) return;
+    this.world.insertAdjacentHTML("afterbegin", `<circle cx="${f.x}" cy="${f.y}" r="7" class="pin-hl"/>`);
+  };
+
+  /* ---------------------------------------------------------------- the component editor */
+  function openComponent(id, o = {}) {
+    if (app.agentOpen()) app.closeAgent();
+    const ed = EP.componentEditor(app, id, {
+      bodyHTML: (c, n) => `<div class="ra-after" style="flex:1"><div class="wrap"><div class="ep-canvas" data-slot="def"></div><div class="ep-cap"><b>Definition</b> Its loose ends are its interface: what an instance plugs into.</div></div>
+        <div class="ep-foot"><div class="iflist" data-slot="iface"></div><span class="hint">Saving updates the ${n} instance${n === 1 ? "" : "s"} on the canvas.</span></div></div>`,
+    });
+    const c = S.typeById(id);
+    panel.open({ kind: "component", kindWord: "Component", title: `<span class="ep-fields"><input class="inp" data-slot="name" value="${esc(c.name)}" aria-label="Name" style="width:140px"><input class="inp symbol" data-slot="symbol" value="${esc(c.symbol || "")}" aria-label="Symbol" data-tip="Symbol"></span>`, del: "Delete component", w: 760, h: 520, build: (body, P) => {
+      const ctl = ed.build(body, P);
+      // the name fields live in the head
+      const nm = P.el.querySelector("[data-slot=name]"), sy = P.el.querySelector("[data-slot=symbol]");
+      let name = c.name, symbol = c.symbol || "", fd = false;
+      nm.oninput = () => { name = nm.value; fd = true; P.sync(); }; sy.oninput = () => { symbol = sy.value; fd = true; P.sync(); };
+      const d0 = ctl.dirty, s0 = ctl.save;
+      ctl.dirty = () => d0() || fd;
+      ctl.save = () => { s0(); const t = S.typeById(id); if (t) { t.name = name.trim() || t.name; t.symbol = symbol; app.buildPalette(); view.render(); } };
+      return ctl;
+    } });
+    if (o.instance != null) view.setHighlight({ agents: [o.instance] });
+  }
+  app.openComponent = openComponent;
+
+  /* ---------------------------------------------------------------- the combinator panel */
+  let comb = { tab: "agent", agent: null, rule: null, mode: null };
+  function openComb(o) {
+    if (app.agentOpen()) app.closeAgent();
+    const sysKey = S.ex.family, info = EC.sysInfo(app, sysKey);
+    comb.mode = comb.sysKey === sysKey && comb.mode ? comb.mode : info.restrictedOk ? "restricted" : "general";
+    comb.sysKey = sysKey;
+    if (o.agent) { comb.tab = "agent"; comb.agent = o.agent; }
+    if (o.rule) { comb.tab = "rule"; comb.rule = o.rule; }
+    if (!comb.agent || !info.T[comb.agent]) comb.agent = info.sys.types[1] ? info.sys.types[1].id : info.sys.types[0].id;
+    if (!comb.rule || !info.sys.rules.includes(comb.rule)) comb.rule = info.sys.rules.find((k) => k.split("|").includes(comb.agent)) || info.sys.rules[0];
+    let cell = null, player = null;
+    panel.open({ kind: "comb", kindWord: "In combinators", title: "", tools: false, w: 980, h: Math.min(700, innerHeight - 150), build: (body, P) => {
+      body.innerHTML = `<div class="ca"><div class="ca-side" data-side></div><div class="ca-main" data-main></div></div>`;
+      const side = body.querySelector("[data-side]"), main = body.querySelector("[data-main]");
+      const sizes = S.ex.sizes;
+      function drawSide() {
+        side.innerHTML = `<div class="ca-tabs"><div class="seg" role="tablist"><button aria-pressed="${comb.tab === "agent"}" data-tab="agent">One agent</button><button aria-pressed="${comb.tab === "rule"}" data-tab="rule">One rule</button></div></div>
+          <div><h4>${comb.tab === "agent" ? "Agent" : "Rule"}</h4><div class="ca-pick">${comb.tab === "agent" ? info.sys.types.map((t) => `<button data-agent="${esc(t.id)}" class="${t.id === comb.agent ? "on" : ""}">${esc(t.symbol)}</button>`).join("") : info.sys.rules.map((k) => `<button data-rule="${esc(k)}" class="${k === comb.rule ? "on" : ""}">${k.split("|").map((x) => esc(info.T[x].symbol)).join(" ")}<small>${info.tr.rules && info.tr.rules[k] && info.tr.rules[k][comb.mode] ? EC.fmt(info.tr.rules[k][comb.mode].total) : ""}</small></button>`).join("")}</div></div>
+          <details class="ca-intro" ${localStorage.getItem("a-intro") === "0" ? "" : "open"}><summary>${ICON.right}What is this?</summary><p class="cb-intro">${EC.INTRO}</p></details>
+          <div>${EC.modeSwitchHTML(app, sysKey, comb.mode)}</div>
+          ${sizes ? `<div class="ca-sizes">This net: <b>${sizes.agents}</b> agents → ${sizes.restricted != null ? `<b>${EC.fmt(sizes.restricted)}</b> combinators restricted, ` : ""}<b>${EC.fmt(sizes.general)}</b> general. Too many to draw whole, so this shows one agent or one rule at a time.</div>` : ""}`;
+        $$("[data-tab]", side).forEach((b) => (b.onclick = () => { comb.tab = b.dataset.tab; drawSide(); drawMain(); }));
+        $$("[data-agent]", side).forEach((b) => (b.onclick = () => { comb.agent = b.dataset.agent; drawSide(); drawMain(); }));
+        $$("[data-rule]", side).forEach((b) => (b.onclick = () => { comb.rule = b.dataset.rule; drawSide(); drawMain(); }));
+        EC.bindModeSwitch(side, (m) => { comb.mode = m; drawSide(); drawMain(); });
+        const det = side.querySelector("details"); det.ontoggle = () => { try { localStorage.setItem("a-intro", det.open ? "1" : "0"); } catch (_) {} };
+      }
+      function drawMain() {
+        player && player.destroy(); player = null;
+        if (comb.tab === "agent") cell = EC.CellView(app, main, { sysKey, typeId: comb.agent, mode: comb.mode });
+        else player = EC.RulePlayer(app, main, { sysKey, key: comb.rule, mode: comb.mode });
+      }
+      drawSide(); drawMain();
+      return { dirty: () => false, focusView: () => null, destroy() { player && player.destroy(); }, onKey(e) {
+        if (comb.tab === "rule" && player && (e.key === "ArrowRight" || e.key === "ArrowLeft") && !e.metaKey) { const b = main.querySelector(`[data-c="${e.key === "ArrowRight" ? "step" : "back"}"]`); b && b.click(); return true; }
+        return false; } };
+    } });
+    const h = panel.el.querySelector(".ep-head h3"); h.innerHTML = `<span class="k">In combinators</span> <span style="font-weight:500">${esc(S.ex.name)}</span><span class="muted" style="font-weight:400;font-size:12px">· ${EC.verdict(app, sysKey).short}</span>`;
+  }
+  app.agentActions = (id) => [{ label: "Show as combinators", run: () => openComb({ agent: id }) }];
+  app.pairActions = (k) => [{ label: "In combinators", run: () => openComb({ rule: k }) }];
+  app.agentEdExtra = (t) => ({ below: `<button class="linkbtn" data-keep id="aeComb">${ICON.comb} Show as combinators</button>`, bind: (root) => { root.querySelector("#aeComb").onclick = () => { app.closeAgent(); openComb({ agent: t.id }); }; } });
+
+  app.init();
+})();
+</script>
+<style>
+.linkbtn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:6px;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2)}
+.linkbtn:hover{color:var(--text)}
+.linkbtn svg{width:14px;height:14px}
+#top-right .btn.scoped{color:var(--accent)}
+</style>
+</body>
+</html>

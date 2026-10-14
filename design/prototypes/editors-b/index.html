@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netties editors: grows from where you click</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 3h12L8 13z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=STIX+Two+Text:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/types-chrome.css">
+<link rel="stylesheet" href="../shared/edkit.css">
+<style>
+/* ---- direction B: the panel grows out of what you clicked, dims the rest, and carries its own palette ---- */
+.ep.dir-b{border-radius:16px}
+.ep.dir-b.max{border-radius:14px}
+.ep.dir-b .ep-head h3 .k{font-weight:500}
+.bp{display:grid;grid-template-columns:auto 1fr;flex:1;min-height:0}
+.bp-pal{width:84px;border-right:1px solid var(--line);padding:10px 8px;display:flex;flex-direction:column;gap:6px;overflow:auto;background:var(--chrome)}
+.bp-pal .tiles{grid-template-columns:1fr;gap:5px}
+.bp-pal .tile{padding:5px 2px 4px}
+.bp-pal .cap{font-size:10.5px;color:var(--muted);line-height:1.3;text-align:center}
+.bp-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.bp-stage{position:relative;flex:1;min-height:0}
+.bp-stage .ep-canvas{position:absolute;inset:0;transition:opacity .35s}
+.bp-stage .ep-canvas.off{opacity:0;pointer-events:none}
+.bp-stage .ep-canvas.ghost{opacity:.16;pointer-events:none}
+.bp-top{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:4;display:flex;gap:8px;align-items:center}
+.bp-top .seg button{height:26px;font-size:12px}
+.bp-top .btn{height:30px;font-size:12px;border:1px solid var(--line-2);background:var(--chrome)}
+.bp-say{position:absolute;left:12px;right:12px;bottom:10px;z-index:4;pointer-events:none;display:flex;justify-content:center}
+.bp-say span{background:color-mix(in srgb,var(--chrome) 92%,transparent);border:1px solid var(--line);border-radius:9px;padding:6px 11px;font-size:12px;color:var(--muted);max-width:560px;text-align:center;line-height:1.4;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.bp-say b{color:var(--text)}
+.bp-say i{font:italic 13px 'STIX Two Text',serif;color:var(--text)}
+.bp-x{stroke:var(--stuck);stroke-width:1.8;stroke-linecap:round}
+.bp-strip{display:flex;gap:4px;align-items:center;padding:7px 10px;border-top:1px solid var(--line);overflow-x:auto;flex:none}
+.bp-strip .lab{font-size:11px;color:var(--muted);margin-right:4px;white-space:nowrap}
+.bp-chip{height:24px;border:1px solid var(--line);border-radius:999px;background:var(--chrome);padding:0 9px;cursor:pointer;color:var(--text);font:italic 13px 'STIX Two Text',serif;white-space:nowrap;display:inline-flex;align-items:center;gap:3px}
+.bp-chip:hover{border-color:var(--line-2);background:var(--chrome-2)}
+.bp-chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.bp-chip.none{border-style:dashed;color:var(--muted)}
+.bp-chip small{font:400 10px var(--ui-font);color:var(--faint)}
+.bp-status{position:absolute;left:12px;top:12px;z-index:4;font-size:12px;display:flex;gap:6px;align-items:center;background:color-mix(in srgb,var(--chrome) 92%,transparent);border:1px solid var(--line);border-radius:9px;padding:5px 9px}
+.bp-status.bad{border-color:color-mix(in srgb,var(--stuck) 45%,var(--line))}
+.bp-status:empty{display:none}
+/* combinators: the whole net, each agent a box that opens in place */
+.bc{display:grid;grid-template-columns:290px 1fr;flex:1;min-height:0}
+.bc-right{display:flex;flex-direction:column;min-width:0;min-height:0}
+.bc-top{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-right:1px solid var(--line);overflow:auto}
+.bc-top .cb-defs{margin:0}
+.bc-top .cb-verdict{margin:0;grid-column:1/-1}
+.bc-top{grid-template-columns:1fr}
+details.bc-intro summary{cursor:pointer;font-size:12px;font-weight:600;list-style:none;display:inline-flex;align-items:center;gap:6px;margin-bottom:6px}
+details.bc-intro summary::-webkit-details-marker{display:none}
+details.bc-intro summary svg{width:11px;height:11px;transition:transform .15s}
+details.bc-intro[open] summary svg{transform:rotate(90deg)}
+details.bc-intro p{margin:0 0 8px}
+.bc-crumbs{display:flex;align-items:center;gap:6px;padding:8px 14px 0;font-size:12px;color:var(--muted)}
+.bc-crumbs button{border:0;background:transparent;color:var(--accent);cursor:pointer;font:inherit;padding:0}
+.bc-crumbs b{color:var(--text);font-weight:500}
+.bc-body{flex:1;min-height:0;overflow:auto;padding:10px 14px 14px}
+.bc-net svg{display:block;margin:0 auto;max-width:100%;height:auto}
+.bc-net .bcell{cursor:zoom-in}
+.bc-net .bcell:hover .cb-box-o{stroke:var(--accent)}
+.bc-net .bpair{cursor:pointer}
+.bc-net .bpair .act{fill:none;stroke:var(--active);stroke-width:6;opacity:var(--active-op,.55);stroke-linecap:round}
+.bc-net .bpair:hover .act{stroke-width:9;opacity:.9}
+.bc-net .bpair .hit{fill:none;stroke:transparent;stroke-width:16}
+.bc-ctl{display:flex;gap:6px;align-items:center;padding:8px 14px;border-top:1px solid var(--line);flex:none;flex-wrap:wrap}
+.bc-ctl .btn{height:28px;font-size:12px}
+.bc-ctl .btn[aria-disabled=true]{opacity:.4;cursor:not-allowed}
+.bc-ctl .whys{flex-basis:100%;display:flex;flex-direction:column;gap:2px}
+.bc-zoom{animation:bcz .28s cubic-bezier(.2,.8,.2,1)}
+@keyframes bcz{from{transform:scale(.6);opacity:.2}to{transform:none;opacity:1}}
+.bc-hullbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.bc-hullbar .sp{flex:1}
+.collapse-btn{width:22px;height:22px;border:1px solid var(--muted);border-radius:5px;background:var(--chrome);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);padding:0}
+.collapse-btn:hover{border-color:var(--accent);color:var(--accent)}
+.collapse-btn svg{width:12px;height:12px}
+.bc-cellwrap{border:1px dashed var(--muted);border-radius:12px;padding:10px 12px 12px;position:relative}
+.linkbtn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:6px;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2)}
+.linkbtn:hover{color:var(--text)}
+.linkbtn svg{width:14px;height:14px}
+#top-right .btn:disabled{opacity:.3}
+</style>
+</head>
+<body>
+<script src="../shared/netkit3.js"></script>
+<script src="../shared/edkit-app.js"></script>
+<script src="../shared/edkit-panel.js"></script>
+<script src="../shared/edkit-comb.js"></script>
+<script>
+(async function () {
+  /* =====================================================================
+     Direction B: grows from where you click.
+     The panel opens out of the grid cell, the tile or the pair you clicked,
+     right next to it, and dims everything else: it's a focused place with
+     its own palette. The rule editor is one canvas: Before shows the pair,
+     After the result, and the interface ends never move between the two, so
+     you can see the pair turn into its result (Play). The combinator view is
+     your whole net with every agent as a box; open one to see its cell, or
+     click an amber pair to watch its rule in combinators.
+     ===================================================================== */
+  const NK = NetKit, EP = EdPanel, EC = EdComb, esc = NK.esc;
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const app = await EdApp.start({ key: "editors-b", fileItems: () => [{ id: "comb", label: "Combinator translation", sub: "Your net in γ, δ and ε: open any agent's box", run: () => openComb({ origin: $("#fileBtn") }) }] });
+  const { S, view, ICON } = app;
+  const sym = (id) => esc((S.typeById(id) || { symbol: id }).symbol);
+  const MAX = `<svg viewBox="0 0 16 16"><path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;
+  let maxed = false;
+
+  /* ---------------------------------------------------------------- the panel: grows from its origin, dims the rest */
+  const panel = EP.Panel(app, {
+    cls: "dir-b", scrim: true, grow: true, escTwice: true, ownsKeys: true,
+    attached: "#hovp,#selp",
+    frame: (o) => `<div class="ep-head">
+        <h3><span class="k">${o.kindWord}</span> ${o.title}<span class="dirtydot" data-tip="Unsaved changes"></span></h3>
+        <span class="sp"></span>
+        ${o.tools !== false ? `<button class="btn icon" data-ep="undo">${ICON.undo}</button><button class="btn icon" data-ep="redo">${ICON.redo}</button><span class="sep"></span>` : ""}
+        ${o.extra || ""}
+        ${o.del ? `<button class="btn danger" data-ep="delete">${o.del}</button>` : ""}
+        <button class="btn icon" data-max data-tip="${maxed ? "Back to normal size" : "Fill the window"}">${MAX}</button>
+        ${o.tools !== false ? `<button class="btn" data-ep="cancel">Cancel</button><button class="btn primary" data-ep="save">Save <span class="kbd">⌘↵</span></button>` : `<button class="btn icon" data-ep="close" data-tip="Close (Esc)">${ICON.x}</button>`}
+      </div>
+      <div class="ep-body" data-slot="body"></div>
+      <div class="ep-flash" data-slot="flashnote"></div>`,
+    place: function placeB(P, o) {
+      const el = P.el, W = innerWidth, H = innerHeight;
+      if (o.rect && !maxed) { el.classList.remove("max"); Object.assign(el.style, { left: o.rect.left + "px", top: o.rect.top + "px", width: o.rect.width + "px", height: o.rect.height + "px" }); }
+      else if (maxed) { Object.assign(el.style, { left: "24px", top: "24px", width: W - 48 + "px", height: H - 48 + "px" }); el.classList.add("max"); }
+      else {
+        el.classList.remove("max");
+        let w = Math.min(o.w || 880, W - 48);
+        const h = Math.min(o.h || 600, H - 96);
+        // next to what opened it, never on top of it: left of a palette cell, beside a pair on the canvas
+        const r = o.origin ? o.origin.getBoundingClientRect() : { left: W / 2, right: W / 2, top: H / 2 - h / 2, bottom: H / 2, width: 0, height: 0 };
+        const rightSpace = W - 16 - (r.right + 14), leftSpace = r.left - 14 - 16;
+        let left;
+        if (leftSpace >= w && (r.left > W / 2 || rightSpace < w)) left = r.left - 14 - w;
+        else if (rightSpace >= w) left = r.right + 14;
+        else if (leftSpace >= rightSpace) { w = Math.max(560, leftSpace); left = r.left - 14 - w; }
+        else { w = Math.max(560, rightSpace); left = r.right + 14; }
+        let top = r.top + r.height / 2 - h / 2;
+        if (o.originMenu) { left = r.left; top = r.bottom + 10; }
+        left = Math.max(16, Math.min(W - w - 16, left)); top = Math.max(16, Math.min(H - h - 16, top));
+        Object.assign(el.style, { left: left + "px", top: top + "px", width: w + "px", height: h + "px" });
+      }
+      const mb = el.querySelector("[data-max]");
+      if (mb) { mb.setAttribute("data-tip", maxed ? "Back to normal size" : "Fill the window"); mb.onclick = () => { maxed = !maxed; placeB(P, o); const c = P.ctl(); c && c.afterOpen && c.afterOpen(); app.refreshTip(); }; }
+    },
+    flashText: (k) => `This ${k === "component" ? "component" : "rule"} has unsaved changes. Save (⌘↵) or cancel first.`,
+    discardWord: () => "Threw away your changes.",
+  });
+  let reopen = null;
+  app.mainBlocked = () => panel.isOpen();
+  app.keyFirst = (e) => panel.isOpen() && panel.onKey(e);
+  app.panelWord = () => (panel.kind() === "component" ? "in the component" : "in the rule");
+  // The main undo and redo sit under the dimmed backdrop: the panel has its own.
+  app.syncUndo = () => {
+    const u = $("#undo"), r = $("#redo");
+    if (panel.isOpen()) { u.disabled = r.disabled = true; u.setAttribute("data-tip", "Undo inside the panel: ⌘Z, or its own buttons"); r.setAttribute("data-tip", "Redo inside the panel: ⇧⌘Z"); return; }
+    u.disabled = !S.canUndo(); r.disabled = !S.canRedo();
+    u.setAttribute("data-tip", S.canUndo() ? "Undo " + (S.undoLabel() || "").toLowerCase() + " (⌘Z)" : "Nothing to undo");
+    r.setAttribute("data-tip", S.canRedo() ? "Redo " + (S.redoLabel() || "").toLowerCase() + " (⇧⌘Z)" : "Nothing to redo");
+  };
+  app.openKey = () => (panel.kind() === "rule" && panel.ctl() ? panel.ctl().rd.key : null);
+  app.beforeLoad = () => { if (panel.isOpen()) { panel.dirty() ? panel.flash() : panel.close(); return !panel.isOpen(); } };
+
+  // The panel's own palette: the same tiles, dragged the same way.
+  function ownPalette(word) {
+    return `<div class="bp-pal" data-pal><div class="tiles">${S.types.map((t) => app.tileHTML(t, { size: 30 })).join("")}</div><div class="cap">Drag in. Click drops one in.</div>${app.clip ? `<div class="cap" style="margin-top:6px">⌘V pastes what you copied from the net.</div>` : ""}</div>`;
+  }
+  function bindOwnPalette(body, getView) {
+    app.bindTiles(body.querySelector("[data-pal]"), { inPanel: true, onClick: (id) => { const v = getView(), r = v.host.getBoundingClientRect(), n = v.state.agents.length; v.addAgent(id, r.left + r.width / 2 + (n % 3) * 30 - 30, r.top + r.height / 2 + (n % 2) * 26, { plug: false }); app.focusView(v); } });
+  }
+  app.tileHint = (t, h) => (h.inPanel ? "Drag it into the canvas, or click to drop one in." : "Drag to add. Click to edit.");
+
+  /* ---------------------------------------------------------------- the rule editor: one canvas, the pair turns into the result */
+  // The "before" picture is built around the result's own interface ends, so they stay put.
+  function pairAround(rd, rhs) {
+    const T = rd.T, pin = (n) => rhs.free.find((f) => f.name === n);
+    const tops = rhs.free.filter((f) => f.name[0] === "L"), bots = rhs.free.filter((f) => f.name[0] === "R");
+    const xs = rhs.free.map((f) => f.x), cx = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0;
+    const ty = tops.length ? tops[0].y : -80, by = bots.length ? bots[0].y : 80, cy = (ty + by) / 2;
+    const A = NK.makeAgent(T[rd.left], 1, cx, cy - 28, "down"), B = NK.makeAgent(T[rd.right], 2, cx, cy + 28, "up");
+    const st = { agents: [A, B], wires: [{ id: 1, ends: [{ agent: 1, slot: 0 }, { agent: 2, slot: 0 }], path: [A.ports[0], B.ports[0]] }], free: NK.clone(rhs.free) };
+    let id = 2;
+    for (const [ag, side] of [[A, "L"], [B, "R"]]) ag.ports.forEach((p, i) => {
+      if (!i) return; const f = pin(side + i); if (!f) return;
+      st.wires.push({ id: ++id, ends: [{ agent: ag.id, slot: i }, { free: f.name }], path: NK.curve(p, NK.portDir(ag, i), [f.x, f.y], f.dir === "up" ? [0, 1] : [0, -1], 18) });
+    });
+    for (const f of st.free) { f.pin = false; f.pinShow = true; }
+    return st;
+  }
+  function openRule(key, o = {}) {
+    if (o.never) { app.toast("These two can never meet: " + o.never.replace(/<[^>]+>/g, "")); return; }
+    if (app.agentOpen()) app.closeAgent();
+    let peek = false, timer = 0;
+    const ed = EP.ruleEditor(app, key, {
+      layout: "toggle", resPad: { t: 72, r: 60, b: 100, l: 60 },
+      bodyHTML: (rd) => `<div class="bp">${ownPalette()}<div class="bp-main"><div class="bp-stage">
+          <div class="ep-canvas off" data-slot="pair"></div><div class="ep-canvas" data-slot="result"></div>
+          <div class="bp-top"><div class="seg" role="tablist"><button data-m="before" aria-pressed="false" data-tip="The pair, about to meet (hold Space to peek)">Before</button><button data-m="after" aria-pressed="true" data-tip="What replaces it: edit here">After</button></div><button class="btn" data-play data-tip="Watch the pair turn into the result">${ICON.right}Play</button></div>
+          <div class="bp-status" data-slot="status"></div>
+          <div class="symnote" data-slot="symnote"><b>Not symmetric.</b> Two <i class="sym">${esc(rd.T[rd.left].symbol)}</i> meeting have no top and bottom, so the result must look the same turned upside down.</div>
+          <div class="bp-say" data-say></div>
+        </div>${strip(rd)}</div></div>`,
+      bind(ctl, body) {
+        bindOwnPalette(body, () => ctl.res.view);
+        // the before picture shares the result's interface ends and camera
+        const syncBefore = () => { ctl.pair.view.setState(pairAround(ctl.rd, ctl.res.view.state)); ctl.pair.view.cam = { ...ctl.res.view.cam }; ctl.pair.view.render(); };
+        ctl.res.view.on("camera", () => { ctl.pair.view.cam = { ...ctl.res.view.cam }; ctl.pair.view.render(); });
+        ctl.syncBefore = syncBefore;
+        const say = body.querySelector("[data-say]"), rd = ctl.rd, L = rd.T[rd.left], R = rd.T[rd.right];
+        const ends = [...ctl.rd.rhs0.free].sort((p, q) => p.name.localeCompare(q.name)).map((f) => `<i>${app.pinLabel(f.name)}</i>`).join(", ");
+        const setMode = (m, anim) => {
+          ctl.setMode(m);
+          body.querySelectorAll("[data-m]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.m === m));
+          syncBefore();
+          ctl.pair.host.classList.toggle("off", m !== "before" && m !== "dissolve");
+          ctl.res.host.classList.toggle("off", m === "before" || m === "dissolve");
+          ctl.pair.view._xs = m === "dissolve"; ctl.pair.view.render();
+          say.innerHTML = m === "before" ? `<span><b>Before:</b> <i>${esc(L.symbol)}</i> and <i>${esc(R.symbol)}</i> meet, principal port to principal port. Press Play: they'll disappear, and the wires they held stay where they are as ${ends || "nothing"}.</span>`
+            : m === "dissolve" ? `<span><b>Both disappear.</b> Their wires are left dangling at ${ends || "nowhere: they had no aux ports"}: the interface ends.</span>`
+            : `<span><b>After:</b> what you plug into ${ends || "nothing"}. Every end needs a wire. The ends stay put; Before shows them on the pair.</span>`;
+        };
+        ctl.setModeB = setMode;
+        body.querySelectorAll("[data-m]").forEach((b) => (b.onclick = () => setMode(b.dataset.m)));
+        body.querySelector("[data-play]").onclick = () => { clearTimeout(timer); setMode("before"); timer = setTimeout(() => { setMode("dissolve"); timer = setTimeout(() => setMode("after"), 1300); }, 1100); };
+        setMode("after");
+        bindStrip(body, ctl);
+      },
+      afterOpen(ctl) { ctl.syncBefore && ctl.syncBefore(); },
+      onChange(ctl) { ctl.syncBefore && ctl.syncBefore(); },
+      onKey(ctl, e) {
+        if (e.key === " " && !e.repeat && ctl.mode() === "after") { e.preventDefault(); peek = true; ctl.setModeB("before"); const up = (ev) => { if (ev.key === " ") { removeEventListener("keyup", up); peek = false; ctl.setModeB("after"); } }; addEventListener("keyup", up); return true; }
+        if (e.key === " ") { e.preventDefault(); return true; }
+        if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { e.preventDefault(); goNeighbour(ctl, e.key === "ArrowLeft" ? -1 : 1); return true; }
+        return false;
+      },
+      destroy() { clearTimeout(timer); },
+    });
+    if (!ed) return;
+    const origin = (o.pairWire != null && pairOrigin(o.pairWire)) || o.origin || $(`#gridHost .c[data-k="${CSS.escape(ed.rd.key)}"]`);
+    const opener = () => panel.open({ kind: "rule", kindWord: "Rule", title: ed.title(), origin: o.rect ? null : origin, rect: o.rect, del: ed.rd.has ? "Delete rule" : null, w: 860, h: 600, build: ed.build });
+    reopen = () => openRule(key, o);
+    opener();
+  }
+  app.openRule = openRule;
+  // the dissolving pair: × on each agent, like the step preview
+  const _render = NK.View.prototype.render;
+  NK.View.prototype.render = function () {
+    _render.call(this);
+    if (!this._xs) return;
+    let s = "";
+    for (const a of this.state.agents) { const b = NK.agentBox(a), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, r = 5; s += `<line x1="${cx - r}" y1="${cy - r}" x2="${cx + r}" y2="${cy + r}" class="bp-x"/><line x1="${cx - r}" y1="${cy + r}" x2="${cx + r}" y2="${cy - r}" class="bp-x"/>`; }
+    this.world.querySelectorAll(".nk-agent").forEach((g) => g.setAttribute("opacity", ".3"));
+    this.world.insertAdjacentHTML("beforeend", s);
+  };
+  function pairOrigin(wid) {
+    if (wid == null) return null;
+    const w = view.state.wires.find((x) => x.id === wid); if (!w) return null;
+    const p0 = view.toScreen(...view.endPos(w.ends[0])), p1 = view.toScreen(...view.endPos(w.ends[1]));
+    const d = document.createElement("div"); Object.assign(d.style, { position: "fixed", left: Math.min(p0[0], p1[0]) - 30 + "px", top: Math.min(p0[1], p1[1]) - 30 + "px", width: Math.abs(p1[0] - p0[0]) + 60 + "px", height: Math.abs(p1[1] - p0[1]) + 60 + "px" });
+    document.body.appendChild(d); setTimeout(() => d.remove(), 600); return d;
+  }
+  // every pair that can meet, as chips along the bottom: move between rules without closing
+  function strip(rd) {
+    const keys = app.pairOrder().filter((k) => { const [a, b] = k.split("|"); return app.cellState(a, b).s !== "never"; });
+    return `<div class="bp-strip"><span class="lab">Rules</span>${keys.map((k) => { const [a, b] = k.split("|"), st = app.cellState(a, b); const on = k === rd.key || k.split("|").reverse().join("|") === rd.key; return `<button class="bp-chip${on ? " on" : ""}${st.s === "has" ? "" : " none"}" data-k="${esc(k)}" data-tip="${st.s === "has" ? "" : "No rule yet. "}${on ? "This rule" : "Switch to this rule (⌥← ⌥→)"}">${sym(a)} ${sym(b)}</button>`; }).join("")}</div>`;
+  }
+  function bindStrip(body, ctl) {
+    body.querySelectorAll(".bp-chip").forEach((b) => (b.onclick = () => {
+      const k = b.dataset.k; if (k === ctl.rd.key || k.split("|").reverse().join("|") === ctl.rd.key) return;
+      if (panel.dirty()) return panel.flash("Save or cancel this rule before moving to another one.");
+      const rect = panel.el.getBoundingClientRect(); panel.close(false, true); openRule(k, { rect });
+    }));
+    const on = body.querySelector(".bp-chip.on"); on && on.scrollIntoView({ inline: "center", block: "nearest" });
+  }
+  function goNeighbour(ctl, d) {
+    const keys = app.pairOrder().filter((k) => { const [a, b] = k.split("|"); return app.cellState(a, b).s !== "never"; });
+    const i = keys.findIndex((k) => k === ctl.rd.key || k.split("|").reverse().join("|") === ctl.rd.key), k = keys[i + d]; if (!k) return;
+    if (panel.dirty()) return panel.flash("Save or cancel this rule before moving to another one.");
+    const rect = panel.el.getBoundingClientRect(); panel.close(false, true); openRule(k, { rect });
+  }
+
+  /* ---------------------------------------------------------------- the component editor: grows out of the instance */
+  function openComponent(id, o = {}) {
+    if (app.agentOpen()) app.closeAgent();
+    const c = S.typeById(id);
+    const ed = EP.componentEditor(app, id, {
+      bodyHTML: (c, n) => `<div class="bp">${ownPalette()}<div class="bp-main"><div class="bp-stage"><div class="ep-canvas" data-slot="def"></div><div class="bp-say" style="top:10px;bottom:auto"><span>Its loose ends are its interface: what each instance plugs into. Saving updates the <b>${n} instance${n === 1 ? "" : "s"}</b> on the canvas.</span></div></div>
+        <div class="ep-foot"><div class="iflist" data-slot="iface"></div></div></div></div>`,
+      fitPad: { t: 80, r: 50, b: 40, l: 50 },
+      bind(ctl, body) { bindOwnPalette(body, () => ctl.ed.view); },
+    });
+    let origin = o.origin;
+    if (o.instance != null) { const a = view.agent(o.instance); if (a) { const b = NK.agentBox(a), p0 = view.toScreen(b.x0, b.y0), p1 = view.toScreen(b.x1, b.y1), r = $("#canvas").getBoundingClientRect(); origin = document.createElement("div"); Object.assign(origin.style, { position: "fixed", left: r.left + p0[0] + "px", top: r.top + p0[1] + "px", width: p1[0] - p0[0] + "px", height: p1[1] - p0[1] + "px" }); document.body.appendChild(origin); const og = origin; setTimeout(() => og.remove(), 600); } }
+    reopen = () => openComponent(id, o);
+    panel.open({ kind: "component", kindWord: "Component", origin, title: `<span class="ep-fields"><input class="inp" data-slot="name" value="${esc(c.name)}" aria-label="Name" style="width:140px"><input class="inp symbol" data-slot="symbol" value="${esc(c.symbol || "")}" aria-label="Symbol" data-tip="Symbol"></span>`, del: "Delete component", w: 720, h: 520, build: (body, P) => {
+      const ctl = ed.build(body, P);
+      const nm = P.el.querySelector("[data-slot=name]"), sy = P.el.querySelector("[data-slot=symbol]");
+      let name = c.name, symbol = c.symbol || "", fd = false;
+      nm.oninput = () => { name = nm.value; fd = true; P.sync(); }; sy.oninput = () => { symbol = sy.value; fd = true; P.sync(); };
+      const d0 = ctl.dirty, s0 = ctl.save;
+      ctl.dirty = () => d0() || fd;
+      ctl.save = () => { s0(); const t = S.typeById(id); if (t) { t.name = name.trim() || t.name; t.symbol = symbol; app.buildPalette(); view.render(); } };
+      return ctl;
+    } });
+  }
+  app.openComponent = openComponent;
+
+  /* ---------------------------------------------------------------- combinators: your whole net, every agent a box */
+  const cs = { mode: null, open: null, rule: null, at: 0 };
+  function openComb(o = {}) {
+    if (app.agentOpen()) app.closeAgent();
+    const sysKey = S.ex.family, info = EC.sysInfo(app, sysKey);
+    if (cs.sysKey !== sysKey) { cs.mode = info.restrictedOk ? "restricted" : "general"; cs.open = null; cs.rule = null; cs.at = 0; }
+    cs.sysKey = sysKey;
+    if (o.agent) cs.openType = o.agent;
+    if (o.rule) cs.rule = o.rule;
+    let player = null, cellv = null;
+    reopen = () => openComb({});
+    panel.open({ kind: "comb", kindWord: "In combinators", title: `<span style="font-weight:500">${esc(S.ex.name)}</span><span class="muted" style="font-weight:400;font-size:12px">· ${EC.verdict(app, sysKey).short}</span>`, tools: false, origin: o.origin, w: Math.min(1180, innerWidth - 48), h: innerHeight - 48, build: (body, P) => {
+      body.innerHTML = `<div class="bc"><div class="bc-top" data-top></div><div class="bc-right"><div class="bc-crumbs" data-crumbs></div><div class="bc-body" data-body></div><div class="bc-ctl" data-ctl></div></div></div>`;
+      const top = body.querySelector("[data-top]"), crumbs = body.querySelector("[data-crumbs]"), main = body.querySelector("[data-body]"), ctlEl = body.querySelector("[data-ctl]");
+      // the net to show: the main net, stepped here on its own copy
+      const states = S.ex.states, base = S.stepIndex;
+      const netAt = () => (cs.at === 0 ? view.state : states[base + cs.at]);
+      function drawTop() {
+        let seen = false; try { seen = localStorage.getItem("b-intro") === "1"; } catch (_) {}
+        top.innerHTML = `<div><details class="bc-intro"${seen ? "" : " open"}><summary>${ICON.right}What is this?</summary><p class="cb-intro">${EC.INTRO}</p></details>${EC.modeSwitchHTML(app, sysKey, cs.mode)}</div><p class="cb-intro" style="font-size:12px">Each box is one of your agents, translated: the number is how many combinators its cell holds. Your net is drawn whole; what's inside each box is shown one at a time.</p>`;
+        EC.bindModeSwitch(top, (m) => { cs.mode = m; drawTop(); draw(); });
+        const det = top.querySelector("details"); det.ontoggle = () => { try { localStorage.setItem("b-intro", det.open ? "0" : "1"); } catch (_) {} };
+      }
+      function draw() {
+        player && player.destroy(); player = null;
+        const types = Object.fromEntries(S.types.map((t) => [t.id, t]));
+        if (cs.rule) {
+          const [a, b] = cs.rule.split("|");
+          crumbs.innerHTML = `<button data-crumb="net">${esc(S.ex.name)}</button> › <b>${sym(a)} meets ${sym(b)}</b>`;
+          main.innerHTML = `<div class="bc-cellwrap bc-zoom"><div class="bc-hullbar"><span class="muted">One rule, in combinators</span><span class="sp"></span><button class="collapse-btn" data-close data-tip="Close it: back to the net">${ICON.x.replace("M4 4l8 8M12 4l-8 8", "M4 8h8")}</button></div><div data-player></div></div>`;
+          player = EC.RulePlayer(app, main.querySelector("[data-player]"), { sysKey, key: cs.rule, mode: cs.mode, scale: 1.15 });
+        } else if (cs.open) {
+          const t = S.typeById(cs.open);
+          crumbs.innerHTML = `<button data-crumb="net">${esc(S.ex.name)}</button> › <b>cell of ${sym(cs.open)}</b>`;
+          main.innerHTML = `<div class="bc-cellwrap bc-zoom"><div class="bc-hullbar"><span class="muted">The box opened: every part of one cell</span><span class="sp"></span><button class="collapse-btn" data-close data-tip="Close it back into one box">${ICON.x.replace("M4 4l8 8M12 4l-8 8", "M4 8h8")}</button></div><div data-cell></div></div>`;
+          cellv = EC.CellView(app, main.querySelector("[data-cell]"), { sysKey, typeId: cs.open, mode: cs.mode, scale: 1.2 });
+        } else {
+          crumbs.innerHTML = `<b>${esc(S.ex.name)}</b> <span>· each agent drawn as its cell. Click a box to open it, or an amber pair to watch its rule.</span>`;
+          main.innerHTML = `<div class="bc-net">${netSVG(netAt(), types)}</div>`;
+          main.querySelectorAll("[data-cell]").forEach((g) => (g.onclick = () => { cs.open = g.dataset.cell; draw(); }));
+          main.querySelectorAll("[data-pair]").forEach((g) => (g.onclick = () => { cs.rule = app.pairKey(...g.dataset.pair.split("|")) || g.dataset.pair; draw(); }));
+        }
+        crumbs.querySelectorAll("[data-crumb]").forEach((b) => (b.onclick = () => { cs.open = null; cs.rule = null; draw(); }));
+        const cl = main.querySelector("[data-close]"); if (cl) cl.onclick = () => { cs.open = null; cs.rule = null; draw(); };
+        drawCtl();
+      }
+      // Each agent a box: [S] and the number of combinators it stands for.
+      function netSVG(st, types) {
+        const tr = info.tr, b = NK.stateBounds(st), pad = 26;
+        let s = "";
+        const active = new Set(st.wires.filter((w) => w.ends.every((e) => e.slot === 0 && e.agent != null)).filter((w) => { const [a, c] = w.ends.map((e) => st.agents.find((x) => x.id === e.agent)); return a && c && app.pairKey(a.type, c.type); }).map((w) => w.id));
+        for (const w of st.wires) { const P = w.path.map((q) => q.join(",")).join(" "); if (active.has(w.id)) { const [a, c] = w.ends.map((e) => st.agents.find((x) => x.id === e.agent)); s += `<g class="bpair" data-pair="${esc(a.type + "|" + c.type)}" data-tip="Watch ${esc(types[a.type].symbol)} meet ${esc(types[c.type].symbol)} in combinators"><polyline class="nk-halo" points="${P}"/><polyline class="act" points="${P}"/><polyline class="nk-wire" points="${P}"/><polyline class="hit" points="${P}"/></g>`; } else s += `<polyline class="nk-halo" points="${P}"/><polyline class="nk-wire" points="${P}"/>`; }
+        for (const a of st.agents) {
+          const q = NK.agentBox(a), w = Math.max(40, q.x1 - q.x0 + 8), h = 28, cx = (q.x0 + q.x1) / 2, cy = (q.y0 + q.y1) / 2, ty = types[a.type];
+          const n = tr.identity ? 1 : tr.cells[a.type] && tr.cells[a.type][cs.mode];
+          s += `<g class="cb-box can bcell" data-cell="${esc(a.type)}" data-tip="Open the cell of ${esc(ty.symbol)}${n ? `: ${EC.fmt(n)} combinators` : ""}"><rect class="cb-box-o" x="${cx - w / 2}" y="${cy - h / 2}" width="${w}" height="${h}" rx="5"/><rect class="cb-box-i" x="${cx - w / 2 + 2.5}" y="${cy - h / 2 + 2.5}" width="${w - 5}" height="${h - 5}" rx="3"/><text class="cb-box-t" x="${cx}" y="${cy - 3}"><tspan class="sym">[${esc(ty.symbol)}]</tspan></text><text class="cb-box-s" x="${cx}" y="${cy + 8}">${n ? EC.fmt(n) : ""}</text><g class="cb-expand" transform="translate(${cx + w / 2 - 8} ${cy - h / 2})"><rect x="-5" y="-5" width="10" height="10" rx="2.5"/><path d="M -2.5 0 H 2.5 M 0 -2.5 V 2.5"/></g></g>`;
+        }
+        for (const f of st.free) s += `<circle cx="${f.x}" cy="${f.y}" r="2.4" class="nk-free"/><text x="${f.x}" y="${f.dir === "up" ? f.y - 9 : f.y + 11}" class="nk-free-label">${esc(f.name)}</text>`;
+        const vb = [b.x0 - pad, b.y0 - pad, b.x1 - b.x0 + 2 * pad, b.y1 - b.y0 + 2 * pad];
+        const k = main.clientHeight > 60 ? Math.max(0.5, Math.min(1.7, (main.clientHeight - 30) / vb[3], (main.clientWidth - 20) / vb[2])) : 1.2;
+        return `<svg class="cb-svg" viewBox="${vb.join(" ")}" width="${vb[2] * k}" height="${vb[3] * k}">${s}</svg>`;
+      }
+      // Stepping: your net (the translation follows), or the combinators of an open rule. Each greyed button says why.
+      function drawCtl() {
+        const st = netAt(), sizes = S.ex.sizes;
+        const hasPair = st.wires.some((w) => w.ends.every((e) => e.slot === 0 && e.agent != null) && (() => { const [a, c] = w.ends.map((e) => st.agents.find((x) => x.id === e.agent)); return a && c && app.pairKey(a.type, c.type); })());
+        const edited = S.dirty && cs.at === 0;
+        const why = {
+          step: cs.rule || cs.open ? "Step your net: close the box first, back to the whole net." : !hasPair ? "Step your net: nothing can fire, no two agents meet principal port to principal port." : base + cs.at + 1 >= states.length ? "Step your net: this prototype only replays the example's recorded steps." : null,
+          comb: cs.rule ? null : "Step combinators: pick a pair first. Click an amber wire to watch its rule, one stage at a time. (Between two of your steps, the combinators are part-way through a rule.)",
+          back: cs.at === 0 ? "Back: this is your net as it is on the canvas." : null,
+        };
+        ctlEl.innerHTML = `<button class="btn ghost" data-s="back" ${why.back ? `aria-disabled="true"` : ""}>${ICON.left}Back</button><button class="btn ghost" data-s="step" ${why.step ? `aria-disabled="true"` : ""}>Step your net${ICON.right}</button>
+          <button class="btn ghost" data-s="comb" ${why.comb ? `aria-disabled="true"` : ""}>Step combinators</button>
+          <span class="muted" style="margin-left:auto;font-size:12px">${sizes ? `${st.agents.length} agents → ${info.tr.identity ? st.agents.length : EC.fmt(st.agents.reduce((n, a) => n + ((info.tr.cells[a.type] || {})[cs.mode] || 0), 0))} combinators` : ""}</span>
+          <div class="whys">${Object.values(why).filter(Boolean).map((w) => `<div class="cb-why">${esc(w)}</div>`).join("")}</div>`;
+        ctlEl.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => {
+          if (b.getAttribute("aria-disabled") === "true") { const ws = ctlEl.querySelector(".whys"); ws.classList.remove("pulse"); void ws.offsetWidth; ws.classList.add("pulse"); return; }
+          if (b.dataset.s === "step") { cs.at++; draw(); app.toast("Stepped your net here, on a copy. The translation follows: each box is still one cell."); }
+          else if (b.dataset.s === "back") { cs.at--; draw(); }
+          else if (b.dataset.s === "comb" && player) { const s2 = main.querySelector("[data-c=step]"); s2 && s2.click(); }
+        }));
+      }
+      drawTop();
+      if (cs.openType) { cs.open = cs.openType; cs.openType = null; }
+      draw();
+      return { dirty: () => false, focusView: () => null, afterOpen() { if (!cs.open && !cs.rule) draw(); }, destroy() { player && player.destroy(); }, onKey(e) {
+        if (e.key === "Escape" && (cs.open || cs.rule)) { cs.open = null; cs.rule = null; draw(); return true; }
+        if (cs.rule && (e.key === "ArrowRight" || e.key === "ArrowLeft") && !e.metaKey) { const b = main.querySelector(`[data-c="${e.key === "ArrowRight" ? "step" : "back"}"]`); b && b.click(); return true; }
+        return false; } };
+    } });
+  }
+  app.agentActions = (id) => [{ label: "Show as combinators", run: () => openComb({ agent: id, origin: $("#selp") }) }];
+  app.pairActions = (k) => [{ label: "In combinators", run: () => openComb({ rule: k, origin: $("#selp") }) }];
+  app.agentEdExtra = (t) => ({ below: `<button class="linkbtn" data-keep id="aeComb">${ICON.comb} Show as combinators</button>`, bind: (root) => { root.querySelector("#aeComb").onclick = () => { app.closeAgent(); openComb({ agent: t.id, origin: $("#agentEd") }); }; } });
+  app.onTileClick = (id, el) => { const t = S.typeById(id); if (t.component) openComponent(id, { origin: el }); else app.openAgent(id, el); };
+
+  app.init();
+})();
+</script>
+</body>
+</html>
