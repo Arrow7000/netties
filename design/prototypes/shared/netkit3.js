@@ -687,10 +687,10 @@
         const flab = this.o.freeLabel ? this.o.freeLabel(f) : esc(f.name);
         const pinEmpty = f.pin && !this.wireOfFree(f.name);
         out += fh != null ? fh : `<circle cx="${x}" cy="${y}" r="${f.pin ? 2.8 : 2.4}" class="nk-free${f.pin ? " pin" : ""}${pinEmpty ? " open" : ""}"/><text x="${x}" y="${ly}" class="nk-free-label${f.pin ? " pin" : ""}">${flab}</text>`;
-        if (D && (D.kind === "carry" || D.kind === "new") && !(D.carryFree === f.name) && !(D.from && D.from.free === f.name) && !(f.pin && this.wireOfFree(f.name) && !isT) && !(fh != null && HK.freeOwnsDrag && !isT)) out += `<circle cx="${x}" cy="${y}" r="${isT ? 6.5 : 5}" class="${isT ? (D.target.ok ? "nk-port-target" : "nk-port-refuse") : "nk-port-cand"}"/>`;
-        if (!D && H && H.kind === "free" && H.name === f.name) out += `<circle cx="${x}" cy="${y}" r="5.2" class="nk-port-hover"/>`;
-        if (D && D.from && D.from.free === f.name) out += `<circle cx="${x}" cy="${y}" r="4.2" class="nk-port-origin"/>`;
-        if (this._plug && this._plug.free === f.name) out += `<circle cx="${x}" cy="${y}" r="6.5" class="nk-port-target"/>`;
+        if (D && (D.kind === "carry" || D.kind === "new") && !(D.carryFree === f.name) && !(D.from && D.from.free === f.name) && !(f.pin && this.wireOfFree(f.name) && !isT) && !(fh != null && HK.freeOwnsDrag && !isT)) out += `<circle cx="${x}" cy="${y}" r="${isT ? 6.5 : 5}" class="${isT ? (D.target.ok ? "nk-port-target" : "nk-port-refuse") : "nk-port-cand"}${f.pin ? " pin" : ""}"/>`;
+        if (!D && H && H.kind === "free" && H.name === f.name) out += `<circle cx="${x}" cy="${y}" r="5.2" class="nk-port-hover${f.pin ? " pin" : ""}"/>`;
+        if (D && D.from && D.from.free === f.name) out += `<circle cx="${x}" cy="${y}" r="4.2" class="nk-port-origin${f.pin ? " pin" : ""}"/>`;
+        if (this._plug && this._plug.free === f.name) out += `<circle cx="${x}" cy="${y}" r="6.5" class="nk-port-target${f.pin ? " pin" : ""}"/>`;
         if (!an) out += `<circle cx="${x}" cy="${y}" r="7" class="nk-free-hit${f.pin ? " pin" : ""}" data-k="free" data-name="${esc(f.name)}"/>`;
       }
 
