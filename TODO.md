@@ -114,6 +114,10 @@ In order. One design round at a time ("things are overwhelming enough").
    combinator view needs to explain general vs restricted and why a step is
    sometimes unavailable, and to let you re-collapse. Absorbs "translation
    screen still animates with the old morph" and "only restyled".
+   Brief: `design/brief-editors.md`; prototypes `design/prototypes/editors-a`
+   to `-c` (2026-10-14). The user is reviewing the rule editor first; the
+   combinator view gets its own review session later, from the same
+   prototypes as they are now.
 4. **Then**:
    - [ ] Profile large nets before deciding anything. Guess: layout,
          routing and SVG redraw dominate, not reduction, so WebAssembly
