@@ -156,6 +156,31 @@ describe("TC-like head observation candidate", () => {
     expect(head(candidate.net).type).toBe("Stem");
   });
 
+  it("classifies static roots without evaluating their children", () => {
+    const constant = (result: Spec) => fork(leaf(), result);
+    const classify = (value: Spec) => triage(
+      leaf(),
+      constant(stem(leaf())),
+      constant(constant(fork(leaf(), leaf()))),
+      value,
+    );
+    const pending = app(fork(leaf(), stem(leaf())), leaf());
+    for (const [value, expected] of [
+      [leaf(), "Leaf"],
+      [stem(pending), "Stem"],
+      [fork(pending, pending), "Fork"],
+    ] as const) {
+      const candidate = setup(classify(value));
+      run(candidate);
+      expect(head(candidate.net).type).toBe(expected);
+      const out = candidate.net.partner(free("out"));
+      if (!out) throw new Error("missing output");
+      expect(readTerm(candidate.net, out)).toEqual(
+        expected === "Leaf" ? leaf() : expected === "Stem" ? stem(leaf()) : fork(leaf(), leaf()),
+      );
+    }
+  });
+
   it("agrees under two redex orders on a copying example", () => {
     const input = app(fork(stem(leaf()), leaf()), stem(leaf()));
     const first = setup(input);
