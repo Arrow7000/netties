@@ -52,6 +52,12 @@ export const Eye = icon(() =>
     <circle cx="8" cy="8" r="1.9" {...line} stroke-width={1.3} />
   </>,
 );
+export const Copy = icon(() =>
+  <>
+    <rect x="5.5" y="5.5" width="8" height="8" rx="1.8" {...line} stroke-width={1.3} />
+    <path d="M10.5 5.5V4.3a1.8 1.8 0 00-1.8-1.8H4.3a1.8 1.8 0 00-1.8 1.8v4.4a1.8 1.8 0 001.8 1.8h1.2" {...line} stroke-width={1.3} />
+  </>,
+);
 export const Check = icon(() => <path d="M3.5 8.5l3 3 6-7" {...line} />);
 export const Left = icon(() => <path d="M10 4L6 8l4 4" {...line} />);
 export const Right = icon(() => <path d="M6 4l4 4-4 4" {...line} />);

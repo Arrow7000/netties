@@ -497,6 +497,8 @@ export function createEditor(initial: Doc | undefined) {
     run,
     stop,
     toDoc,
+    /** The whole document as one string, to tell whether two states are the same. */
+    fingerprint,
     save: () => saveLocal(toDoc()),
     openRule: (left: string, right: string) => dispatch({ kind: "screen/open", screen: { kind: "rule", left, right } }),
     closeRule: () => dispatch({ kind: "screen/close" }),

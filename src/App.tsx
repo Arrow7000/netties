@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { createEditor } from "./state/editor";
 import { type Doc, fromShareHash, loadLocal } from "./state/persist";
 import { Canvas, createCamera } from "./ui/Canvas";
@@ -27,7 +27,7 @@ const SPEED_MIN = -3;
 const SPEED_MAX = 2;
 const SLOW = 0.2;
 
-export function App(props: { initial?: Doc }) {
+export function App(props: { initial?: Doc; fromLink?: boolean }) {
   const ed = createEditor(props.initial);
   ed.init();
   const m = ed.model;
@@ -48,6 +48,12 @@ export function App(props: { initial?: Doc }) {
 
   // Save after every change.
   createEffect(on([ed.rev, m.mode], () => ed.save()));
+
+  // The share link in the address bar only changes when it's asked to, so
+  // keep track of which state it holds, to offer to update it.
+  const here = createMemo(on([ed.rev, m.mode], () => ed.fingerprint()));
+  const [linked, setLinked] = createSignal(props.fromLink ? ed.fingerprint() : undefined);
+  const stale = () => linked() !== undefined && linked() !== here();
 
   createEffect(
     on(ed.message, (msg) => {
@@ -74,7 +80,7 @@ export function App(props: { initial?: Doc }) {
     const onHashChange = async () => {
       const hash = location.hash;
       const navigation = ++hashNavigation;
-      if (!hash.startsWith("#n=")) return;
+      if (!hash.startsWith("#n=")) return setLinked(undefined);
       const doc = await fromShareHash(hash);
       if (navigation !== hashNavigation || location.hash !== hash) return;
       if (!doc) {
@@ -83,6 +89,7 @@ export function App(props: { initial?: Doc }) {
       }
       try {
         ed.load(doc);
+        setLinked(ed.fingerprint());
       } catch {
         ed.setMessage("Couldn't load this shared net.");
       }
@@ -198,14 +205,20 @@ export function App(props: { initial?: Doc }) {
 
   const active = () => m.activeWires().size;
 
+  const [copied, setCopied] = createSignal(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   const share = async () => {
     const { toShareHash } = await import("./state/persist");
+    const print = ed.fingerprint();
     const hash = await toShareHash(ed.toDoc());
     const url = location.origin + location.pathname + hash;
     history.replaceState(null, "", hash);
+    setLinked(print);
     try {
       await navigator.clipboard.writeText(url);
-      ed.setMessage("Copied a link to this net.");
+      setCopied(true);
+      clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => setCopied(false), 900);
     } catch {
       ed.setMessage("Couldn't copy the link; it's in the address bar.");
     }
@@ -291,13 +304,6 @@ export function App(props: { initial?: Doc }) {
               />
               <hr />
               <MenuItem
-                title="Copy share link"
-                onClick={() => {
-                  share();
-                  close();
-                }}
-              />
-              <MenuItem
                 title="Export SVG"
                 onClick={() => {
                   exportSVG();
@@ -318,6 +324,22 @@ export function App(props: { initial?: Doc }) {
           )}
         </Menu>
         <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
+        <span class="sep" />
+        <button
+          class="btn share"
+          classList={{ stale: stale() && !copied(), copied: copied() }}
+          onClick={share}
+          title={
+            stale()
+              ? "This net has changed since the link in the address bar was made. Update the link and copy it"
+              : "Put a link to this net in the address bar and copy it"
+          }
+        >
+          <Show when={copied()} fallback={<I.Copy />}>
+            <I.Check />
+          </Show>
+          {copied() ? "Copied" : stale() ? "Update link" : "Copy link"}
+        </button>
       </div>
 
       <div class="island top-right">
@@ -505,8 +527,10 @@ export function App(props: { initial?: Doc }) {
   );
 }
 
-export async function initialDoc(): Promise<Doc | undefined> {
-  return (await fromShareHash(location.hash)) ?? loadLocal();
+/** The document to start with: the one in a share link, or the last session's. */
+export async function initialDoc(): Promise<{ doc?: Doc; fromLink: boolean }> {
+  const linked = await fromShareHash(location.hash);
+  return linked ? { doc: linked, fromLink: true } : { doc: loadLocal(), fromLink: false };
 }
 
 function safeGet(k: string): string | null {

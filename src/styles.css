@@ -164,6 +164,12 @@ textarea {
   left: 12px;
 }
 
+/* The address bar's link is out of date, or was just copied. */
+.btn.share.stale,
+.btn.share.copied {
+  color: var(--accent);
+}
+
 .top-right {
   top: 12px;
   right: 12px;
