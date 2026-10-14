@@ -219,67 +219,46 @@ what's done (at the user's request).
          chord (small icon buttons can skip it). Needs every shortcut
          registered in one place first; today each screen has its own
          keydown handler.
-3. **Not as easy as it looks**:
-   - [ ] Wires in manual mode. Manual mode doesn't change the wires: both
-         modes use the same router (`src/layout/route.ts`). But the router
-         assumes the automatic layout's tidy rows and gaps between them,
-         so with agents placed by hand it runs wires behind agents and
-         across each other. The fix is a router that avoids obstacles for
-         arbitrary placements (e.g. orthogonal routing through a grid of
-         free space), a real piece of work.
-
-     - [ ] **Option 1, the user's pick (2026-10-14): patch the current
-           router**, about one session. A full obstacle-avoiding router
-           (option 2: visibility grid, fewest-bend paths, then spreading
-           wires that share a channel, or the libavoid WASM port) waits
-           until this has been tried.
-
-           How the router works now (`route()` in `src/layout/route.ts`):
-           every wire gets one of a few fixed shapes. `direct` is an
-           S-curve between facing ports; `cap`/`cup` are arches between
-           ports facing the same way; `around` goes out, along a vertical
-           lane, and back; `drop`/`rise` run straight to a loose end; `pin`
-           goes to a rule interface end. Only the horizontal runs avoid
-           agents (`settle()` pushes caps and cups clear of agents and of
-           each other). Vertical runs and S-curves never check what's in
-           their way, and lanes come from `gapsBetween()`, which only finds
-           strips free of agents over the net's whole height. Automatic
-           layout (`src/layout/place.ts`) makes all that safe; manual
-           placement doesn't. The same happens briefly while dragging an
-           agent in automatic mode (`layout` in `src/state/model.ts` reroutes
-           a moved placement with `route()`).
-
-           The patch:
-           - After choosing each wire's shape, check its vertical runs and
-             S-curves against the agent boxes (not counting the agents at
-             its own ends). A `direct` or `drop`/`rise` that hits an agent
-             becomes an `around`; a cap or cup whose legs hit one moves its
-             legs out to a lane.
-           - Lanes only need to be clear over the height the wire covers:
-             compute gaps per wire from the boxes overlapping its y-range,
-             instead of the one whole-height `gapsBetween()` list (keep that
-             list for automatic layout if it routes the same as before).
-           - Lanes in the same gap still get spaced `G.wireGap` apart, and
-             caps and cups still settle against each other, so wires don't
-             end up drawn on top of each other.
-
-           Keep the Lafont look: wires leave ports vertically, facing ports
-           still get the S-curve when nothing is in the way, rounded
-           corners as now.
-
-           Done when:
-           - Automatic layout draws every example exactly as before
-             (snapshot the routes of every step of every example before
-             changing anything; the existing tests in
-             `src/layout/layout.test.ts` must pass unchanged).
-           - New tests: in hand-placed nets (including random placements
-             with fast-check, as the existing tests do), no wire segment
-             passes through an agent other than the two it connects.
-           - Checked by eye in the app, in manual mode, with agents
-             dragged on top of wires and between facing pairs, in light
-             and dark themes.
-           - Routing stays fast on the largest example (the router runs on
-             every pointer move while dragging).
+3. **Done** (2026-10-14): wires in manual mode, and in automatic mode too
+   (the user: "even in auto mode sometimes the wires appear behind agents,
+   or overlap with other wires"). Option 1, patching the router
+   (`src/layout/route.ts`), was enough; option 2 (a full obstacle-avoiding
+   router) isn't needed for now.
+   - A wire whose drawing would run through an agent, or alongside another
+     wire (closer than 0.7 of `G.wireGap` for more than 14 units), becomes
+     a detour: out from each port as a short cap or cup, then along a lane
+     of its own, at the x nearest its ports that's clear of agents and of
+     other wires' vertical runs over the height it covers. Lanes that turn
+     out badly once the runs settle are chosen again (up to 4 passes).
+   - "Around" wires keep their whole-height gaps unless a gap is too narrow
+     for its lanes (hand placement), when they become detours too.
+   - Caps and cups now keep clear of each other, not just of their own
+     kind. Where there's no room in front of a port for the full gap, runs
+     squeeze to half a gap rather than letting a leg run through the agent
+     in front.
+   - In automatic mode, every example step draws exactly as before except
+     where a step was broken (Copying a feedback loop, 3 × 2, Square of a
+     sum, One number two calculations) and the steps after it. Wires ran
+     behind agents there: a cap or cup whose ports sit at different
+     heights ran its long leg straight through whatever was between, and
+     two such legs could share a column. Directed cascade steps 2–3 also
+     changed: nothing was broken, but the flip search in `place.ts` now
+     lands on a different (also clean) arrangement, because some of the
+     layouts it tries cost differently with detours.
+   - Measured with `npx vite-node scripts/route-check.ts` (`--svg DIR` to
+     draw the problem cases): examples went from 11 wires through agents
+     and 3 overlapping pairs to none; 300 random hand-placed nets went from
+     709 wires through agents and 268 close pairs to 0 through agents and
+     41 pairs squeezed to half a gap where there was no room. New tests in
+     `src/layout/layout.test.ts` hold both. Routing the largest example
+     takes 0.1 ms; 318 agents laid out automatically 1.6 ms, then nudged
+     by hand 4.3 ms (the old router took 0.4 ms for that).
+   - Checked by eye in the app, manual mode, light and dark: agents dragged
+     onto a wire and between a facing pair. Very tight spots (an agent
+     jammed between two others) route round it closely but don't cross.
+   - Not covered: wires to rule-interface pins (`pin` jobs) don't detour
+     yet, and agents placed overlapping each other can still leave a wire
+     through one.
 4. **Waiting on the user**: the taking/giving wave animation (a drawing
    is coming).
 5. **Design and research, one at a time**:
@@ -317,7 +296,7 @@ what's done (at the user's request).
 - [ ] maybe instead of the symbols for taking and giving we could have a little wave animation thing moving inward for "taking" and outward for "giving" (i will draw something to explain what i mean)
 - [x] when i click on a wire it doesn't look any different, it's only when i move my mouse away that i can see that its colour has changed into the selected mode. not sure why this is
 - [x] when a wire is highlighted (either selected or active) you can see the rounding of the end as it goes into the agent's primary port. i don't like this. makes it look quite amateur svg ish.
-- [ ] i think manual mode should only affect agents, not wires. i think wires should still keep their automatic routing. atm when i switch to manual, the wires no longer avoid intersecting or going behind their agents. i don't think there's a reason for that to happen. seeing as wires can't themselves be moved, i don't think their behaviour should change in manual mode.
+- [x] i think manual mode should only affect agents, not wires. i think wires should still keep their automatic routing. atm when i switch to manual, the wires no longer avoid intersecting or going behind their agents. i don't think there's a reason for that to happen. seeing as wires can't themselves be moved, i don't think their behaviour should change in manual mode.
 - [x] there's a big gap after the "click to fire" and "click to select the wire" text in their pills
 - [x] when select-dragging i think we should include any touched wire, not only if we've included both its ends
   - there is also the more advanced mode which i vaguely remember from sketchup, which is that if you drag from left to right it selects everything touched, whereas if you drag from rtl it only selects things that are completely in the box. or the other way round. is this a common convention? do programs still do this? worth implementing or nah?

@@ -1,5 +1,15 @@
 import { type End, type Net, NONE, type WireId, endKey } from "../core/net";
-import { type Box, G, type Placement, type Pt, type Terminal, boxOf, portPos } from "./geometry";
+import {
+  type Box,
+  G,
+  type Placement,
+  type Pt,
+  type Terminal,
+  agentOutline,
+  boxOf,
+  portPos,
+  segmentHitsPolygon,
+} from "./geometry";
 
 /**
  * Wire routing in the style of Lafont's figures. Wires leave ports
@@ -16,6 +26,12 @@ import { type Box, G, type Placement, type Pt, type Terminal, boxOf, portPos } f
  * - free ports sit along the top or bottom edge, whichever way the port faces.
  *
  * Caps (and cups) are placed narrowest first, so wider ones nest outside them.
+ *
+ * Automatic layout leaves room for all of these. Agents placed anywhere else
+ * (by hand, or while being dragged) can sit in a wire's way, so a wire that
+ * would run through an agent, or alongside another wire, takes a detour
+ * instead: out from each port as a short cap or cup, then along a lane of its
+ * own that's clear of agents and other wires over the height it covers.
  */
 
 export interface Routed {
@@ -64,6 +80,8 @@ interface Leg {
 type Job =
   | { kind: "direct"; id: WireId; a: Leg; b: Leg }
   | { kind: "cap" | "cup"; id: WireId; a: Leg; b: Leg }
+  /** Out from each port to a lane of its own, round agents that were in the way. */
+  | { kind: "detour"; id: WireId; a: Leg; b: Leg }
   | { kind: "around"; id: WireId; up: Leg; down: Leg; upFirst: boolean }
   | { kind: "drop"; id: WireId; leg: Leg; free: string; legFirst: boolean }
   | { kind: "rise"; id: WireId; leg: Leg; free: string; legFirst: boolean }
@@ -78,6 +96,8 @@ interface Span {
   /** The run must be at least this far past these y values (above for caps, below for cups). */
   from: number;
   y: number;
+  /** Where wires come up (or down) from their ports to the run; both ends if not given. */
+  legs?: number[];
 }
 
 const JOG = 12;
@@ -85,7 +105,14 @@ const JOG = 12;
 export function route(net: Net, placement: Placement, opts: RouteOptions = {}): Routed {
   const arity = (id: number) => net.agent(id).wires.length - 1;
   const boxes: Box[] = [];
-  for (const [id, p] of placement) if (net.agents.has(id)) boxes.push(boxOf(p, arity(id)));
+  /** Each agent's outline, by its box. */
+  const outlines = new Map<Box, Pt[]>();
+  for (const [id, p] of placement) {
+    if (!net.agents.has(id)) continue;
+    const box = boxOf(p, arity(id));
+    boxes.push(box);
+    outlines.set(box, agentOutline(p, arity(id), 0.5));
+  }
 
   const leg = (e: Extract<End, { kind: "port" }>): Leg => {
     const p = placement.get(e.agent);
@@ -161,167 +188,292 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       laneX.set(u.job.id, x);
     });
   });
-
-  // Horizontal runs. Caps and cups are placed separately, narrowest first.
-  const caps = new Map<WireId, Span>();
-  const cups = new Map<WireId, Span>();
-  const span = (xa: number, xb: number, from: number): Span => ({
-    x0: Math.min(xa, xb),
-    x1: Math.max(xa, xb),
-    from,
-    y: from,
+  /** The lane each detour runs along (NaN while it needs choosing). */
+  const detour = new Map<WireId, number>();
+  // A gap too narrow for its lanes (agents placed by hand can leave one)
+  // sends its wires round as detours, each finding a lane of its own.
+  gaps.forEach((g, i) => {
+    const users = laneUsers[i]!;
+    if (!Number.isFinite(g.x1 - g.x0) || (g.x1 - g.x0) / (users.length + 1) >= G.wireGap) return;
+    for (const { job } of users) {
+      if (job.kind !== "around") continue;
+      const [a, b] = job.upFirst ? [job.up, job.down] : [job.down, job.up];
+      jobs[jobs.indexOf(job)] = { kind: "detour", id: job.id, a, b };
+      detour.set(job.id, laneX.get(job.id)!);
+    }
   });
-  for (const job of jobs) {
-    if (job.kind === "cap") caps.set(job.id, span(job.a.t.x, job.b.t.x, Math.min(job.a.t.y, job.b.t.y)));
-    if (job.kind === "cup") cups.set(job.id, span(job.a.t.x, job.b.t.x, Math.max(job.a.t.y, job.b.t.y)));
-    if (job.kind === "around") {
-      const lx = laneX.get(job.id)!;
-      caps.set(job.id, span(job.up.t.x, lx, job.up.t.y));
-      cups.set(job.id, span(lx, job.down.t.x, job.down.t.y));
-    }
-    if (job.kind === "pin" && job.around) {
-      const sp = span(job.leg.t.x, laneX.get(job.id)!, job.leg.t.y);
-      (job.leg.t.dir === "up" ? caps : cups).set(job.id, sp);
-    }
-  }
-  settle(caps, boxes, -1);
-  settle(cups, boxes, +1);
 
-  // Free ports sit on common lines above and below everything.
-  let bottom = -Infinity;
-  let top = Infinity;
-  for (const b of boxes) [top, bottom] = [Math.min(top, b.y0), Math.max(bottom, b.y1)];
-  for (const c of cups.values()) bottom = Math.max(bottom, c.y);
-  for (const c of caps.values()) top = Math.min(top, c.y);
-  for (const job of jobs) {
-    if (job.kind === "drop") bottom = Math.max(bottom, job.leg.t.y);
-    if (job.kind === "rise") top = Math.min(top, job.leg.t.y);
-    if (job.kind === "pin") [top, bottom] = [Math.min(top, job.leg.t.y), Math.max(bottom, job.leg.t.y)];
-  }
-  bottom = (Number.isFinite(bottom) ? bottom : 0) + G.freeMargin;
-  top = (Number.isFinite(top) ? top : 0) - G.freeMargin;
-
-  // Pinned ports keep their order, but sit as close as they can to where
-  // their wires naturally arrive.
-  const pinX = new Map<string, number>();
-  const pinTop = top - PIN_RISE;
-  const pinBottom = bottom + PIN_RISE;
-  if (opts.pins) {
-    const natural = new Map<string, number>();
-    for (const job of jobs) {
-      if (job.kind === "pin") natural.set(job.free, job.around ? laneX.get(job.id)! : job.leg.t.x);
-    }
-    const mid = boxes.length ? boxes.reduce((s, b) => s + b.x0 + b.x1, 0) / (2 * boxes.length) : 0;
-    const { top: tops, bottom: bottoms, gaps } = opts.pins;
-    spread(tops, natural, mid, gaps?.top).forEach((x, n) => pinX.set(n, x));
-    spread(bottoms, natural, mid, gaps?.bottom).forEach((x, n) => pinX.set(n, x));
-  }
-
-  const wires = new Map<WireId, Pt[]>();
-  const free = new Map<string, Terminal>();
-  /** a's port, out along a, through `mid`, then in along b to its port. */
-  const join = (a: Leg, mid: Pt[], b: Leg, smooth = false): Pt[] => [
-    ...a.prefix,
-    a.t,
-    ...mid,
-    { ...b.t, s: smooth },
-    ...b.prefix.map((p, i) => ({ ...p, s: i === 0 && !!b.t.s })).reverse(),
-  ];
-  let bareX = Math.max(0, ...boxes.map((b) => b.x1)) + G.unitGap;
-  for (const job of jobs) {
-    switch (job.kind) {
-      case "direct": {
-        wires.set(job.id, join(job.a, [], job.b, true));
-        break;
-      }
-      case "cap":
-      case "cup": {
-        const y = (job.kind === "cap" ? caps : cups).get(job.id)!.y;
-        wires.set(job.id, join(job.a, [{ x: job.a.t.x, y }, { x: job.b.t.x, y }], job.b));
-        break;
-      }
-      case "around": {
-        const lx = laneX.get(job.id)!;
-        const cy = caps.get(job.id)!.y;
-        const uy = cups.get(job.id)!.y;
-        const pts = join(
-          job.up,
-          [
-            { x: job.up.t.x, y: cy },
-            { x: lx, y: cy },
-            { x: lx, y: uy },
-            { x: job.down.t.x, y: uy },
-          ],
-          job.down,
-        );
-        wires.set(job.id, job.upFirst ? pts : reversePath(pts));
-        break;
-      }
-      case "drop":
-      case "rise": {
-        const t = job.leg.t;
-        const pts: Pt[] = [...job.leg.prefix, t, { x: t.x, y: job.kind === "drop" ? bottom : top }];
-        free.set(job.free, { ...pts[pts.length - 1]!, dir: job.kind === "drop" ? "down" : "up" });
-        wires.set(job.id, job.legFirst ? pts : reversePath(pts));
-        break;
-      }
-      case "pin": {
-        const t = job.leg.t;
-        const up = job.side === "up";
-        const edge = up ? top : bottom;
-        const end = { x: pinX.get(job.free)!, y: up ? pinTop : pinBottom, s: true };
-        let pts: Pt[];
-        if (!job.around) pts = [...job.leg.prefix, t, { x: t.x, y: edge }, end];
-        else {
-          const lx = laneX.get(job.id)!;
-          const y = (t.dir === "up" ? caps : cups).get(job.id)!.y;
-          pts = [...job.leg.prefix, t, { x: t.x, y }, { x: lx, y }, { x: lx, y: edge }, end];
+  // Draw, then send wires that run through an agent or alongside another wire
+  // round as detours, and lanes that turned out badly to be chosen again.
+  const agentsByX = new ByX(boxes);
+  const hitsAgent = (pts: Pt[]) => {
+    for (let i = 1; i < pts.length; i++)
+      for (const [a, b] of pieces(pts[i - 1]!, pts[i]!))
+        for (const box of agentsByX.over(Math.min(a.x, b.x), Math.max(a.x, b.x) + 0.001)) {
+          if (Math.max(a.y, b.y) < box.y0 || Math.min(a.y, b.y) > box.y1) continue;
+          if (segmentHitsPolygon(a, b, outlines.get(box)!)) return true;
         }
-        free.set(job.free, { x: end.x, y: end.y, dir: job.side });
-        wires.set(job.id, job.legFirst ? pts : reversePath(pts));
-        break;
+    return false;
+  };
+  /** How far up and down each detour's lane has had to reach. */
+  const reach = new Map<WireId, [number, number]>();
+  let drawn = draw();
+  for (let pass = 0; pass < 4; pass++) {
+    const runs = runsOf(drawn.wires);
+    const close = closeRuns(runs);
+    /** Wires sent to choose a lane again this pass: their runs no longer count. */
+    const redo = new Set<WireId>();
+    const beside = (id: WireId, fits: (c: Close) => boolean) => close.get(id)?.some((c) => !redo.has(c.other) && fits(c));
+    jobs.forEach((job, i) => {
+      if (detour.has(job.id)) {
+        // Choose again if the lane now runs into an agent or alongside another wire, now that the runs at its ends have settled.
+        const [lo, hi] = drawn.lanes.get(job.id)!;
+        const x = detour.get(job.id)!;
+        if (
+          agentsByX.over(x, x + 0.001).some((b) => b.x0 < x && b.y0 < hi - 0.5 && b.y1 > lo + 0.5) ||
+          beside(job.id, (c) => Math.abs(c.x - x) < 0.01 && c.gap < G.wireGap - 0.5 && c.overlap > 1)
+        )
+          redo.add(job.id);
+        return;
       }
-      case "bare": {
-        const [sa, sb] = job.free.map(pinSide);
-        if (sa && sb) {
-          const a = { x: pinX.get(job.free[0])!, y: sa === "up" ? pinTop : pinBottom };
-          const b = { x: pinX.get(job.free[1])!, y: sb === "up" ? pinTop : pinBottom };
-          free.set(job.free[0], { ...a, dir: sa });
-          free.set(job.free[1], { ...b, dir: sb });
-          if (sa !== sb) {
-            const ya = sa === "up" ? top : bottom;
-            const yb = sb === "up" ? top : bottom;
-            wires.set(job.id, [a, { x: a.x, y: ya }, { x: b.x, y: yb, s: true }, b]);
-          } else {
-            const y = a.y + (sa === "up" ? 1 : -1) * G.layerH * 0.4;
-            wires.set(job.id, [a, { x: a.x, y }, { x: b.x, y }, b]);
-          }
+      if (!hitsAgent(drawn.wires.get(job.id)!) && !beside(job.id, (c) => c.gap < G.wireGap * 0.7 && c.overlap > 14)) return;
+      if (job.kind === "direct" || job.kind === "cap" || job.kind === "cup") {
+        jobs[i] = { kind: "detour", id: job.id, a: job.a, b: job.b };
+        redo.add(job.id);
+      } else if (job.kind === "drop" || job.kind === "rise") redo.add(job.id);
+    });
+    if (!redo.size) break;
+    for (const id of redo) detour.set(id, NaN);
+    chooseLanes(runs.filter((r) => !redo.has(r.id)));
+    drawn = draw();
+  }
+
+  /** Lanes for detours still waiting for one, each clear of agents and of the other wires' vertical runs beside it. */
+  function chooseLanes(runs: Run[]) {
+    for (const job of jobs) {
+      if (!Number.isNaN(detour.get(job.id) ?? 0)) continue;
+      const near = (t: Terminal) => t.y + (t.dir === "up" ? -1 : 1) * G.wireGap;
+      let xs: number[];
+      let ys: number[];
+      if (job.kind === "detour") [xs, ys] = [[job.a.t.x, job.b.t.x], [near(job.a.t), near(job.b.t)]];
+      else if (job.kind === "drop" || job.kind === "rise")
+        [xs, ys] = [[job.leg.t.x], [near(job.leg.t), job.kind === "drop" ? drawn.bottom : drawn.top]];
+      else continue;
+      // Every height the lane has had to cover so far, so it never goes back to a place that didn't work.
+      const was = reach.get(job.id) ?? [];
+      const lo = Math.min(...ys, ...was, ...(drawn.lanes.get(job.id) ?? []));
+      const hi = Math.max(...ys, ...was, ...(drawn.lanes.get(job.id) ?? []));
+      reach.set(job.id, [lo, hi]);
+      const blocked: [number, number][] = [];
+      for (const b of boxes) if (b.y1 > lo + 0.5 && b.y0 < hi - 0.5) blocked.push([b.x0 - G.wireGap, b.x1 + G.wireGap]);
+      for (const r of runs)
+        if (r.id !== job.id && r.hi > lo + 1 && r.lo < hi - 1) blocked.push([r.x - G.wireGap, r.x + G.wireGap]);
+      const x = laneNear(xs, blocked);
+      detour.set(job.id, x);
+      runs.push({ id: job.id, x, lo, hi });
+    }
+  }
+
+  function draw() {
+    // Horizontal runs, narrowest first: caps, then cups.
+    const caps = new Map<string, Span>();
+    const cups = new Map<string, Span>();
+    const span = (xa: number, xb: number, from: number, legs?: number[]): Span => ({
+      x0: Math.min(xa, xb),
+      x1: Math.max(xa, xb),
+      from,
+      y: from,
+      legs,
+    });
+    /** A run from a port out to x, on the side the port faces. */
+    const out = (key: string, t: Terminal, x: number) => {
+      if (Math.abs(x - t.x) > 0.5) (t.dir === "up" ? caps : cups).set(key, span(t.x, x, t.y, [t.x]));
+    };
+    for (const job of jobs) {
+      if (job.kind === "cap") caps.set(`${job.id}`, span(job.a.t.x, job.b.t.x, Math.min(job.a.t.y, job.b.t.y)));
+      if (job.kind === "cup") cups.set(`${job.id}`, span(job.a.t.x, job.b.t.x, Math.max(job.a.t.y, job.b.t.y)));
+      if (job.kind === "around") {
+        const lx = laneX.get(job.id)!;
+        caps.set(`${job.id}`, span(job.up.t.x, lx, job.up.t.y, [job.up.t.x]));
+        cups.set(`${job.id}`, span(lx, job.down.t.x, job.down.t.y, [job.down.t.x]));
+      }
+      if (job.kind === "pin" && job.around) {
+        const sp = span(job.leg.t.x, laneX.get(job.id)!, job.leg.t.y, [job.leg.t.x]);
+        (job.leg.t.dir === "up" ? caps : cups).set(`${job.id}`, sp);
+      }
+      if (job.kind === "detour") {
+        out(`${job.id}a`, job.a.t, detour.get(job.id)!);
+        out(`${job.id}b`, job.b.t, detour.get(job.id)!);
+      }
+      if ((job.kind === "drop" || job.kind === "rise") && detour.has(job.id)) out(`${job.id}a`, job.leg.t, detour.get(job.id)!);
+    }
+    // Cups keep clear of the caps too, so the two never run along each other.
+    const capRuns = settle(caps, agentsByX, -1);
+    settle(cups, agentsByX, +1, capRuns);
+    /** Where the run out from a port settled, if it has one. */
+    const outY = (key: string, t: Terminal) => (t.dir === "up" ? caps : cups).get(key)?.y;
+
+    // Free ports sit on common lines above and below everything.
+    let bottom = -Infinity;
+    let top = Infinity;
+    for (const b of boxes) [top, bottom] = [Math.min(top, b.y0), Math.max(bottom, b.y1)];
+    for (const c of cups.values()) bottom = Math.max(bottom, c.y);
+    for (const c of caps.values()) top = Math.min(top, c.y);
+    for (const job of jobs) {
+      if (job.kind === "drop") bottom = Math.max(bottom, job.leg.t.y);
+      if (job.kind === "rise") top = Math.min(top, job.leg.t.y);
+      if (job.kind === "pin") [top, bottom] = [Math.min(top, job.leg.t.y), Math.max(bottom, job.leg.t.y)];
+    }
+    bottom = (Number.isFinite(bottom) ? bottom : 0) + G.freeMargin;
+    top = (Number.isFinite(top) ? top : 0) - G.freeMargin;
+
+    // Pinned ports keep their order, but sit as close as they can to where
+    // their wires naturally arrive.
+    const pinX = new Map<string, number>();
+    const pinTop = top - PIN_RISE;
+    const pinBottom = bottom + PIN_RISE;
+    if (opts.pins) {
+      const natural = new Map<string, number>();
+      for (const job of jobs) {
+        if (job.kind === "pin") natural.set(job.free, job.around ? laneX.get(job.id)! : job.leg.t.x);
+      }
+      const mid = boxes.length ? boxes.reduce((s, b) => s + b.x0 + b.x1, 0) / (2 * boxes.length) : 0;
+      const { top: tops, bottom: bottoms, gaps } = opts.pins;
+      spread(tops, natural, mid, gaps?.top).forEach((x, n) => pinX.set(n, x));
+      spread(bottoms, natural, mid, gaps?.bottom).forEach((x, n) => pinX.set(n, x));
+    }
+
+    const wires = new Map<WireId, Pt[]>();
+    const free = new Map<string, Terminal>();
+    /** Where each detour's lane starts and ends. */
+    const lanes = new Map<WireId, [number, number]>();
+    /** a's port, out along a, through `mid`, then in along b to its port. */
+    const join = (a: Leg, mid: Pt[], b: Leg, smooth = false): Pt[] => [
+      ...a.prefix,
+      a.t,
+      ...mid,
+      { ...b.t, s: smooth },
+      ...b.prefix.map((p, i) => ({ ...p, s: i === 0 && !!b.t.s })).reverse(),
+    ];
+    let bareX = Math.max(0, ...boxes.map((b) => b.x1)) + G.unitGap;
+    for (const job of jobs) {
+      switch (job.kind) {
+        case "direct": {
+          wires.set(job.id, join(job.a, [], job.b, true));
           break;
         }
-        const capY = bottom - G.layerH / 2;
-        const a = { x: bareX, y: bottom };
-        const b = { x: bareX + G.portGap, y: bottom };
-        bareX += G.portGap * 2;
-        free.set(job.free[0], { ...a, dir: "down" });
-        free.set(job.free[1], { ...b, dir: "down" });
-        wires.set(job.id, [a, { x: a.x, y: capY }, { x: b.x, y: capY }, b]);
-        break;
+        case "cap":
+        case "cup": {
+          const y = (job.kind === "cap" ? caps : cups).get(`${job.id}`)!.y;
+          wires.set(job.id, join(job.a, [{ x: job.a.t.x, y }, { x: job.b.t.x, y }], job.b));
+          break;
+        }
+        case "detour": {
+          const lx = detour.get(job.id)!;
+          const ya = outY(`${job.id}a`, job.a.t);
+          const yb = outY(`${job.id}b`, job.b.t);
+          const mid: Pt[] = [];
+          if (ya !== undefined) mid.push({ x: job.a.t.x, y: ya }, { x: lx, y: ya });
+          if (yb !== undefined) mid.push({ x: lx, y: yb }, { x: job.b.t.x, y: yb });
+          const ends = [ya ?? job.a.t.y, yb ?? job.b.t.y];
+          lanes.set(job.id, [Math.min(...ends), Math.max(...ends)]);
+          wires.set(job.id, join(job.a, mid, job.b));
+          break;
+        }
+        case "around": {
+          const lx = laneX.get(job.id)!;
+          const cy = caps.get(`${job.id}`)!.y;
+          const uy = cups.get(`${job.id}`)!.y;
+          const pts = join(
+            job.up,
+            [
+              { x: job.up.t.x, y: cy },
+              { x: lx, y: cy },
+              { x: lx, y: uy },
+              { x: job.down.t.x, y: uy },
+            ],
+            job.down,
+          );
+          wires.set(job.id, job.upFirst ? pts : reversePath(pts));
+          break;
+        }
+        case "drop":
+        case "rise": {
+          const t = job.leg.t;
+          const edge = job.kind === "drop" ? bottom : top;
+          const pts: Pt[] = [...job.leg.prefix, t];
+          const lx = detour.get(job.id);
+          if (lx === undefined) pts.push({ x: t.x, y: edge });
+          else {
+            const y = outY(`${job.id}a`, t);
+            if (y !== undefined) pts.push({ x: t.x, y }, { x: lx, y });
+            pts.push({ x: lx, y: edge });
+            lanes.set(job.id, [Math.min(y ?? t.y, edge), Math.max(y ?? t.y, edge)]);
+          }
+          free.set(job.free, { ...pts[pts.length - 1]!, dir: job.kind === "drop" ? "down" : "up" });
+          wires.set(job.id, job.legFirst ? pts : reversePath(pts));
+          break;
+        }
+        case "pin": {
+          const t = job.leg.t;
+          const up = job.side === "up";
+          const edge = up ? top : bottom;
+          const end = { x: pinX.get(job.free)!, y: up ? pinTop : pinBottom, s: true };
+          let pts: Pt[];
+          if (!job.around) pts = [...job.leg.prefix, t, { x: t.x, y: edge }, end];
+          else {
+            const lx = laneX.get(job.id)!;
+            const y = (t.dir === "up" ? caps : cups).get(`${job.id}`)!.y;
+            pts = [...job.leg.prefix, t, { x: t.x, y }, { x: lx, y }, { x: lx, y: edge }, end];
+          }
+          free.set(job.free, { x: end.x, y: end.y, dir: job.side });
+          wires.set(job.id, job.legFirst ? pts : reversePath(pts));
+          break;
+        }
+        case "bare": {
+          const [sa, sb] = job.free.map(pinSide);
+          if (sa && sb) {
+            const a = { x: pinX.get(job.free[0])!, y: sa === "up" ? pinTop : pinBottom };
+            const b = { x: pinX.get(job.free[1])!, y: sb === "up" ? pinTop : pinBottom };
+            free.set(job.free[0], { ...a, dir: sa });
+            free.set(job.free[1], { ...b, dir: sb });
+            if (sa !== sb) {
+              const ya = sa === "up" ? top : bottom;
+              const yb = sb === "up" ? top : bottom;
+              wires.set(job.id, [a, { x: a.x, y: ya }, { x: b.x, y: yb, s: true }, b]);
+            } else {
+              const y = a.y + (sa === "up" ? 1 : -1) * G.layerH * 0.4;
+              wires.set(job.id, [a, { x: a.x, y }, { x: b.x, y }, b]);
+            }
+            break;
+          }
+          const capY = bottom - G.layerH / 2;
+          const a = { x: bareX, y: bottom };
+          const b = { x: bareX + G.portGap, y: bottom };
+          bareX += G.portGap * 2;
+          free.set(job.free[0], { ...a, dir: "down" });
+          free.set(job.free[1], { ...b, dir: "down" });
+          wires.set(job.id, [a, { x: a.x, y: capY }, { x: b.x, y: capY }, b]);
+          break;
+        }
       }
     }
-  }
 
-  // Free ports with nothing attached still need a spot.
-  for (const [name, w] of net.free) {
-    if (free.has(name) || w !== NONE) continue;
-    const side = pinSide(name);
-    if (side) {
-      free.set(name, { x: pinX.get(name)!, y: side === "up" ? pinTop : pinBottom, dir: side });
-      continue;
+    // Free ports with nothing attached still need a spot.
+    for (const [name, w] of net.free) {
+      if (free.has(name) || w !== NONE) continue;
+      const side = pinSide(name);
+      if (side) {
+        free.set(name, { x: pinX.get(name)!, y: side === "up" ? pinTop : pinBottom, dir: side });
+        continue;
+      }
+      free.set(name, { x: bareX, y: bottom, dir: "down" });
+      bareX += G.portGap;
     }
-    free.set(name, { x: bareX, y: bottom, dir: "down" });
-    bareX += G.portGap;
+    return { wires, free, lanes, top, bottom };
   }
 
+  const { wires, free } = drawn;
   const arounds = jobs.filter((j) => j.kind === "around" || (j.kind === "pin" && j.around)).length;
   const bounds = boundsOf(boxes, wires);
   for (const f of free.values()) {
@@ -329,6 +481,95 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     bounds.y1 = Math.max(bounds.y1, f.y);
   }
   return { wires, free, bounds, laneCount: laneUsers.map((u) => u.length), gaps, arounds };
+}
+
+/**
+ * The x nearest the given ones (counting each it misses as a bend) outside
+ * every blocked interval.
+ */
+function laneNear(xs: number[], blocked: [number, number][]): number {
+  // Merge the blocked intervals; their ends are then all free.
+  const merged: [number, number][] = [];
+  for (const [a, b] of [...blocked].sort((p, q) => p[0] - q[0])) {
+    const last = merged[merged.length - 1];
+    if (last && a < last[1] - 0.01) last[1] = Math.max(last[1], b);
+    else merged.push([a, b]);
+  }
+  const free = (x: number) => merged.every(([a, b]) => x <= a + 0.01 || x >= b - 0.01);
+  let best = xs[0]!;
+  let bestCost = Infinity;
+  for (const x of [...xs.filter(free), ...merged.flat()]) {
+    const cost = xs.reduce((s, v) => s + Math.abs(x - v) + (Math.abs(x - v) > 0.5 ? G.layerH / 2 : 0), 0);
+    if (cost < bestCost) [best, bestCost] = [x, cost];
+  }
+  return best;
+}
+
+/** A vertical stretch of a wire. */
+interface Run {
+  id: WireId;
+  x: number;
+  lo: number;
+  hi: number;
+}
+
+/** Where the wires run vertically, S-curves counting as vertical for half their height at each end. */
+function runsOf(wires: Map<WireId, Pt[]>): Run[] {
+  const runs: Run[] = [];
+  for (const [id, pts] of wires)
+    for (let i = 1; i < pts.length; i++) {
+      const [a, b] = [pts[i - 1]!, pts[i]!];
+      const run = (x: number, y0: number, y1: number) => runs.push({ id, x, lo: Math.min(y0, y1), hi: Math.max(y0, y1) });
+      if (b.s) [run(a.x, a.y, (a.y + b.y) / 2), run(b.x, (a.y + b.y) / 2, b.y)];
+      else if (Math.abs(a.x - b.x) < 0.01) run(a.x, a.y, b.y);
+    }
+  return runs;
+}
+
+/** Another wire's run beside one of a wire's runs: how far apart they are, and for how long they run together. */
+interface Close {
+  other: WireId;
+  /** Where this wire's run is. */
+  x: number;
+  gap: number;
+  overlap: number;
+}
+
+/** For each wire, the other wires running less than a wire gap beside it. */
+function closeRuns(runs: Run[]): Map<WireId, Close[]> {
+  const out = new Map<WireId, Close[]>();
+  const add = (r: Run, o: Run, overlap: number) => {
+    const c = { other: o.id, x: r.x, gap: Math.abs(r.x - o.x), overlap };
+    const list = out.get(r.id);
+    if (list) list.push(c);
+    else out.set(r.id, [c]);
+  };
+  const byX = [...runs].sort((a, b) => a.x - b.x);
+  for (let i = 0; i < byX.length; i++)
+    for (let j = i + 1; j < byX.length && byX[j]!.x - byX[i]!.x < G.wireGap; j++) {
+      const [r, o] = [byX[i]!, byX[j]!];
+      const overlap = Math.min(r.hi, o.hi) - Math.max(r.lo, o.lo);
+      if (r.id === o.id || overlap <= 1) continue;
+      add(r, o, overlap);
+      add(o, r, overlap);
+    }
+  return out;
+}
+
+/** A path segment as straight pieces: itself, or an S-curve cut into short lines. */
+function pieces(a: Pt, b: Pt): [Pt, Pt][] {
+  if (!b.s) return [[a, b]];
+  const my = (a.y + b.y) / 2;
+  const at = (t: number): Pt => {
+    const u = 1 - t;
+    return {
+      x: (u * u * u + 3 * u * u * t) * a.x + (3 * u * t * t + t * t * t) * b.x,
+      y: u * u * u * a.y + 3 * u * t * (u + t) * my + t * t * t * b.y,
+    };
+  };
+  const out: [Pt, Pt][] = [];
+  for (let i = 0; i < 10; i++) out.push([at(i / 10), at((i + 1) / 10)]);
+  return out;
 }
 
 /** How far pinned ports sit beyond the net, leaving room for wires to bend in. */
@@ -368,28 +609,87 @@ export function reversePath(pts: Pt[]): Pt[] {
 
 /**
  * Give each span a height clear of the agents and earlier spans beneath it.
- * `dir` is -1 for caps (moving up) and +1 for cups (moving down).
+ * `dir` is -1 for caps (moving up) and +1 for cups (moving down). `runs`
+ * are horizontal runs already placed. Returns the runs as placed.
  */
-function settle(spans: Map<WireId, Span>, boxes: Box[], dir: -1 | 1) {
+function settle(spans: Map<string, Span>, agents: ByX, dir: -1 | 1, runs: Box[] = []): Box[] {
   const placed: Box[] = [];
+  const taken = new ByX(runs);
   const order = [...spans.values()].sort((a, b) => a.x1 - a.x0 - (b.x1 - b.x0) || dir * (b.from - a.from));
   const pad = G.wireGap * 0.6;
   for (const s of order) {
-    let y = s.from + dir * Math.max(G.wireGap, Math.min(G.radius, (s.x1 - s.x0) / 2));
-    const obstacles = [...boxes, ...placed].filter((b) => b.x1 > s.x0 - pad && b.x0 < s.x1 + pad);
-    for (let moved = true; moved; ) {
-      moved = false;
-      for (const b of obstacles) {
-        if (y > b.y0 - G.wireGap + 0.01 && y < b.y1 + G.wireGap - 0.01) {
-          y = dir < 0 ? b.y0 - G.wireGap : b.y1 + G.wireGap;
-          moved = true;
+    const near = agents.over(s.x0 - pad, s.x1 + pad);
+    const others = taken.over(s.x0 - pad, s.x1 + pad);
+    /** The first height clear of agents by `gap` and of other runs by `runGap`. */
+    const push = (gap: number, runGap: number) => {
+      // Heights measured in the direction the run moves.
+      let at = dir * s.from + Math.max(gap, Math.min(G.radius, (s.x1 - s.x0) / 2));
+      // Each obstacle ahead as the band the run must stay out of, in the order the run meets them.
+      const bands: [number, number][] = [];
+      for (const [list, g] of [[near, gap], [others, runGap]] as const)
+        for (const b of list) {
+          const band: [number, number] = dir < 0 ? [-(b.y1 + g), -(b.y0 - g)] : [b.y0 - g, b.y1 + g];
+          if (band[1] > at) bands.push(band);
         }
+      bands.sort((p, q) => p[0] - q[0]);
+      for (const [lo, hi] of bands) if (at > lo + 0.01 && at < hi - 0.01) at = hi;
+      return dir * at;
+    };
+    // The nearest agent in front of a leg: going past it would run the leg through it.
+    let wall = dir * Infinity;
+    for (const b of near) {
+      const edge = dir < 0 ? b.y1 : b.y0;
+      const ahead = dir * (edge - s.from) > 0.5 && dir * (edge - wall) < 0;
+      if (ahead && (s.legs ?? [s.x0, s.x1]).some((x) => b.x0 < x && b.x1 > x)) wall = edge;
+    }
+    let y = push(G.wireGap, G.wireGap);
+    // Short of room before it: squeeze in closer to the other runs, or
+    // failing that, take the middle of the widest space left.
+    if (dir * (y - wall) > 0) y = push(G.wireGap / 2, G.wireGap / 2);
+    if (dir * (y - wall) > 0) {
+      // Heights in the direction the run moves: the stretch up to the wall, less the agents in it, cut by the other runs.
+      const [from, to] = [dir * s.from, dir * wall];
+      const inside = near.map((b) => (dir < 0 ? [-b.y1, -b.y0] : [b.y0, b.y1]) as [number, number]);
+      const stops = [from, to, ...inside.flat(), ...others.map((b) => dir * b.y0)]
+        .filter((v) => v >= from && v <= to)
+        .sort((p, q) => p - q);
+      let widest = -1;
+      for (let i = 1; i < stops.length; i++) {
+        const mid = (stops[i]! + stops[i - 1]!) / 2;
+        const room = stops[i]! - stops[i - 1]!;
+        if (room > widest && !inside.some(([lo, hi]) => mid > lo && mid < hi)) [widest, y] = [room, dir * mid];
       }
     }
     s.y = y;
-    placed.push({ x0: s.x0, x1: s.x1, y0: y, y1: y });
+    const run = { x0: s.x0, x1: s.x1, y0: y, y1: y };
+    placed.push(run);
+    taken.add(run);
+  }
+  return placed;
+}
+
+/** Boxes filed by x, to find the ones over a stretch quickly. */
+class ByX {
+  private cells = new Map<number, Box[]>();
+  constructor(boxes: Box[] = []) {
+    for (const b of boxes) this.add(b);
+  }
+  add(b: Box) {
+    for (let c = Math.floor(b.x0 / BY_X); c <= Math.floor(b.x1 / BY_X); c++) {
+      const list = this.cells.get(c);
+      if (list) list.push(b);
+      else this.cells.set(c, [b]);
+    }
+  }
+  /** Boxes reaching strictly into the stretch from x0 to x1. */
+  over(x0: number, x1: number): Box[] {
+    const out = new Set<Box>();
+    for (let c = Math.floor(x0 / BY_X); c <= Math.floor(x1 / BY_X); c++)
+      for (const b of this.cells.get(c) ?? []) if (b.x1 > x0 && b.x0 < x1) out.add(b);
+    return [...out];
   }
 }
+const BY_X = 64;
 
 /** Vertical strips free of agents, including the unbounded strips either side. */
 export function gapsBetween(boxes: Box[]): Gap[] {

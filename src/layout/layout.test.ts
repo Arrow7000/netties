@@ -5,8 +5,10 @@ import { type End, Net, free, port } from "../core/net";
 import { combinators } from "../core/presets";
 import { interact, parallelStep, redexes } from "../core/reduce";
 import { parse } from "../core/text";
-import { boxOf, portPos } from "./geometry";
+import { G, type Placement, boxOf, portPos } from "./geometry";
 import { autoLayout } from "./place";
+import { route } from "./route";
+import { wiresThroughAgents, wiresTooClose } from "./routeCheck";
 
 const sys = combinators();
 const types = ["γ", "δ", "ε"];
@@ -95,5 +97,51 @@ Add(Z, out2) ~ S(S(Z));
       prev = autoLayout(net, { prev }).placement;
     }
     expect(width(prev)).toBeCloseTo(width(autoLayout(net).placement));
+  });
+});
+
+describe("routing", () => {
+  it("keeps every step of the examples clear of agents, with no wires running alongside each other", () => {
+    for (const ex of examples) {
+      const s = ex.system();
+      const net = ex.net(s);
+      let prev: Placement | undefined;
+      for (let i = 0; i < 40; i++) {
+        const { placement, routed } = autoLayout(net, { prev });
+        prev = placement;
+        expect(wiresThroughAgents(net, placement, routed), `${ex.name}, step ${i}`).toEqual([]);
+        expect(wiresTooClose(routed), `${ex.name}, step ${i}`).toEqual([]);
+        if (!parallelStep(net, s).length) break;
+      }
+    }
+  });
+
+  // Agents placed by hand on a loose grid (cells 90 by 80, nudged by up to
+  // 20 by 16), each pointing either way.
+  const arbPlaced = fc
+    .tuple(arbNet, fc.array(fc.tuple(fc.nat(15), fc.nat(19), fc.nat(15), fc.boolean()), { minLength: 10, maxLength: 10 }))
+    .map(([net, spots]) => {
+      const placement: Placement = new Map();
+      const used = new Set<number>();
+      [...net.agents.keys()].forEach((id, i) => {
+        const [c0, dx, dy, up] = spots[i]!;
+        let c = c0;
+        while (used.has(c)) c = (c + 1) % 16;
+        used.add(c);
+        placement.set(id, { x: (c % 4) * 90 + dx, y: Math.floor(c / 4) * 80 + dy, orient: up ? "up" : "down" });
+      });
+      return { net, placement };
+    });
+
+  it("routes round agents placed by hand", () => {
+    fc.assert(
+      fc.property(arbPlaced, ({ net, placement }) => {
+        const routed = route(net, placement);
+        expect(wiresThroughAgents(net, placement, routed)).toEqual([]);
+        // Where there's no room for the full gap they squeeze up, but not onto each other.
+        expect(wiresTooClose(routed, G.wireGap / 4)).toEqual([]);
+      }),
+      { numRuns: 150 },
+    );
   });
 });

@@ -101,6 +101,53 @@ export function segmentHitsBox(a: Pt, b: Pt, box: Box): boolean {
   return clip(-dx, a.x - box.x0) && clip(dx, box.x1 - a.x) && clip(-dy, a.y - box.y0) && clip(dy, box.y1 - a.y);
 }
 
+/** The outline of an agent as drawn, shrunk by `inset` so grazing an edge doesn't count. */
+export function agentOutline(p: Placed, arity: number, inset = 0): Pt[] {
+  const s = shape(arity);
+  if (s.circle) {
+    const r = s.w / 2 - inset;
+    const at = (i: number) => (i * Math.PI) / 6;
+    return Array.from({ length: 12 }, (_, i) => ({ x: p.x + r * Math.cos(at(i)), y: p.y + r * Math.sin(at(i)) }));
+  }
+  const sign = p.orient === "down" ? 1 : -1;
+  // The slanted sides are about twice as long as the triangle is tall, so move the corners in twice as far.
+  const by = p.y - sign * (s.h / 2 - inset);
+  return [
+    { x: p.x, y: p.y + sign * (s.h / 2 - inset * 2) },
+    { x: p.x - s.w / 2 + inset * 2, y: by },
+    { x: p.x + s.w / 2 - inset * 2, y: by },
+  ];
+}
+
+/**
+ * Whether the segment from `a` to `b` passes through the inside of a convex
+ * polygon (Cyrus–Beck clipping). Running along an edge or through a corner
+ * doesn't count.
+ */
+export function segmentHitsPolygon(a: Pt, b: Pt, poly: Pt[]): boolean {
+  let area = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) area += poly[j]!.x * poly[i]!.y - poly[i]!.x * poly[j]!.y;
+  const sign = area < 0 ? -1 : 1;
+  const [dx, dy] = [b.x - a.x, b.y - a.y];
+  let t0 = 0;
+  let t1 = 1;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const p = poly[j]!;
+    const [ex, ey] = [poly[i]!.x - p.x, poly[i]!.y - p.y];
+    // How far inside this edge the segment is at its start, and how fast that changes along it.
+    const at = sign * (ex * (a.y - p.y) - ey * (a.x - p.x));
+    const rate = sign * (ex * dy - ey * dx);
+    if (Math.abs(rate) < 1e-9) {
+      if (at <= 0) return false;
+      continue;
+    }
+    if (rate > 0) t0 = Math.max(t0, -at / rate);
+    else t1 = Math.min(t1, -at / rate);
+    if (t0 >= t1 - 1e-9) return false;
+  }
+  return true;
+}
+
 /** Whether a point lies inside a polygon (even-odd rule). */
 export function insidePolygon(p: Pt, poly: Pt[]): boolean {
   let inside = false;
