@@ -1,5 +1,6 @@
 import { type End, Net, free, port } from "./net";
-import { arithmetic, combinators, directedCombinators, listArithmetic, lists, typingLab } from "./presets";
+import { arithmetic, combinators, directedCombinators, intensionalTrees, listArithmetic, lists, typingLab } from "./presets";
+import { triageMachine } from "./triageMachine";
 import { System } from "./system";
 
 /**
@@ -229,6 +230,45 @@ export const examples: Example[] = [
       link(net, isEmpty, build(net, sys, t("if", f("out"), whenTrue, whenFalse)));
       build(net, sys, num(1));
       build(net, sys, num(2));
+      return net;
+    },
+  },
+  {
+    name: "Inspect a computed tree",
+    about: "R0 is a leaf; BS builds each stem, BF their fork. Step until Shape exposes its children.",
+    system: intensionalTrees,
+    net: (sys) => {
+      const net = new Net();
+      const leftLeaf = net.addAgent(sys.type("R0"));
+      const rightLeaf = net.addAgent(sys.type("R0"));
+      const leftStem = net.addAgent(sys.type("BS"));
+      const rightStem = net.addAgent(sys.type("BS"));
+      const fork = net.addAgent(sys.type("BF"));
+      const inspect = net.addAgent(sys.type("Shape"));
+      net.connect(port(leftStem, 0), port(leftLeaf, 0));
+      net.connect(port(rightStem, 0), port(rightLeaf, 0));
+      net.connect(port(fork, 0), port(leftStem, 1));
+      net.connect(port(fork, 2), port(rightStem, 1));
+      net.connect(port(inspect, 0), port(fork, 1));
+      net.connect(port(inspect, 1), free("view"));
+      return net;
+    },
+  },
+  {
+    name: "Triage: inspect, then run a child",
+    about: "A TC-like evaluator inspects a fork's head, selects its still-reducible left child, then evaluates that child to a stem at out.",
+    showcase: true,
+    system: triageMachine,
+    net: (sys) => {
+      const leaf = (): Spec => t("Leaf");
+      const app = (fn: Spec, arg: Spec): Spec => t("App", fn, arg);
+      const stem = (arg: Spec): Spec => app(leaf(), arg);
+      const fork = (left: Spec, right: Spec): Spec => app(stem(left), right);
+      const pending = app(fork(leaf(), stem(leaf())), leaf());
+      const selectLeft = fork(fork(leaf(), leaf()), stem(leaf()));
+      const term = app(selectLeft, fork(pending, leaf()));
+      const net = new Net();
+      link(net, build(net, sys, term), build(net, sys, t("Eval", f("out"))));
       return net;
     },
   },

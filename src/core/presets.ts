@@ -1,4 +1,4 @@
-import { A, L, R, System } from "./system";
+import { A, L, R, System, type RuleEnd } from "./system";
 import type { Polarity, PortSpec } from "./types";
 
 /** A port that gives or takes, optionally of a type, with a label. */
@@ -241,5 +241,55 @@ export function typingLab(): System {
   sys.addRule({ left: "εn", right: "S", agents: ["εn"], wires: [[A(0, 0), R(1)]] });
   sys.addRule({ left: "εl", right: "[]", agents: [], wires: [] });
   sys.addRule({ left: "εl", right: "∷", agents: ["εn", "εl"], wires: [[A(0, 0), R(1)], [A(1, 0), R(2)]] });
+  return sys;
+}
+
+/**
+ * A small intensional tree experiment. R0/R1/R2 are ready leaf/stem/fork
+ * values. BS/BF/AR build them through auxiliary outputs, so Shape cannot
+ * interact until construction exposes a ready value at its principal port.
+ * The guarantee assumes ready trees are built by these rules or are already
+ * well formed; arbitrary hand-wired R1/R2 agents can break that invariant.
+ */
+export function intensionalTrees(): System {
+  const tree = "tree";
+  const view = "view";
+  const sys = new System()
+    .addType({ id: "R0", name: "ready leaf", symbol: "R0", arity: 0, ports: [give(tree)] })
+    .addType({ id: "R1", name: "ready stem", symbol: "R1", arity: 1, ports: [give(tree), take(tree)] })
+    .addType({ id: "R2", name: "ready fork", symbol: "R2", arity: 2, ports: [give(tree), take(tree), take(tree)] })
+    .addType({ id: "BS", name: "build stem", symbol: "BS", arity: 1, ports: [take(tree), give(tree)] })
+    .addType({ id: "BF", name: "build fork", symbol: "BF", arity: 2, ports: [take(tree), give(tree), take(tree)] })
+    .addType({ id: "AR", name: "await right child", symbol: "AR", arity: 2, ports: [take(tree), give(tree), take(tree)] })
+    .addType({ id: "Shape", name: "inspect shape", symbol: "Shape", arity: 1, ports: [take(tree), give(view)] });
+  for (let arity = 0; arity <= 2; arity++) {
+    sys.addType({
+      id: `View${arity}`, name: `view ${arity}`, symbol: `View${arity}`, arity,
+      ports: [give(view), ...Array.from({ length: arity }, () => take(tree))],
+    });
+  }
+  sys.typing = { dirs: "required", types: "required", names: [tree, view] };
+
+  for (let arity = 0; arity <= 2; arity++) {
+    const value = `R${arity}`;
+    const children: [RuleEnd, RuleEnd][] = Array.from({ length: arity }, (_, i) => [A(1, i + 1), R(i + 1)]);
+    const exposed: [RuleEnd, RuleEnd][] = Array.from({ length: arity }, (_, i) => [A(0, i + 1), R(i + 1)]);
+    sys.addRule({
+      left: "BS", right: value, agents: ["R1", value],
+      wires: [[A(0, 0), L(1)], [A(0, 1), A(1, 0)], ...children],
+    });
+    sys.addRule({
+      left: "BF", right: value, agents: ["AR", value],
+      wires: [[A(0, 0), L(2)], [A(0, 1), L(1)], [A(0, 2), A(1, 0)], ...children],
+    });
+    sys.addRule({
+      left: "AR", right: value, agents: ["R2", value],
+      wires: [[A(0, 0), L(1)], [A(0, 1), L(2)], [A(0, 2), A(1, 0)], ...children],
+    });
+    sys.addRule({
+      left: "Shape", right: value, agents: [`View${arity}`],
+      wires: [[A(0, 0), L(1)], ...exposed],
+    });
+  }
   return sys;
 }

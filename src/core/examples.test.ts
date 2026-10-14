@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { build, examples, f, link, t } from "./examples";
 import { Net, NONE, free, port } from "./net";
 import { typingLab } from "./presets";
-import { normalize } from "./reduce";
-import { clash, specOf } from "./types";
+import { normalize, redexes } from "./reduce";
+import { badWires, clash, specOf } from "./types";
 
 function loaded(name: string) {
   const ex = examples.find((e) => e.name === name)!;
@@ -72,6 +72,29 @@ describe("new examples", () => {
     net.connect(port(roots[1]!.id, 0), port(id("if"), 3));
     expect(normalize(net, system).normal).toBe(true);
     expect(readNumber(net, "out")).toBe(1);
+  });
+
+  it("exposes the computed fork and both stem children", () => {
+    const { system, net } = loaded("Inspect a computed tree");
+    expect(net.unconnected()).toEqual([]);
+    expect(badWires(net, system).size).toBe(0);
+    expect(redexes(net, system)).toHaveLength(2);
+    expect(normalize(net, system).normal).toBe(true);
+    const view = net.partner(free("view"));
+    expect(view?.kind === "port" && net.agent(view.agent).type).toBe("View2");
+    if (!view || view.kind !== "port") throw new Error("missing view");
+    for (const slot of [1, 2]) {
+      const child = net.partner(port(view.agent, slot));
+      expect(child?.kind === "port" && net.agent(child.agent).type).toBe("R1");
+    }
+  });
+
+  it("lets the triage example inspect a fork and then run its selected child", () => {
+    const { system, net } = loaded("Triage: inspect, then run a child");
+    expect(net.unconnected()).toEqual([]);
+    expect(badWires(net, system).size).toBe(0);
+    expect(normalize(net, system, { limit: 1000 }).normal).toBe(true);
+    expect(readType(net, "out")).toBe("Stem");
   });
 
   it("runs the other boolean branches too", () => {
