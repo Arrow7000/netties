@@ -3,7 +3,7 @@ import type { Frame } from "../anim/morph";
 import type { GroupId } from "../core/groups";
 import { type AgentId, type End, NONE, type WireId, free, port, sameEnd } from "../core/net";
 import { type System, pairKey } from "../core/system";
-import { type Box, G, type Pt, boxOf, portPos, shape } from "../layout/geometry";
+import { type Box, G, type Placed, type Pt, boxOf, insidePolygon, portPos, segmentHitsBox, shape } from "../layout/geometry";
 import type { StepPlan, StepPreview } from "../layout/replace";
 import { flattenPath, polylinePath, resample, roundedPath } from "../render/path";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
@@ -465,7 +465,11 @@ export function Canvas(props: CanvasProps) {
     }
   };
 
-  /** View agents inside a marquee, and the wires with both ends inside it. */
+  /**
+   * What a marquee selects. Dragged rightwards it's a window: the view
+   * agents inside it, and the wires with both ends inside. Dragged leftwards
+   * it's a crossing, as in CAD tools: anything it touches.
+   */
   const marqueed = (d: Extract<Drag, { kind: "marquee" }>) => {
     const x0 = Math.min(d.start.x, d.cur.x);
     const x1 = Math.max(d.start.x, d.cur.x);
@@ -474,12 +478,30 @@ export function Canvas(props: CanvasProps) {
     const within = (p: Pt) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
     const l = ed.layout();
     const v = ed.view().net;
+    if (crossing(d)) {
+      const box = { x0, y0, x1, y1 };
+      const corners = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+      const touches = (id: AgentId, p: Placed) => {
+        const o = agentOutline(p, v.agent(id).wires.length - 1, ed.view().box.has(id));
+        if (o.kind === "circle") return Math.hypot(p.x - Math.max(x0, Math.min(x1, p.x)), p.y - Math.max(y0, Math.min(y1, p.y))) <= o.r;
+        const q = o.points;
+        return q.some((a, i) => segmentHitsBox(a, q[(i + 1) % q.length]!, box)) || insidePolygon(corners[0]!, q);
+      };
+      const agents = new Set([...l.placement].filter(([id, p]) => v.agents.has(id) && touches(id, p)).map(([id]) => id));
+      const wires = [...v.wires.keys()].filter((id) => {
+        const f = flattenPath(l.routed.wires.get(id) ?? [], G.radius);
+        return f.some((a, i) => i > 0 && segmentHitsBox(f[i - 1]!, a, box));
+      });
+      return { agents, wires };
+    }
     const agents = new Set([...l.placement].filter(([id, p]) => v.agents.has(id) && within(p)).map(([id]) => id));
     // A loose end is inside when the spot it's drawn at is.
     const inside = (e: End) => (e.kind === "port" ? agents.has(e.agent) : !!l.routed.free.get(e.name) && within(l.routed.free.get(e.name)!));
     const wires = [...v.wires.values()].filter((w) => inside(w.ends[0]) && inside(w.ends[1])).map((w) => w.id);
     return { agents, wires };
   };
+  /** A marquee dragged leftwards selects whatever it touches. */
+  const crossing = (d: Extract<Drag, { kind: "marquee" }>) => d.cur.x < d.start.x;
   const preselected = createMemo(() => {
     const d = drag();
     return d?.kind === "marquee" && d.moved ? marqueed(d) : { agents: new Set<AgentId>(), wires: [] as WireId[] };
@@ -851,6 +873,7 @@ export function Canvas(props: CanvasProps) {
             {(d) => (
               <rect
                 class="marquee"
+                classList={{ crossing: crossing(d()) }}
                 x={Math.min(d().start.x, d().cur.x)}
                 y={Math.min(d().start.y, d().cur.y)}
                 width={Math.abs(d().cur.x - d().start.x)}
