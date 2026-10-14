@@ -91,7 +91,9 @@ details.ca-intro p{margin:6px 0 0}
 .nk-port-target.pin,.nk-port-refuse.pin{r:9.6px}
 .nk-port-cand.pin{r:9px}
 .nk-port-origin.pin{r:4.6px}
-.ek-type{font:500 7.5px var(--ui-font);fill:var(--muted);text-anchor:middle;dominant-baseline:central;pointer-events:none;paint-order:stroke;stroke:var(--paper);stroke-width:2.5px;stroke-linejoin:round}
+.ek-type{font:500 10.5px var(--ui-font);fill:var(--muted);dominant-baseline:central;pointer-events:none;paint-order:stroke;stroke:var(--paper);stroke-width:2.5px;stroke-linejoin:round}
+.ek-type.row{text-anchor:end}
+.ek-type.end{text-anchor:start}
 /* header: arrows left of the name, the description labelled, with a pencil */
 .rtitle h3 .navs{display:inline-flex;margin:0 4px 0 -6px}
 .rtitle h3 .navbtn{width:26px;min-width:26px;height:26px}
@@ -107,8 +109,10 @@ details.ca-intro p{margin:6px 0 0}
 @keyframes epWarm3{0%{box-shadow:0 0 0 0 transparent}20%{box-shadow:0 0 0 2.5px color-mix(in srgb,var(--active) 85%,transparent),0 0 12px 3px color-mix(in srgb,var(--active) 50%,transparent)}100%{box-shadow:0 0 0 0 transparent}}
 .btn.flashw{animation:epWarm3 .6s ease-out 1}
 /* while an editor is open, the hover and selection panels sit side by side below it */
-body.editing #hovp{bottom:72px!important;left:calc(12px + var(--selw,0px))}
-body.editing #selp,body.editing #hovp{max-height:100px;overflow:hidden}
+/* while an editor is open, the net's hover and selection islands are hidden; a selection in the rule shows inside the editor */
+body.editing #hovp{display:none!important}
+body.editing #selp:not(.inrule){display:none!important}
+#selp.inrule{z-index:31;box-shadow:0 1px 2px rgba(16,20,28,.08),0 4px 14px rgba(16,20,28,.10)}
 </style>
 </head>
 <body>
@@ -132,8 +136,7 @@ body.editing #selp,body.editing #hovp{max-height:100px;overflow:hidden}
   const { S, view, ICON } = app;
   const sym = (id) => esc((S.typeById(id) || { symbol: id }).symbol);
   let place = null; // where the user moved the panel to; kept while the page is open
-  // The editor stops above the bottom-left panels: room for the selection panel under it.
-  const BOTTOM = 72 + 100 + 12;
+  const BOTTOM = 84; // just above the bottom toolbar row, as in A2
 
   /* ---------------------------------------------------------------- the panel */
   const panel = EP.Panel(app, {
@@ -171,13 +174,13 @@ body.editing #selp,body.editing #hovp{max-height:100px;overflow:hidden}
     head.onpointerdown = (e) => {
       if (e.button !== 0 || e.target.closest("button,input")) return;
       const r = P.el.getBoundingClientRect(), sx = e.clientX, sy = e.clientY; head.classList.add("moving");
-      const mv = (ev) => { P.el.style.left = r.left + ev.clientX - sx + "px"; P.el.style.top = Math.max(8, r.top + ev.clientY - sy) + "px"; };
+      const mv = (ev) => { P.el.style.left = r.left + ev.clientX - sx + "px"; P.el.style.top = Math.max(8, r.top + ev.clientY - sy) + "px"; placeSel(); };
       const up = () => { head.classList.remove("moving"); removeEventListener("pointermove", mv); removeEventListener("pointerup", up); remember(P); };
       addEventListener("pointermove", mv); addEventListener("pointerup", up);
     };
     grip.onpointerdown = (e) => {
       e.preventDefault(); const r = P.el.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
-      const mv = (ev) => { const w = Math.max(560, r.width - (ev.clientX - sx)); P.el.style.width = w + "px"; P.el.style.left = r.right - w + "px"; P.el.style.height = Math.min(innerHeight - r.top - BOTTOM, Math.max(380, r.height + ev.clientY - sy)) + "px"; const c = P.ctl(); c && c.afterOpen && c.afterOpen(); };
+      const mv = (ev) => { const w = Math.max(560, r.width - (ev.clientX - sx)); P.el.style.width = w + "px"; P.el.style.left = r.right - w + "px"; P.el.style.height = Math.min(innerHeight - r.top - BOTTOM, Math.max(380, r.height + ev.clientY - sy)) + "px"; const c = P.ctl(); c && c.afterOpen && c.afterOpen(); placeSel(); };
       const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); remember(P); };
       addEventListener("pointermove", mv); addEventListener("pointerup", up);
     };
@@ -254,21 +257,44 @@ body.editing #selp,body.editing #hovp{max-height:100px;overflow:hidden}
     const open = new Set(withNeed && probs ? probs.open.filter((o) => o.free != null).map((o) => o.free) : []);
     const H = v.hover, hot = (f) => v._pinHl === f.name || (!v.drag && H && H.kind === "free" && H.name === f.name);
     let s = "";
-    // type labels: stacked beyond the name; neighbours that would touch are staggered
-    const rows = { up: pins.filter((f) => f.dir === "up").sort((p, q) => p.x - q.x), down: pins.filter((f) => f.dir === "down").sort((p, q) => p.x - q.x) };
-    const stagger = new Map();
-    for (const row of Object.values(rows)) { let lastX = -1e9, lvl = 0; for (const f of row) { const t = f.ptype && f.ptype.name; if (!t) continue; lvl = f.x - lastX < t.length * 4.4 + 6 ? 1 - lvl : 0; stagger.set(f.name, lvl); lastX = f.x; } }
+    // type labels: once for a row when its ends agree, to the left of the row; else next to each name
+    const typed = app.TY.typesOn(), perEnd = new Set();
+    if (typed) for (const side of ["up", "down"]) {
+      const row = pins.filter((f) => f.dir === side).sort((p, q) => p.x - q.x); if (!row.length) continue;
+      const names = new Set(row.map((f) => (f.ptype && f.ptype.name) || ""));
+      const y = row[0].y + (side === "up" ? -15 : 15);
+      if (names.size === 1 && !names.has("")) s += `<text class="ek-type row" x="${row[0].x - 12}" y="${y}">${esc(row[0].ptype.name)}</text>`;
+      else for (const f of row) if (f.ptype && f.ptype.name) perEnd.add(f.name);
+    }
     for (const f of pins) {
       const out = f.dir === "up" ? -1 : 1, d = [0, -out];
       const need = open.has(f.name);
       s += `<circle cx="${f.x}" cy="${f.y}" r="6.6" class="ek-ring${need ? " need" : ""}"/>`;
       if (hot(f)) s += `<circle cx="${f.x}" cy="${f.y}" r="9.6" class="ek-hov"/>`;
       s += `<text class="ek-rlab" x="${f.x}" y="${f.y + out * 15}">${SUB(f.name)}</text>`;
-      if (f.ptype && f.ptype.name && app.TY.typesOn()) s += `<text class="ek-type" x="${f.x}" y="${f.y + out * (25 + 8 * (stagger.get(f.name) || 0))}">${esc(f.ptype.name)}</text>`;
+      if (perEnd.has(f.name)) s += `<text class="ek-type end" x="${f.x + NAME_HALF + 3}" y="${f.y + out * 15}">${esc(f.ptype.name)}</text>`;
       if (f.ptype && f.ptype.pol && app.TY.dirsOn() && !v.wireOfFree(f.name)) s += app.arrowAt([f.x + d[0] * 11, f.y + d[1] * 11], f.ptype.pol === "give" ? d : [-d[0], -d[1]], "ta-pmark", 0.82);
       if (need && showNeed) s += `<text x="${f.x + 11}" y="${f.y + d[1] * 12}" class="ek-need-t">needs a wire</text>`;
     }
     return s;
+  }
+  // Ends whose types differ get a label each, on one line: space them so the labels don't collide.
+  const NAME_HALF = 7, CH = 5.9;
+  function spaceEnds(v) {
+    if (!app.TY.typesOn()) return;
+    const st = v.state, moved = new Set();
+    for (const side of ["up", "down"]) {
+      const row = st.free.filter((f) => f.pin && f.dir === side).sort((p, q) => p.x - q.x); if (row.length < 2) continue;
+      const names = new Set(row.map((f) => (f.ptype && f.ptype.name) || ""));
+      if (names.size === 1 && !names.has("")) continue;
+      for (let i = 1; i < row.length; i++) {
+        const a = row[i - 1], need = NAME_HALF + 3 + ((a.ptype && a.ptype.name) || "").length * CH + 8 + NAME_HALF;
+        const dx = a.x + need - row[i].x; if (dx <= 0) continue;
+        for (let j = i; j < row.length; j++) { row[j].x += dx; moved.add(row[j].name); }
+      }
+    }
+    for (const w of st.wires) if (w.ends.some((e) => e.free != null && moved.has(e.free))) v._curveWire(w);
+    if (moved.size) v.render();
   }
   function needOverlay(v) {
     if (!probs) return "";
@@ -322,7 +348,19 @@ body.editing #selp,body.editing #hovp{max-height:100px;overflow:hidden}
     requestAnimationFrame(tick);
   }
   // Before and After at one zoom, so the same agent is the same size on both sides.
-  const fitZ = (v) => { const r = v.host.getBoundingClientRect(), b = NK.stateBounds(v.state), P = v.o.fitPad; return Math.max(0.3, Math.min((r.width - P.l - P.r) / (b.x1 - b.x0 + 1), (r.height - P.t - P.b) / (b.y1 - b.y0 + 1), v.o.maxFit || 2.4)); };
+  // the drawing's bounds, counting the type labels beside the interface ends
+  function boundsOf(v) {
+    const b = { ...NK.stateBounds(v.state) };
+    if (!app.TY.typesOn()) return b;
+    for (const side of ["up", "down"]) {
+      const row = v.state.free.filter((f) => f.pin && f.dir === side).sort((p, q) => p.x - q.x); if (!row.length) continue;
+      const names = new Set(row.map((f) => (f.ptype && f.ptype.name) || ""));
+      if (names.size === 1 && !names.has("")) b.x0 = Math.min(b.x0, row[0].x - 12 - row[0].ptype.name.length * CH);
+      else for (const f of row) if (f.ptype && f.ptype.name) b.x1 = Math.max(b.x1, f.x + NAME_HALF + 3 + f.ptype.name.length * CH);
+    }
+    return b;
+  }
+  const fitZ = (v) => { const r = v.host.getBoundingClientRect(), b = boundsOf(v), P = v.o.fitPad; return Math.max(0.3, Math.min((r.width - P.l - P.r) / (b.x1 - b.x0 + 1), (r.height - P.t - P.b) / (b.y1 - b.y0 + 1), v.o.maxFit || 2.4)); };
   // after a change: keep the zoom unless the drawing no longer fits, or now fits far better
   function keepZoom(views) {
     const z = Math.min(...views.map(fitZ)), cur = views[1].cam.z;
@@ -330,7 +368,7 @@ body.editing #selp,body.editing #hovp{max-height:100px;overflow:hidden}
   }
   function sameZoom(views) {
     const z = Math.min(...views.map(fitZ));
-    for (const v of views) { const r = v.host.getBoundingClientRect(), b = NK.stateBounds(v.state); v.cam = { z, x: r.width / 2 - ((b.x0 + b.x1) / 2) * z, y: r.height / 2 - ((b.y0 + b.y1) / 2) * z }; v.render(); v.emit("camera", v.cam); }
+    for (const v of views) { const r = v.host.getBoundingClientRect(), b = boundsOf(v); v.cam = { z, x: r.width / 2 - ((b.x0 + b.x1) / 2) * z, y: r.height / 2 - ((b.y0 + b.y1) / 2) * z }; v.render(); v.emit("camera", v.cam); }
   }
   // Tidy: lay the result out afresh. Only movement, so it's an undoable step but not a change.
   function colours(st) {
@@ -439,7 +477,9 @@ body.editing #selp,body.editing #hovp{max-height:100px;overflow:hidden}
         onChange: () => { if (!ready) return; probs = EP.ruleProblems(app, rd, res.view); res.view.render(); renderStatus(); P.sync(); moveRows(res.view, true, () => keepZoom([pair.view, res.view])); },
       });
       res.reset(NK.clone(rd.rhs0));
+      spaceEnds(pair.view); spaceEnds(res.view);
       moveRows(pair.view, false); moveRows(res.view, false);
+      res.reset(NK.clone(res.view.state), false); // the spaced-out ends are where undo starts from
       // the saved rule, to compare against: wiring and agents (not positions or ids), and the description
       const sig = (st) => EP.signature(st, false);
       let savedSig = sig(rd.rhs0), savedDesc = descOf(rd.key), desc = savedDesc;
@@ -537,7 +577,19 @@ body.editing #selp,body.editing #hovp{max-height:100px;overflow:hidden}
   // The panel's messages use the app's own toasts, bottom centre.
   panel.flashNote = (text) => app.toast(String(text).replace(/<[^>]+>/g, ""));
   app.on("panel", (on) => document.body.classList.toggle("editing", on));
-  new ResizeObserver(() => document.body.style.setProperty("--selw", ($("#selp").classList.contains("on") ? $("#selp").offsetWidth + 8 : 0) + "px")).observe($("#selp"));
+  // A selection in the rule gets the selection panel in the After area's bottom-left corner.
+  const selp = $("#selp");
+  function placeSel() {
+    const ctl = panel.isOpen() && panel.kind() === "rule" ? panel.ctl() : null;
+    const inRule = !!(ctl && ctl.res && app.selView() === ctl.res.view && selp.classList.contains("on"));
+    if (!inRule) { if (selp.classList.contains("inrule")) { selp.classList.remove("inrule"); selp.style.top = selp.style.left = selp.style.bottom = ""; } return; }
+    if (!selp.classList.contains("inrule")) selp.classList.add("inrule"); // (adding a class that's there still counts as a change, and would loop)
+    const r = ctl.res.host.getBoundingClientRect();
+    selp.style.bottom = "auto"; selp.style.left = r.left + 10 + "px"; selp.style.top = r.bottom - selp.offsetHeight - 10 + "px";
+  }
+  new MutationObserver(placeSel).observe(selp, { attributes: true, attributeFilter: ["class"], childList: true });
+  app.on("panel", () => setTimeout(placeSel));
+  addEventListener("pointerup", () => setTimeout(placeSel));
   // interface-end highlight drawn on both canvases
   const _render = NK.View.prototype.render;
   NK.View.prototype.render = function () {

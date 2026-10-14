@@ -35,18 +35,19 @@ code{font-size:13px}
 <section>
 <h2><a href="editors-a3/">A3. The rule editor, revised again</a></h2>
 <p>A2, reworked from your feedback. The combinator view and the component editor are still as in A.</p>
-<p><b>Interface ends.</b> No more Filled or On a rail, and no switch. An end is hollow, like a loose end, so an unwired one looks empty, but it's wider and has a thin dashed ring around the outside in a muted grey: fixed, part of the rule. While an end still needs a wire, its ring turns red (the same red as before), so there's no second ring. Pointing at an end now puts the blue highlight clearly outside that ring, on both sides. In a system with directions and types, each end shows the direction and type of the port it stands for, before you try a wire: the small arrow the net uses on empty ports (while the end is empty) and the type name ("number") in small grey letters beyond its name.</p>
+<p><b>Interface ends.</b> No more Filled or On a rail, and no switch. An end is hollow, like a loose end, so an unwired one looks empty, but it's wider and has a thin dashed ring around the outside in a muted grey: fixed, part of the rule. While an end still needs a wire, its ring turns red (the same red as before), so there's no second ring. Pointing at an end now puts the blue highlight clearly outside that ring, on both sides. In a system with directions and types, each end shows the direction and type of the port it stands for, before you try a wire: the small arrow the net uses on empty ports (while the end is empty) and the type name in grey, as big as the end names. When every end in a row has the same type, it's said once, to the left of the row ("number x₁ x₂"); when they differ, each end gets its own on one line ("y₂ list  y₁ number"), and those ends are spaced out so the labels don't collide.</p>
 <p><b>One zoom.</b> Before and After are drawn at the same zoom, so an agent is the same size on both sides. The two rows of ends follow what's between them: all ends of a row move together and keep their places across, closer when there's less in between and further apart when more is needed, with a short animation after each change. The part of each end's wire beyond the agents stretches along, so wires keep their shape.</p>
 <p><b>Header and messages.</b> The ‹ › arrows sit left of the rule's name, and the unsaved dot is back next to the name (it says "Unsaved changes"). The description has a label and a pencil, so it reads as editable without pointing at it. Messages ("Saved", "No changes to save.", "Unsaved changes…") are the app's normal toasts, bottom centre. A click outside or Escape with unsaved changes gives Save and Cancel only a short amber glow round their edge; their colours don't change.</p>
-<p><b>Room at the bottom.</b> The editor stops above the bottom-left panels, and while it's open the hover panel sits beside the selection panel instead of on top of it, so neither covers Delete rule.</p>
+<p><b>Room at the bottom.</b> The editor is as tall as in A2. While it's open, the net's own hover and selection panels are hidden, and selecting something in the rule shows the selection panel as a small island in the bottom-left corner of the After area, so nothing covers Delete rule.</p>
 <p class="tr"><b>Try in A3:</b></p>
 <ul>
 <li>In "3 + 2", open <i>×</i> with <i>S</i>: the <i>×</i> is the same size before and after. Point at x₁ on either side: the highlight sits outside its ring, on both sides at once.</li>
-<li>Drag the wire off x₂ and let go on empty canvas: x₂ is empty again, with a red ring and the small arrow saying which way it goes; "number" stays by its name.</li>
+<li>Drag the wire off x₂ and let go on empty canvas: x₂ is empty again, with a red ring and the small arrow saying which way it goes. "number" is said once, left of the row.</li>
+<li>Load "Complete a typed if", open the rule grid's <i>#</i> with <i>∷</i>: the bottom ends have different types, each labelled on its own line, spaced apart.</li>
 <li>Drag the bottom <i>×</i> far down, or select everything in the result and delete it: the rows of ends move apart or together.</li>
 <li>Make a change and click outside or press Escape: only a short amber glow on Save and Cancel, and the toast at the bottom. ⌘S with nothing changed says "No changes to save."</li>
 <li>Use the ‹ › arrows by the name; edit the description (its label and pencil).</li>
-<li>Select an agent in the result and point at something else: the selection and hover panels sit side by side, below Delete rule.</li>
+<li>Select an agent in the result: its selection panel appears in the After area's bottom-left corner, clear of Delete rule.</li>
 <li>All of it again in dark mode.</li>
 </ul>
 </section>
