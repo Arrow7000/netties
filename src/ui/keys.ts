@@ -19,3 +19,22 @@ export const held = createRoot(() => {
   }
   return { alt };
 });
+
+/** Apple keyboards say ⌘ and ⌥; everything else says Ctrl and Alt. */
+export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+const NAMES: Record<string, string> = { "⌃": "Ctrl", "⌘": "Ctrl", "⌥": "Alt", "⇧": "Shift" };
+const ORDER = ["Ctrl", "Alt", "Shift"];
+const KEYS: Record<string, string> = { "↵": "Enter", "⌫": "Backspace" };
+
+/**
+ * Shortcuts in text, written the Mac way ("⇧⌘Z"), for this platform: as
+ * written on a Mac, "Ctrl+Shift+Z" elsewhere.
+ */
+export function shortcuts(text: string): string {
+  if (isMac) return text;
+  return text.replace(/([⌃⌥⇧⌘]+)(\S)/g, (_, mods: string, key: string) => {
+    const names = [...new Set([...mods].map((m) => NAMES[m]!))].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+    return [...names, KEYS[key] ?? key].join("+");
+  });
+}

@@ -626,6 +626,7 @@ kbd {
 
 .wire .mark {
   stroke: transparent;
+  stroke-linecap: butt;
   stroke-width: 5;
   transition: stroke-width 0.12s;
 }
@@ -671,7 +672,7 @@ kbd {
   opacity: 0.95;
 }
 
-.wire.hot:not(.active):not(.stuck) .mark {
+.wire.hot:not(.active):not(.stuck):not(.selected) .mark {
   stroke: var(--accent);
   opacity: 0.25;
 }
@@ -2037,6 +2038,12 @@ kbd {
   margin: -4px -6px -4px 0;
   cursor: pointer;
   font-weight: 500;
+}
+
+.toast .kbd {
+  font-weight: 400;
+  margin-left: 3px;
+  color: color-mix(in srgb, var(--chrome) 60%, transparent);
 }
 
 /* Full-screen editors: rules, components, the translation, text */

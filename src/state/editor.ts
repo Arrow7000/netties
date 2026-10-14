@@ -37,6 +37,7 @@ export type EditorMsg =
   | { kind: "history/undo" }
   | { kind: "history/redo" }
   | { kind: "selection/clear" }
+  | { kind: "selection/all" }
   | { kind: "selection/delete" }
   | { kind: "selection/change-type"; agents: AgentId[]; type: string }
   | { kind: "selection/flip"; agents: AgentId[] }
@@ -338,6 +339,9 @@ export function createEditor(initial: Doc | undefined) {
         return;
       case "selection/clear":
         model.clearSelection();
+        return;
+      case "selection/all":
+        model.selectAll();
         return;
       case "selection/delete":
         model.deleteSelection();

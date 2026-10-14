@@ -674,6 +674,18 @@ export function createNetModel(opts: NetModelOptions) {
       setItems(agents, gs, wires);
     },
 
+    /** Select everything drawn: agents, boxes and wires. */
+    selectAll() {
+      const v = view().net;
+      const { agents, groups: gs } = keptItems(false);
+      for (const id of v.agents.keys()) {
+        const it = itemOf(id);
+        if ("group" in it) gs.add(it.group);
+        else agents.add(it.agent);
+      }
+      setItems(agents, gs, new Set(v.wires.keys()));
+    },
+
     /** Begin one undoable selection move; subsequent pointer updates belong to this edit. */
     beginSelectionMove() {
       checkpoint();

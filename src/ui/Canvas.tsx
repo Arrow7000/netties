@@ -744,6 +744,7 @@ export function Canvas(props: CanvasProps) {
                   hidden={carried() === id}
                   highlighted={highlighted().has(id)}
                   fading={!!firing()?.wires.has(id)}
+                  seeThrough={firing()?.agents}
                   pre={preselectedWires().has(id)}
                 />
               )}
@@ -1074,17 +1075,26 @@ function HoverPill(props: { ed: NetModel; hidden: boolean; canFire: boolean }) {
   };
   return (
     <Show when={info()}>
-      {(i) => (
-        <g class={`pill ${i().kind}`} transform={`translate(${i().mid.x + 12} ${i().mid.y})`}>
-          <rect x={0} y={-6.5} width={i().text.length * 4.3 + 12} height={13} rx={6.5} />
-          <text x={6} y={0.4} dominant-baseline="central">
-            {i().text}
-          </text>
-        </g>
-      )}
+      {(i) => {
+        // Sized to the text as drawn; the estimate only shows for the first frame.
+        const [w, setW] = createSignal(0);
+        let el!: SVGTextElement;
+        createEffect(on(() => i().text, () => setW(el.getComputedTextLength())));
+        return (
+          <g class={`pill ${i().kind}`} transform={`translate(${i().mid.x + 12} ${i().mid.y})`}>
+            <rect x={0} y={-6.5} width={(w() || i().text.length * 3.6) + 12} height={13} rx={6.5} />
+            <text ref={el} x={6} y={0.4} dominant-baseline="central">
+              {i().text}
+            </text>
+          </g>
+        );
+      }}
     </Show>
   );
 }
+
+/** How far a wire's highlight runs on under an agent: far enough to cover its width beside the narrowest tip. */
+const MARK_TUCK = 9;
 
 /** Where a view end is drawn. */
 function endPos(ed: NetModel, e: End): Pt | undefined {
@@ -1160,10 +1170,36 @@ function Wire(props: {
   pre?: boolean;
   /** Taken away, or rerouted, by the step being previewed. */
   fading?: boolean;
+  /** Agents drawn see-through, which the highlight mustn't run on under. */
+  seeThrough?: ReadonlySet<AgentId>;
 }) {
   const ed = props.ed;
   const pts = () => ed.layout().routed.wires.get(props.id) ?? [];
   const d = () => roundedPath(pts(), G.radius);
+  /**
+   * The highlight runs on under the agents it meets, with flat ends, so an
+   * agent's outline cuts it off cleanly rather than showing a rounded end
+   * beside a tip.
+   */
+  const markD = () => {
+    const p = pts();
+    if (p.length < 2 || !ed.view().net.wires.has(props.id)) return d();
+    const out = [...p];
+    for (const e of ed.view().net.wire(props.id).ends) {
+      if (e.kind !== "port" || props.seeThrough?.has(e.agent)) continue;
+      const pl = ed.layout().placement.get(e.agent);
+      if (!pl) continue;
+      const at = portPos(pl, ed.view().net.agent(e.agent).wires.length - 1, e.slot);
+      const near = (q: Pt) => Math.hypot(q.x - at.x, q.y - at.y) < 0.5;
+      const i = near(out[0]!) ? 0 : near(out[out.length - 1]!) ? out.length - 1 : -1;
+      if (i < 0) continue;
+      // Wires leave ports vertically, so the agent lies the other way.
+      const ext = { x: at.x, y: at.y + (at.dir === "down" ? -MARK_TUCK : MARK_TUCK) };
+      if (i === 0) out.unshift(ext);
+      else out.push(ext);
+    }
+    return roundedPath(out, G.radius);
+  };
   /** The arrowhead halfway along, pointing from the end that gives to the end that takes. */
   const arrow = () => {
     if (!ed.view().net.wires.has(props.id)) return undefined;
@@ -1209,7 +1245,7 @@ function Wire(props: {
       data-wire={props.id}
     >
       <path class="halo" d={d()} />
-      <path class="mark" d={d()} />
+      <path class="mark" d={markD()} />
       <path class="line" d={d()} />
       <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
       <path class="hit" d={d()} />

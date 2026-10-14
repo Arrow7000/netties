@@ -1,5 +1,6 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import { Portal } from "solid-js/web";
+import { shortcuts } from "./keys";
 
 /** Wait this long before the first tooltip shows, so sweeping across the UI doesn't flash them. */
 const DELAY = 120;
@@ -12,8 +13,10 @@ const EDGE = 8;
  * Near-instant tooltips for everything with a `title`. The browser's own
  * take about a second to appear and can't be sped up, so this takes each
  * `title` over as `data-tip` the first time the pointer reaches it, and
- * draws the tip itself; a title set again later is taken over at once. Elements whose only name was the title keep it as
- * their aria-label.
+ * draws the tip itself; a title set again later is taken over at once.
+ * Shortcuts in titles are written the Mac way and shown in this platform's
+ * (`shortcuts`). Elements whose only name was the title keep it as their
+ * aria-label.
  */
 export function Tooltips() {
   const [tip, setTip] = createSignal<string>();
@@ -27,7 +30,7 @@ export function Tooltips() {
     const title = t.getAttribute("title");
     if (title === null) return;
     t.removeAttribute("title");
-    t.setAttribute("data-tip", title);
+    t.setAttribute("data-tip", shortcuts(title));
     if (!t.hasAttribute("aria-label") && !t.textContent?.trim()) t.setAttribute("aria-label", title);
   };
 

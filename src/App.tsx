@@ -14,7 +14,7 @@ import { Tooltips } from "./ui/Tooltip";
 import { TranslateView } from "./ui/TranslateView";
 import { TypesSheet } from "./ui/TypesSheet";
 import * as I from "./ui/icons";
-import { held } from "./ui/keys";
+import { held, shortcuts } from "./ui/keys";
 import { prefs } from "./ui/prefs";
 import { CLIP_TYPE, type Clip } from "./core/clip";
 import { parse } from "./core/text";
@@ -101,6 +101,9 @@ export function App(props: { initial?: Doc }) {
         const redo = e.shiftKey;
         if (m.historySize()[redo ? "redo" : "undo"]) flash(redo ? redoBtn : undoBtn);
         ed.dispatch({ kind: redo ? "history/redo" : "history/undo" });
+      } else if (mod && e.key.toLowerCase() === "a" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        ed.dispatch({ kind: "selection/all" });
       } else if (mod) return;
       else if (e.key === "Delete" || e.key === "Backspace") ed.dispatch({ kind: "selection/delete" });
       else if (e.key === "Escape") ed.dispatch({ kind: "selection/clear" });
@@ -493,7 +496,7 @@ export function App(props: { initial?: Doc }) {
                 ed.setMessage(undefined);
               }}
             >
-              Undo
+              Undo <span class="kbd">{shortcuts("⌘Z")}</span>
             </button>
           </Show>
         </div>

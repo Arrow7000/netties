@@ -12,6 +12,7 @@ import { createNetModel } from "../state/model";
 import { Canvas, createCamera } from "./Canvas";
 import { dismissOnClickOutside } from "./dismiss";
 import { Check, Left, Pencil, Redo, Right, Tidy, Trash, Undo } from "./icons";
+import { shortcuts } from "./keys";
 import { gridTypes } from "./RuleGrid";
 import { setSubEditor } from "./subEditor";
 
@@ -521,7 +522,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
           disabled={!canSave()}
           title="Save and close (⌘↵). ⌘S saves and keeps the rule open."
         >
-          Save <span class="kbd">⌘↵</span>
+          Save <span class="kbd">{shortcuts("⌘↵")}</span>
         </button>
       </footer>
       <div class="rp-grip" onPointerDown={resizeStart} title="Drag to resize" />
