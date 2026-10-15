@@ -1,0 +1,79 @@
+[
+  {
+    "title": "Interaction Combinators",
+    "author": "Yves Lafont",
+    "year": 1997,
+    "url": "https://www.i2m.univ-amu.fr/perso/yves.lafont/pub/combinators.ps",
+    "sections": [
+      "1.2 interaction and symmetry",
+      "1.6 principal nets",
+      "1.7 translations",
+      "Theorem 1 universality"
+    ],
+    "supports": "Ordinary local rule discipline, same-kind symmetry, and principal-net universality.",
+    "downloadedFileSha256": "ffdc57506bcbd1d75c3bcd0d7d044bdefd196fd1e56103406a137e20d6d59fa9",
+    "downloadedBytes": 332650,
+    "checkedOn": "2026-10-15"
+  },
+  {
+    "title": "Théorie et pratique des réseaux d’interaction",
+    "author": "Sylvain Lippi",
+    "year": 2002,
+    "url": "https://users.polytech.unice.fr/~lippi/r/phd.ps.gz",
+    "sections": [
+      "2.3.2 same-kind rules",
+      "3.2.1 principal-net duplication",
+      "3.2.2 Proposition 3.2.1 package duplication"
+    ],
+    "supports": "Exact distinction between universal tree duplication and a binary universal principal-net/package duplicator.",
+    "downloadedFileSha256": "0d848545301c632664a3a456f79389fe018eb5d0749788f5b3a32ef916839021",
+    "downloadedBytes": 698349,
+    "checkedOn": "2026-10-15"
+  },
+  {
+    "title": "Interaction Nets Semantics and Concurrent Extensions",
+    "author": "Damiano Mazza",
+    "year": 2006,
+    "url": "https://www.lipn.fr/~mazza/papers/Thesis-1.1.pdf",
+    "sections": [
+      "1.1.5 vicious circles",
+      "1.2.4 deadlock freeness",
+      "1.3.2 duplication discussion",
+      "1.4 translations and universality"
+    ],
+    "supports": "Definitions and a secondary pointer to Lippi, not the source of the new sealed-set contextual argument.",
+    "downloadedFileSha256": "8e2dbb1ac0552262972b4253801f7fcb89433777ad28338cd529019fb926350a",
+    "downloadedBytes": 1325807,
+    "checkedOn": "2026-10-15"
+  },
+  {
+    "title": "A Combinatory Account of Internal Structure",
+    "authors": [
+      "Barry Jay",
+      "Thomas Given-Wilson"
+    ],
+    "url": "https://opus.lib.uts.edu.au/bitstream/10453/14486/1/2010003973.pdf",
+    "sections": [
+      "Introduction",
+      "8 structure completeness"
+    ],
+    "supports": "The normal-form domain and representation requirement behind structural completeness.",
+    "checkedOn": "2026-10-15",
+    "downloadedFileSha256": "e8a6c8f98fae7b46b150b88ee8058d91171a939475d4545acd395b11f5b66867",
+    "downloadedBytes": 205405
+  },
+  {
+    "title": "Encoding the Factorisation Calculus",
+    "author": "Reuben N. S. Rowe",
+    "year": 2015,
+    "url": "https://arxiv.org/abs/1508.06713",
+    "sections": [
+      "Abstract",
+      "5 Expressiveness of Factorisation Discussion and Related Work"
+    ],
+    "supports": "Faithful encodings do not by themselves establish structural access to all host values.",
+    "checkedOn": "2026-10-15",
+    "downloadedFileSha256": "ca97f3cb3f46726c558902b8cfdfe9ad28d40a64c0feb41e986b8283d0484f8c",
+    "downloadedBytes": 169846
+  }
+]

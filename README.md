@@ -35,3 +35,19 @@ For those interested in how it works under the hood:
 - `src/render` — SVG paths and standalone SVG export.
 - `src/state` — The net model and the editor store.
 - `src/ui` — SolidJS UI components.
+
+## Native reflection research
+
+The current feasibility investigation is in
+[research/native-reflection](research/native-reflection/README.md). It includes
+an explicit specification, a locality obstruction for reflection of arbitrary
+normal graphs including deadlocked cycles, and reproducible experiments on
+graph wiring, quotation, self-inspection, and duplication.
+
+```sh
+npm run research:reflection
+npm run research:reflection:check
+```
+
+The earlier TC-oriented Lean implementation remains archived in the adjacent
+`boom` checkout and is excluded from its default build.

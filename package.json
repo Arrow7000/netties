@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "research:reflection": "node scripts/reflection-feasibility.mjs",
+    "research:reflection:check": "tsc --noEmit -p research/native-reflection/tsconfig.json && vitest run research/native-reflection/experiments.test.ts && node scripts/reflection-feasibility.mjs --check"
   },
   "dependencies": {
     "@netlify/blobs": "^11.1.4",

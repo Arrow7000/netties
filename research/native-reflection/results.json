@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 1,
+  "limits": {
+    "maxSteps": 20,
+    "maxStates": 20000
+  },
+  "coreExamples": [
+    {
+      "cycleLength": 1,
+      "cells": 3,
+      "activePairs": 0,
+      "sealedCells": 1,
+      "exteriorSha256": "c9a279507b54870dec1d2b52621ef2ee5741daec1e3da7f955e846abfa53e7c8"
+    },
+    {
+      "cycleLength": 3,
+      "cells": 5,
+      "activePairs": 0,
+      "sealedCells": 3,
+      "exteriorSha256": "c9a279507b54870dec1d2b52621ef2ee5741daec1e3da7f955e846abfa53e7c8"
+    },
+    {
+      "cycleLength": 5,
+      "cells": 7,
+      "activePairs": 0,
+      "sealedCells": 5,
+      "exteriorSha256": "c9a279507b54870dec1d2b52621ef2ee5741daec1e3da7f955e846abfa53e7c8"
+    }
+  ],
+  "aliasing": [
+    {
+      "shared": true,
+      "sourceCells": 2,
+      "sourceSealedCells": 1,
+      "targetCells": 699,
+      "targetSealedCells": 322,
+      "targetActivePairs": 0,
+      "sourceExteriorSha256": "036dbb0f9246a3abbf55c18d6366933c62a9e4c85f1ee957591475a6fea7b5d8",
+      "targetExteriorSha256": "eff2d034c8dae3cff44ad6810e72b7c8a7ede7ba5aa4c6a4753d13ac108738f9"
+    },
+    {
+      "shared": false,
+      "sourceCells": 3,
+      "sourceSealedCells": 2,
+      "targetCells": 1021,
+      "targetSealedCells": 644,
+      "targetActivePairs": 0,
+      "sourceExteriorSha256": "036dbb0f9246a3abbf55c18d6366933c62a9e4c85f1ee957591475a6fea7b5d8",
+      "targetExteriorSha256": "eff2d034c8dae3cff44ad6810e72b7c8a7ede7ba5aa4c6a4753d13ac108738f9"
+    }
+  ],
+  "observerChecks": [
+    {
+      "observer": "γ",
+      "cycle1": {
+        "states": 2,
+        "transitions": 1,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 1,
+        "exteriorSha256": "f63f693c31fe40055816970f89a73b26f7bcb7e7786e6ec2a489459c02979c79"
+      },
+      "cycle3": {
+        "states": 2,
+        "transitions": 1,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 1,
+        "exteriorSha256": "f63f693c31fe40055816970f89a73b26f7bcb7e7786e6ec2a489459c02979c79"
+      }
+    },
+    {
+      "observer": "δ",
+      "cycle1": {
+        "states": 3,
+        "transitions": 2,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 2,
+        "exteriorSha256": "c94898e0ae4affb9de0bc3be7e728b18cafdfb89e3f847a002a14b70d7232160"
+      },
+      "cycle3": {
+        "states": 3,
+        "transitions": 2,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 2,
+        "exteriorSha256": "c94898e0ae4affb9de0bc3be7e728b18cafdfb89e3f847a002a14b70d7232160"
+      }
+    },
+    {
+      "observer": "ε",
+      "cycle1": {
+        "states": 3,
+        "transitions": 2,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 2,
+        "exteriorSha256": "41e88965d9399948d8aea13030b27ac04df16492274e1cfbc829d9d4b740f184"
+      },
+      "cycle3": {
+        "states": 3,
+        "transitions": 2,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 2,
+        "exteriorSha256": "41e88965d9399948d8aea13030b27ac04df16492274e1cfbc829d9d4b740f184"
+      }
+    }
+  ],
+  "wiring": [
+    {
+      "crossed": false,
+      "states": 10,
+      "transitions": 13,
+      "frontier": 0,
+      "hasCycle": false,
+      "normalForms": 1,
+      "interactions": 5,
+      "outputTags": [
+        "Same",
+        "Same",
+        "Same",
+        "Same"
+      ]
+    },
+    {
+      "crossed": true,
+      "states": 8,
+      "transitions": 9,
+      "frontier": 0,
+      "hasCycle": false,
+      "normalForms": 1,
+      "interactions": 5,
+      "outputTags": [
+        "Cross",
+        "Cross",
+        "Cross",
+        "Cross"
+      ]
+    }
+  ],
+  "quoting": [
+    {
+      "crossed": false,
+      "quote": {
+        "states": 10,
+        "transitions": 13,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 5
+      },
+      "run": {
+        "states": 10,
+        "transitions": 13,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 5
+      },
+      "roundTrip": true
+    },
+    {
+      "crossed": true,
+      "quote": {
+        "states": 8,
+        "transitions": 9,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 5
+      },
+      "run": {
+        "states": 8,
+        "transitions": 9,
+        "frontier": 0,
+        "hasCycle": false,
+        "normalForms": 1,
+        "interactions": 5
+      },
+      "roundTrip": true
+    }
+  ],
+  "buriedQuote": [
+    {
+      "cycleLength": 1,
+      "states": 3,
+      "transitions": 2,
+      "frontier": 0,
+      "hasCycle": false,
+      "normalForms": 1,
+      "interactions": 2,
+      "pendingWalkers": 1
+    },
+    {
+      "cycleLength": 3,
+      "states": 3,
+      "transitions": 2,
+      "frontier": 0,
+      "hasCycle": false,
+      "normalForms": 1,
+      "interactions": 2,
+      "pendingWalkers": 1
+    }
+  ],
+  "selfQuote": {
+    "states": 2,
+    "transitions": 1,
+    "frontier": 0,
+    "hasCycle": false,
+    "normalForms": 1,
+    "interactions": 1,
+    "outputKinds": [
+      "ε"
+    ]
+  },
+  "copying": [
+    {
+      "loop": false,
+      "states": 5,
+      "transitions": 5,
+      "frontier": 0,
+      "hasCycle": false,
+      "normalForms": 1,
+      "interactions": 3,
+      "actualCells": 6,
+      "expectedCells": 6,
+      "correctCopies": true
+    },
+    {
+      "loop": true,
+      "states": 3,
+      "transitions": 2,
+      "frontier": 0,
+      "hasCycle": false,
+      "normalForms": 1,
+      "interactions": 2,
+      "actualCells": 6,
+      "expectedCells": 2,
+      "correctCopies": false
+    }
+  ],
+  "symmetry": [
+    {
+      "types": 3,
+      "rules": 6,
+      "asymmetricSameKindRules": 0
+    },
+    {
+      "types": 4,
+      "rules": 6,
+      "asymmetricSameKindRules": 0
+    },
+    {
+      "types": 8,
+      "rules": 14,
+      "asymmetricSameKindRules": 0
+    },
+    {
+      "types": 12,
+      "rules": 12,
+      "asymmetricSameKindRules": 0
+    },
+    {
+      "types": 3,
+      "rules": 6,
+      "asymmetricSameKindRules": 0
+    }
+  ]
+}
