@@ -205,7 +205,7 @@ what's done (at the user's request).
          link in the address bar; a check and "Copied" for 0.9 s after.
 2. **Next, small to medium**:
    - [ ] Shorter share links. They're already deflated JSON (600–1,650
-         characters for the examples). fhm deflates its *source text* with
+         characters for the examples). fhm deflates its _source text_ with
          a preset dictionary (`../fhm/editors/web/src/share.mjs`, fflate).
          Deflating our text format instead is about half the length
          (measured on the examples: 1,647 → ~690 for the triage example);
@@ -260,7 +260,7 @@ what's done (at the user's request).
      grazing agents (an `if` whose third port's wire ran down the corner of
      the S below it). Switching to manual keeps the automatic positions but
      drops the columns wires jog out to, and the check only asked whether a
-     wire went *through* an agent. Wires now keep 4 units clear of agents
+     wire went _through_ an agent. Wires now keep 4 units clear of agents
      they don't connect to (`CLEARANCE`; they're drawn on a halo about that
      wide), and a detour whose lane is close to its port reaches it with
      the same S-curve as automatic layout's columns. A new test routes
@@ -270,6 +270,14 @@ what's done (at the user's request).
    - Not covered: wires to rule-interface pins (`pin` jobs) don't detour
      yet, and agents placed overlapping each other can still leave a wire
      through one.
+   - Layout gallery for checking by eye (2026-10-15, the user's idea):
+     `/layouts.html` on the dev server (`src/dev/layouts.ts`, not in the
+     production build). Every example step, plus generated nets of growing
+     size (T: trees in pairs, R: tangles, H: placed by hand), each with a
+     label to point at (E3.2, T39, …). Auto/Manual switch, zoom, theme,
+     "only flagged"; drawings the checks fault are outlined, and clicking
+     one opens it large with the faulty wires marked. First finding: T39
+     in Auto has a long S-curve brushing a γ.
 4. **Waiting on the user**: the taking/giving wave animation (a drawing
    is coming).
 5. **Design and research, one at a time**:
@@ -316,3 +324,4 @@ what's done (at the user's request).
   - hm other than "fully parallel" and whnf is there anything else? worth having a selector for just two strategies? and for the single step, since it only does one thing at a time, what should we choose then, still prioritising external-first? does that mean the strategy only meaningfully affects the other 2, the multi-step buttons?
 - [ ] maybe we should fade out nets that (have no empty ports but) are unconnected to any external ports? because that basically means that whatever computation results from that will be unobservable from the outside? like e.g. the leftovers of a non-chosen if branch, which would ordinarily just result in attaching an eliminator agent and nomnomming its way through whatever remained there. in that case, we may as well show that that subnet is no longer really relevant to us and thus whatever happens there will no longer affect anything else.
   - this would fit nicely with the whnf strategy, since in that strategy unconnected subnets will never be evaluated. basically i want to make it for that, to show that if a thing is isolated, we don't _need_ to evaluate it anymore, because we're going to get our computation anyway. but may not make so much sense to have this with the other strategies. unless the strats only affect prioritisation, and not exclusion altogether? ok idk, needs some thought.
+- [ ] clicking a port that has a wire plugged into it currently unplugs the wire. that shouldn't happen unless i actually drag the wire out
