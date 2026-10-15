@@ -583,6 +583,21 @@ export function Canvas(props: CanvasProps) {
     const d = wireDrag();
     return d?.g.kind === "carry" ? d.g.wire : undefined;
   };
+  /** A loose end being carried: it's drawn at the pointer, not where it was. */
+  const carriedFree = () => {
+    const d = wireDrag();
+    return !props.iface && d?.g.kind === "carry" && d.g.moving.kind === "free" ? d.g.moving.name : undefined;
+  };
+  /**
+   * Where a loose end would be if the wire were let go now: at the pointer,
+   * unless it's over an end it would plug into. A rule's interface has no
+   * loose ends to make, so there the wire's tip is left bare.
+   */
+  const tipEnd = () => {
+    const d = wireDrag();
+    if (!d || props.iface || (d.target && d.check?.kind === "ok")) return undefined;
+    return { at: d.cur, label: carriedFree() };
+  };
 
   /** The arrowhead on the wire being dragged, pointing the way its anchor's direction says. */
   const dragArrow = (pts: Pt[]) => {
@@ -796,7 +811,7 @@ export function Canvas(props: CanvasProps) {
                       props.iface ? (
                         <IfaceEnd ed={ed} name={name} at={p()} state={endState(free(name))} label={props.freeLabel?.(name) ?? name} />
                       ) : (
-                      <g class="free-end">
+                      <g class="free-end" visibility={carriedFree() === name ? "hidden" : undefined}>
                         <EndMark at={p()} state={endState(free(name))} />
                         <circle class="end-dot" cx={p().x} cy={p().y} r={2.4} />
                         <text class="free-label" x={p().x} y={p().dir === "up" ? p().y - 7 : p().y + 13} text-anchor="middle">
@@ -855,6 +870,20 @@ export function Canvas(props: CanvasProps) {
                           {(t) => <WireLabel pts={p()} text={t()} />}
                         </Show>
                       </>
+                    )}
+                  </Show>
+                  <Show when={tipEnd()}>
+                    {(t) => (
+                      <g class="free-end">
+                        <circle class="end-dot" cx={t().at.x} cy={t().at.y} r={2.4} />
+                        <Show when={t().label}>
+                          {(name) => (
+                            <text class="free-label" x={t().at.x} y={t().at.y + 13} text-anchor="middle">
+                              {props.freeLabel?.(name()) ?? name()}
+                            </text>
+                          )}
+                        </Show>
+                      </g>
                     )}
                   </Show>
                 </g>

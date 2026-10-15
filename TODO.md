@@ -281,10 +281,12 @@ what's done (at the user's request).
 4. **Done** (2026-10-15), from the user's drawings:
    - [x] A direction on its own, as a looping animation
          (`src/ui/PolarityIcon.tsx`): giving is rings rippling out from a
-         pebble, thinning and fading; taking is rings inside a rim closing
-         in, turning and collapsing into a lopsided star, like water down a
-         drain. Two moving rings each (three read as plain circles at icon
-         size), all on one clock so a re-rendered icon carries on instead of
+         pebble, thinning and fading; taking is the rim itself creasing
+         inward and collapsing, straight towards the middle, into a
+         lopsided star, like water down a drain (a first version kept the
+         rim fixed and turned the rings as they shrank: "a pretty flower",
+         not draining). Two moving rings for giving (three read as plain
+         circles at icon size), three for taking. All on one clock so a re-rendered icon carries on instead of
          restarting (the hover panel re-renders on every pointer move, which
          is why the first version looked still). Still frames under reduced
          motion. Used wherever directions are talked about, so the pictures
@@ -301,6 +303,15 @@ what's done (at the user's request).
    - [x] Pressing a wired port and letting go no longer unplugs its wire
          (or makes a loose end on an empty port); the gesture starts once
          the pointer moves 3 px.
+   - [x] A carried loose end (dot and name) moves with the pointer instead
+         of staying behind, and any wire drag shows a dot at its tip where
+         letting go would leave a loose end. Let go over nothing, a carried
+         loose end goes back (loose ends have no positions of their own).
+   - [x] In the rule editor, a wire pulled off an interface end and let go
+         over nothing comes out, as selecting and deleting it does. The
+         interface end stays put, since it's fixed. The user also wondered
+         about telling a wire's loose tip apart from an interface end there
+         more generally; not designed yet.
 5. **Design and research, one at a time**:
    - [ ] Reduction strategies. Worth knowing first: interaction nets are
          strongly confluent, so every order of firing reaches the same

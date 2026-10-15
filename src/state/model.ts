@@ -535,7 +535,9 @@ export function createNetModel(opts: NetModelOptions) {
      */
     finishGesture(g: WireGesture, to?: End) {
       if (to && checkDrop(g, to).kind !== "ok") return;
-      if (!to && g.kind === "carry" && g.moving.kind === "free") return;
+      // A loose end let go over nothing stays where it was. In a rule, a wire
+      // pulled off an interface end over nothing comes out, as if deleted.
+      if (!to && g.kind === "carry" && g.moving.kind === "free" && !opts.fixedInterface) return;
       if (!to && g.kind === "new" && opts.fixedInterface) return;
       const v = view();
       checkpoint();
