@@ -5,8 +5,9 @@ import type { Polarity } from "../core/types";
  * A direction on its own, for when there's no port or wire to point an
  * arrow at (the user's drawings, 2026-10-15). Giving is a pebble dropped in
  * a lake: rings leave the middle, thinning and fading as they go. Taking is
- * water down a drain: rings close in, turning and collapsing into a jagged
- * star. Used wherever the app talks about giving and taking, so the
+ * water down a drain: the rim creases inward and collapses, straight
+ * towards the middle, into a jagged star (not turning: that read as a
+ * flower, the user said). Used wherever the app talks about giving and taking, so the
  * pictures are familiar by the time they matter.
  *
  * They loop slowly, all on one clock, so an icon that's drawn again (a
@@ -46,8 +47,8 @@ const RINGS = 2;
 const DUR = 2.7;
 const RIM = 11;
 
-/** Repeating forever, this ring's share of the loop in. */
-const loop = (i: number) => ({ dur: `${DUR}s`, begin: `${(-i * DUR) / RINGS}s`, repeatCount: "indefinite" as const });
+/** Repeating forever, ring `i` of `n` its share of the loop in. */
+const loop = (i: number, n = RINGS) => ({ dur: `${DUR}s`, begin: `${(-i * DUR) / n}s`, repeatCount: "indefinite" as const });
 
 /** Rings from the stone's edge out to the rim. */
 function Giving(props: { moving: boolean }) {
@@ -75,64 +76,85 @@ function Giving(props: { moving: boolean }) {
   );
 }
 
-/** A fixed rim, and rings inside it closing in. */
+/**
+ * Rings that start as the rim and collapse: each creases inward as it
+ * shrinks, straight towards the middle, until it's a small jagged star.
+ * Three, since the shapes differ enough not to blur together.
+ */
 function Taking(props: { moving: boolean }) {
+  const rings = 3;
   const frames = 18;
   const values = Array.from({ length: frames + 1 }, (_, k) => drain(k / frames)).join(";");
   return (
-    <>
-      <circle r={RIM} stroke-width={1.5} />
-      <For each={Array.from({ length: RINGS }, (_, i) => i)}>
-        {(i) => {
-          const t = (i + 0.35) / RINGS;
-          return (
-            // Thinning as it shrinks, so the star stays open instead of clogging into a blob.
-            <path d={drain(t)} stroke-width={1.9 - 0.7 * t} stroke-linejoin="round">
-              {props.moving && [
-                <animate attributeName="d" values={values} {...loop(i)} />,
-                <animate attributeName="stroke-width" values="1.9;1.2" {...loop(i)} />,
-                <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.85;1" {...loop(i)} />,
-              ]}
-            </path>
-          );
-        }}
-      </For>
-    </>
+    <For each={Array.from({ length: rings }, (_, i) => i)}>
+      {(i) => {
+        // The still frame: the rim, a creased ring, and the star, like the drawing.
+        const t = [0, 0.4, 0.8][i]!;
+        return (
+          <path d={drain(t)} stroke-width={1.8 - 0.6 * t} stroke-linejoin="round">
+            {props.moving && [
+              <animate attributeName="d" values={values} {...loop(i, rings)} />,
+              // Thinning as it shrinks, so the star stays open instead of clogging into a blob.
+              <animate attributeName="stroke-width" values="1.8;1.2" {...loop(i, rings)} />,
+              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.06;0.85;1" {...loop(i, rings)} />,
+            ]}
+          </path>
+        );
+      }}
+    </For>
   );
 }
 
 /**
- * Uneven dents and tips, and a little slant to each point, so it collapses
- * lopsidedly like the drawing rather than into a regular star.
+ * The collapse is steered by ten control points round the ring, alternating
+ * creases (which sink) and the arms between them (which mostly hold). How
+ * far each crease sinks, how much each arm gives way, and each point's
+ * angle off even spacing are all uneven, so it collapses lopsidedly like
+ * the drawing rather than into a regular star.
  */
-const DENTS = [1, 0.65, 1.2, 0.8, 1.05];
-const TIPS = [0.18, -0.12, 0.05, -0.2, 0.1];
-const SLANT = [0.12, -0.08, 0.15, -0.1, 0.05, 0.1, -0.14, 0.06, -0.05, 0.09];
-const POINTS = DENTS.length * 2;
+const DENTS = [1.15, 0.55, 1, 0.8, 1.2];
+const TIPS = [0, 0.4, 0.12, 0.3, 0.2];
+const SKEW = [0, 0.3, -0.25, 0.1, 0.35, -0.2, 0.15, 0.4, -0.3, 0.05];
+const CONTROLS = DENTS.length * 2;
+const ANGLES = Array.from({ length: CONTROLS }, (_, i) => ((i + SKEW[i]!) / CONTROLS) * 2 * Math.PI - 1.2);
+/** The ring is drawn through this many points, each at a fixed angle, so every one moves straight in. */
+const SAMPLES = 60;
 
 /**
- * The draining ring at `t` (0 to 1): a circle just inside the rim at 0,
- * shrinking, turning and denting inward until it's a small jagged star.
- * Always the same number of curves, so the shapes in between interpolate.
+ * The draining ring at `t` (0 to 1): a circle at the rim at 0, shrinking and
+ * creasing inward until it's a small jagged star. The same number of curves
+ * at every `t`, so the shapes in between interpolate.
  */
 function drain(t: number): string {
-  const radius = 9.2 - 6.8 * Math.pow(t, 0.85);
-  const depth = 0.6 * Math.pow(t, 0.9);
-  const turn = 1.1 * t;
-  const pts = Array.from({ length: POINTS }, (_, i) => {
-    const a = ((i + SLANT[i]! * t) / POINTS) * 2 * Math.PI + turn;
-    const r = radius * (i % 2 ? 1 - depth * DENTS[(i - 1) / 2]! : 1 + depth * TIPS[i / 2]!);
+  const radius = RIM - 8.6 * Math.pow(t, 0.9);
+  // Creases start shallow and deepen as it goes down.
+  const depth = 0.62 * Math.pow(t, 0.8);
+  const sink = (j: number) => {
+    const i = j % CONTROLS;
+    return i % 2 ? DENTS[(i - 1) / 2]! : TIPS[i / 2]!;
+  };
+  const pts = Array.from({ length: SAMPLES }, (_, n) => {
+    const a = ANGLES[0]! + (n / SAMPLES) * 2 * Math.PI;
+    // Between which two control points, and how far along.
+    let j = 0;
+    while (j < CONTROLS - 1 && ANGLES[j + 1]! <= a) j++;
+    const from = ANGLES[j]!;
+    const to = j < CONTROLS - 1 ? ANGLES[j + 1]! : ANGLES[0]! + 2 * Math.PI;
+    const u = (a - from) / (to - from);
+    // Eased while round, straight once it's a star, so the creases sharpen as it drains.
+    const w = ((1 - Math.cos(Math.PI * u)) / 2) * (1 - t) + u * t;
+    const r = radius * (1 - depth * (sink(j) + (sink(j + 1) - sink(j)) * w));
     return { x: r * Math.cos(a), y: r * Math.sin(a) };
   });
-  // Catmull–Rom through the points; a smaller tension sharpens the corners as it drains.
-  const k = (1 - 0.8 * t) / 6;
+  // Catmull–Rom through the points.
+  const k = 1 / 6;
   const f = (n: number) => n.toFixed(2);
   let d = `M${f(pts[0]!.x)} ${f(pts[0]!.y)}`;
-  for (let i = 0; i < POINTS; i++) {
-    const p0 = pts[(i - 1 + POINTS) % POINTS]!;
+  for (let i = 0; i < SAMPLES; i++) {
+    const p0 = pts[(i - 1 + SAMPLES) % SAMPLES]!;
     const p1 = pts[i]!;
-    const p2 = pts[(i + 1) % POINTS]!;
-    const p3 = pts[(i + 2) % POINTS]!;
+    const p2 = pts[(i + 1) % SAMPLES]!;
+    const p3 = pts[(i + 2) % SAMPLES]!;
     d += `C${f(p1.x + (p2.x - p0.x) * k)} ${f(p1.y + (p2.y - p0.y) * k)} ${f(p2.x - (p3.x - p1.x) * k)} ${f(p2.y - (p3.y - p1.y) * k)} ${f(p2.x)} ${f(p2.y)}`;
   }
   return d + "Z";
