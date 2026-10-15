@@ -9,9 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "formal:export": "node scripts/export-triage-lean.mjs --write",
-    "formal:check": "node scripts/export-triage-lean.mjs --check && cd ../boom && lake build TriageArchive"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@netlify/blobs": "^11.1.4",
