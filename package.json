@@ -11,7 +11,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "formal:export": "node scripts/export-triage-lean.mjs --write",
-    "formal:check": "node scripts/export-triage-lean.mjs --check && cd ../boom && lake build"
+    "formal:check": "node scripts/export-triage-lean.mjs --check && cd ../boom && lake build TriageArchive"
   },
   "dependencies": {
     "@netlify/blobs": "^11.1.4",

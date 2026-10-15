@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const target = resolve(root, "../boom/src/TriageRules.lean");
+const target = resolve(root, "../boom/src/archive/triage/TriageRules.lean");
 const kinds = new Map([
   ["Leaf", "leaf"], ["Stem", "stem"], ["Fork", "fork"], ["App", "app"],
   ["Eval", "eval"], ["Call", "call"], ["Case", "case_"],

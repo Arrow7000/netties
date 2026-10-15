@@ -35,3 +35,19 @@ For those interested in how it works under the hood:
 - `src/render` — SVG paths and standalone SVG export.
 - `src/state` — The net model and the editor store.
 - `src/ui` — SolidJS UI components.
+
+## Archived TC formalization
+
+The TC interaction-net Lean experiment is archived in
+[`../boom/src/archive/triage`](../boom/src/archive/triage/README.md).
+It is excluded from the default `boom` build. These commands explicitly
+maintain the archive:
+
+```sh
+npm run formal:export  # regenerate its Lean rule table
+npm run formal:check   # check the rule table and build TriageArchive
+```
+
+The current research target is a small universal interaction-net system with
+native reflection of graph structure, including sharing. Its working brief
+is in [`../boom/README.md`](../boom/README.md).
