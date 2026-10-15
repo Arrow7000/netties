@@ -2374,11 +2374,60 @@ kbd {
 }
 
 .port-badge .dir svg {
-  width: 15px;
-  height: 15px;
+  width: 24px;
+  height: 24px;
+  stroke: var(--ink);
+}
+
+/* Directions on their own: a fount for giving, a drain for taking (src/ui/PolarityIcon.tsx) */
+
+.pol-icon {
+  width: 1.6em;
+  height: 1.6em;
   flex: none;
   fill: none;
-  stroke: var(--ink);
+  stroke: currentColor;
+  vertical-align: -0.4em;
+}
+
+.dir-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dir-seg .pol-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.dir-word .pol-icon {
+  margin-right: 2px;
+}
+
+.clash-icons {
+  display: inline-flex;
+  gap: 1px;
+  vertical-align: -0.4em;
+  margin-right: 3px;
+}
+
+.clash-icons .pol-icon {
+  vertical-align: 0;
+}
+
+.iface-mark {
+  fill: none;
+  stroke: var(--stuck);
+  pointer-events: none;
+}
+
+.iface-mark.ok {
+  stroke: var(--accent);
+}
+
+.iface-mark.dim {
+  stroke: var(--faint);
 }
 
 .type-chip {

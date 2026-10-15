@@ -279,13 +279,25 @@ what's done (at the user's request).
      one opens it large with the faulty wires marked. First finding: T39
      in Auto has a long S-curve brushing a γ.
 4. **Done** (2026-10-15), from the user's drawings:
-   - [x] The hover panel's gives/takes badge shows a direction on its own
-         as a looping animation (`src/ui/PolarityIcon.tsx`): giving is rings
-         rippling out from a pebble, thinning and fading; taking is rings
-         inside a rim closing in, turning and collapsing into a lopsided
-         star, like water down a drain. Still frames under reduced motion.
-         Only there: the user wants arrows kept on ports, stubs and wires,
-         since the animation would grab too much attention on the canvas.
+   - [x] A direction on its own, as a looping animation
+         (`src/ui/PolarityIcon.tsx`): giving is rings rippling out from a
+         pebble, thinning and fading; taking is rings inside a rim closing
+         in, turning and collapsing into a lopsided star, like water down a
+         drain. Two moving rings each (three read as plain circles at icon
+         size), all on one clock so a re-rendered icon carries on instead of
+         restarting (the hover panel re-renders on every pointer move, which
+         is why the first version looked still). Still frames under reduced
+         motion. Used wherever directions are talked about, so the pictures
+         are familiar by the time they matter (the user's idea): the hover
+         badge (24 px); the Gives/Takes switches (still until pointed at,
+         since the directions sheet has one per port); the directions
+         sheet's notes ("Every port ◎ gives or ◎ takes"); "Both give/take"
+         refusals while dragging a wire and on "can never meet" rule-grid
+         pairs (two of the same side by side); and the rule editor's empty
+         interface ends, drawn as a red fount or drain instead of a ring and
+         arrow. The user isn't sure about the rule editor yet ("let's try it
+         out"). Arrows stay on ports, palette stubs and wires: clearer there,
+         and less attention-grabbing.
    - [x] Pressing a wired port and letting go no longer unplugs its wire
          (or makes a loose end on an empty port); the gesture starts once
          the pointer moves 3 px.

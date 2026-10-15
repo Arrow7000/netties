@@ -7,7 +7,7 @@ import type { Editor } from "../state/editor";
 import { Menu, MenuItem } from "./Menu";
 import { held } from "./keys";
 import { Glyph } from "./Glyph";
-import { PolarityIcon } from "./PolarityIcon";
+import { ClashIcons, PolarityIcon } from "./PolarityIcon";
 import { Trash } from "./icons";
 
 /** A symbol set the way the nets set it. */
@@ -197,7 +197,10 @@ export function HoverPanel(props: { ed: Editor }) {
         const g = h.gesture;
         const title = g.kind === "new" ? "Drawing a wire" : "Moving a wire end";
         const c = h.check;
-        if (h.target && c?.kind === "refuse") return { title, lines: [{ text: c.why, tone: "bad" }] };
+        if (h.target && c?.kind === "refuse") {
+          const pol = c.clash?.kind === "pol" ? c.clash.pol : undefined;
+          return { title, lines: [{ text: pol ? <><ClashIcons pol={pol} /> {c.why}</> : c.why, tone: "bad" }] };
+        }
         if (h.target && c?.kind === "back") return { title, lines: [{ text: "Let go to put it back." }] };
         if (h.target && c?.kind === "ok") {
           return {
@@ -273,7 +276,16 @@ export function HoverPanel(props: { ed: Editor }) {
               </>
             ),
             aside: "can never meet",
-            lines: [{ text: `Their principal ports don't fit. ${clashText(never).split(". ")[0]}.` }],
+            lines: [
+              {
+                text: (
+                  <>
+                    Their principal ports don't fit. {never.kind === "pol" && <ClashIcons pol={never.pol} />}
+                    {clashText(never).split(". ")[0]}.
+                  </>
+                ),
+              },
+            ],
           };
         }
         const brokenRule = has && ed.system.broken(ed.system.ruleFor(h.a, h.b)!.rule);

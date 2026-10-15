@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { For, onMount } from "solid-js";
 import type { Polarity } from "../core/types";
 
 /**
@@ -6,39 +6,67 @@ import type { Polarity } from "../core/types";
  * arrow at (the user's drawings, 2026-10-15). Giving is a pebble dropped in
  * a lake: rings leave the middle, thinning and fading as they go. Taking is
  * water down a drain: rings close in, turning and collapsing into a jagged
- * star. They loop slowly; under reduced motion they stand still, caught at
- * staggered moments, like the drawings.
+ * star. Used wherever the app talks about giving and taking, so the
+ * pictures are familiar by the time they matter.
+ *
+ * They loop slowly, all on one clock, so an icon that's drawn again (a
+ * panel re-rendering) carries on where it was instead of starting over.
+ * Under reduced motion, or with `playing` false, they stand still, caught
+ * at staggered moments, like the drawings.
  */
-export function PolarityIcon(props: { pol: Polarity }) {
-  const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+export function PolarityIcon(props: { pol: Polarity; playing?: boolean; class?: string }) {
+  let svg!: SVGSVGElement;
+  onMount(() => {
+    if (STILL) return;
+    // An outermost <svg> keeps its own animation clock; set it to the shared one.
+    const sync = () => (svg.isConnected ? svg.setCurrentTime((performance.now() / 1000) % (DUR * 1000)) : requestAnimationFrame(sync));
+    sync();
+  });
   return (
-    <svg class="pol-icon" classList={{ [props.pol]: true }} viewBox="-12 -12 24 24" aria-hidden="true">
-      {props.pol === "give" ? <Giving still={still} /> : <Taking still={still} />}
+    <svg ref={svg} class={`pol-icon ${props.pol} ${props.class ?? ""}`} viewBox="-12 -12 24 24" aria-hidden="true">
+      <PolarityMark pol={props.pol} playing={props.playing} />
     </svg>
   );
 }
 
-const RINGS = 3;
+/**
+ * The drawing itself, centred on 0,0 and 24 across, for placing inside
+ * another SVG (the canvas). There the canvas's own clock drives it, which
+ * the negative begin times keep in phase across redraws.
+ */
+export function PolarityMark(props: { pol: Polarity; playing?: boolean }) {
+  // Not playing, it's the still frame: rings caught at chosen moments, not wherever the loop had got to.
+  const moving = () => !STILL && props.playing !== false;
+  return <g class="pol-mark">{props.pol === "give" ? <Giving moving={moving()} /> : <Taking moving={moving()} />}</g>;
+}
+
+const STILL = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Two moving rings: any more crowd together at icon sizes and read as plain circles.
+const RINGS = 2;
 const DUR = 2.7;
+const RIM = 11;
+
+/** Repeating forever, this ring's share of the loop in. */
+const loop = (i: number) => ({ dur: `${DUR}s`, begin: `${(-i * DUR) / RINGS}s`, repeatCount: "indefinite" as const });
 
 /** Rings from the stone's edge out to the rim. */
-function Giving(props: { still: boolean }) {
-  const from = 3.6;
-  const to = 11.2;
+function Giving(props: { moving: boolean }) {
+  const from = 2.9;
   return (
     <>
-      <circle r={from} stroke-width={1.8} />
+      <circle r={from} stroke-width={2} />
       <For each={Array.from({ length: RINGS }, (_, i) => i)}>
         {(i) => {
           // Where this ring is in its journey when standing still.
           const t = (i + 0.5) / RINGS;
-          const begin = `${(-i * DUR) / RINGS}s`;
-          const anim = (attr: string, a: number, b: number) => (
-            <animate attributeName={attr} values={`${a};${b}`} dur={`${DUR}s`} begin={begin} repeatCount="indefinite" />
-          );
           return (
-            <circle r={from + (to - from) * t} stroke-width={1.5 - 1.1 * t} opacity={1 - 0.75 * t}>
-              {!props.still && [anim("r", from, to), anim("stroke-width", 1.5, 0.35), anim("opacity", 1, 0)]}
+            <circle r={from + (RIM - from) * t} stroke-width={2 - 1 * t} opacity={1 - 0.6 * t}>
+              {props.moving && [
+                <animate attributeName="r" values={`${from};${RIM}`} {...loop(i)} />,
+                <animate attributeName="stroke-width" values="2;1" {...loop(i)} />,
+                // Clear for most of the way out, so the movement reads even when small.
+                <animate attributeName="opacity" values="1;0.75;0" keyTimes="0;0.6;1" {...loop(i)} />,
+              ]}
             </circle>
           );
         }}
@@ -48,30 +76,22 @@ function Giving(props: { still: boolean }) {
 }
 
 /** A fixed rim, and rings inside it closing in. */
-function Taking(props: { still: boolean }) {
+function Taking(props: { moving: boolean }) {
   const frames = 18;
-  const ts = Array.from({ length: frames + 1 }, (_, k) => k / frames);
-  const values = ts.map(drain).join(";");
+  const values = Array.from({ length: frames + 1 }, (_, k) => drain(k / frames)).join(";");
   return (
     <>
-      <circle r={11.2} stroke-width={1} />
+      <circle r={RIM} stroke-width={1.5} />
       <For each={Array.from({ length: RINGS }, (_, i) => i)}>
         {(i) => {
-          const t = (i + 0.4) / RINGS;
-          const begin = `${(-i * DUR) / RINGS}s`;
+          const t = (i + 0.35) / RINGS;
           return (
-            <path d={drain(t)} stroke-width={1.2 + 0.5 * t} stroke-linejoin="round">
-              {!props.still && [
-                <animate attributeName="d" values={values} dur={`${DUR}s`} begin={begin} repeatCount="indefinite" />,
-                <animate attributeName="stroke-width" values="1.2;1.7" dur={`${DUR}s`} begin={begin} repeatCount="indefinite" />,
-                <animate
-                  attributeName="opacity"
-                  values="0;1;1;0"
-                  keyTimes="0;0.12;0.82;1"
-                  dur={`${DUR}s`}
-                  begin={begin}
-                  repeatCount="indefinite"
-                />,
+            // Thinning as it shrinks, so the star stays open instead of clogging into a blob.
+            <path d={drain(t)} stroke-width={1.9 - 0.7 * t} stroke-linejoin="round">
+              {props.moving && [
+                <animate attributeName="d" values={values} {...loop(i)} />,
+                <animate attributeName="stroke-width" values="1.9;1.2" {...loop(i)} />,
+                <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.85;1" {...loop(i)} />,
               ]}
             </path>
           );
@@ -96,7 +116,7 @@ const POINTS = DENTS.length * 2;
  * Always the same number of curves, so the shapes in between interpolate.
  */
 function drain(t: number): string {
-  const radius = 10 - 8.4 * Math.pow(t, 0.85);
+  const radius = 9.2 - 6.8 * Math.pow(t, 0.85);
   const depth = 0.6 * Math.pow(t, 0.9);
   const turn = 1.1 * t;
   const pts = Array.from({ length: POINTS }, (_, i) => {
@@ -117,3 +137,29 @@ function drain(t: number): string {
   }
   return d + "Z";
 }
+
+/** Text with each "give(s)" and "take(s)" led by its icon, for sentences that explain directions. */
+export function DirWords(props: { text: string }) {
+  return (
+    <For each={props.text.split(/\b(gives?|takes?)\b/)}>
+      {(part, i) =>
+        i() % 2 ? (
+          <span class="dir-word">
+            <PolarityIcon pol={part.startsWith("give") ? "give" : "take"} />
+            {part}
+          </span>
+        ) : (
+          part
+        )
+      }
+    </For>
+  );
+}
+
+/** Two of the same direction side by side: the clash when both ends of a wire give, or both take. */
+export const ClashIcons = (props: { pol: Polarity }) => (
+  <span class="clash-icons">
+    <PolarityIcon pol={props.pol} />
+    <PolarityIcon pol={props.pol} />
+  </span>
+);

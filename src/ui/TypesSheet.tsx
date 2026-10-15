@@ -3,6 +3,7 @@ import { type Level, missing, portName } from "../core/types";
 import type { Editor } from "../state/editor";
 import { Glyph, dirsOf } from "./Glyph";
 import { DirectionControl, TypeChips, TypeControl } from "./PortControls";
+import { DirWords } from "./PolarityIcon";
 import { Close, Pencil } from "./icons";
 import { dismissOnClickOutside } from "./dismiss";
 
@@ -80,7 +81,7 @@ export function TypesSheet(props: { ed: Editor }) {
 
   const note = (d: Dim): JSX.Element => {
     const p = preview();
-    if (p?.dim === d) return <span class="preview">{MEANS[d][p.level]}</span>;
+    if (p?.dim === d) return <span class="preview">{d === "dirs" ? <DirWords text={MEANS[d][p.level]} /> : MEANS[d][p.level]}</span>;
     if (pending() === d) {
       const n = gaps().length;
       return (
@@ -102,7 +103,7 @@ export function TypesSheet(props: { ed: Editor }) {
         </span>
       );
     }
-    return MEANS[d][typing()[d]];
+    return d === "dirs" ? <DirWords text={MEANS[d][typing()[d]]} /> : MEANS[d][typing()[d]];
   };
 
   const LevelSeg = (p: { dim: Dim }) => (

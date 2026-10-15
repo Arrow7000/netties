@@ -2,15 +2,21 @@ import { For, Show, createSignal } from "solid-js";
 import type { Level, Polarity } from "../core/types";
 import { Popover } from "./Popover";
 import { Check, Chevron, Plus } from "./icons";
+import { PolarityIcon } from "./PolarityIcon";
 
 /**
  * The two settings every port can have, used alike in the agent editor and
  * in the directions and types sheet: which way it goes, and what it carries.
  */
 
-/** Gives / Takes / Either. Under Required, Either can't be chosen. */
+/**
+ * Gives / Takes / Either. Under Required, Either can't be chosen. Gives and
+ * Takes carry their icons, still until pointed at: the directions sheet has
+ * a row of these per port, and all of them moving would be a lot.
+ */
 export function DirectionControl(props: { value?: Polarity; level: Level; onChange: (v: Polarity | undefined) => void }) {
   const required = () => props.level === "required";
+  const [pointed, setPointed] = createSignal<Polarity>();
   const opt = (label: string, v: Polarity | undefined, title: string) => (
     <button
       type="button"
@@ -19,7 +25,10 @@ export function DirectionControl(props: { value?: Polarity; level: Level; onChan
       disabled={required() && v === undefined}
       title={required() && v === undefined ? "Directions are required: every port gives or takes" : title}
       onClick={() => props.onChange(v)}
+      onPointerEnter={() => setPointed(v)}
+      onPointerLeave={() => setPointed(undefined)}
     >
+      {v && <PolarityIcon pol={v} playing={pointed() === v} />}
       {label}
     </button>
   );
