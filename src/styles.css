@@ -2428,6 +2428,10 @@ kbd {
   margin-right: 4px;
 }
 
+.pol-icon.mirrored {
+  transform: scaleX(-1);
+}
+
 .type-chip {
   display: inline-block;
   padding: 1px 7px;
