@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fount and drain</title>
+    <!--
+      A research artefact, standalone: open this file directly, no build or
+      server needed. The icons are drawn by the script below, a plain-JS copy
+      of src/dev/fountDrain.tsx at its last round (commit c9946a7).
+    -->
+    <style>
+      :root {
+        --paper: #f6f6f4;
+        --card: #ffffff;
+        --ink: #17181b;
+        --muted: #6b6f76;
+        --line: #e3e4e7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #000;
+          --card: #17181b;
+          --ink: #f1f2f4;
+          --muted: #9a9ea6;
+          --line: #2a2d32;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font: 14px/1.55 system-ui, -apple-system, sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 32px 16px 64px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 16px;
+        margin: 32px 0 8px;
+      }
+      p,
+      li {
+        color: var(--muted);
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin: 12px 0;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        flex-wrap: wrap;
+        min-height: 48px;
+      }
+      .label {
+        width: 120px;
+        color: var(--muted);
+        flex: none;
+      }
+      svg.icon {
+        fill: none;
+        stroke: currentColor;
+        flex: none;
+      }
+      .drawings img {
+        max-width: 100%;
+        border-radius: 8px;
+        display: block;
+        margin: 8px 0;
+      }
+      code {
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Fount and drain</h1>
+      <p>
+        netties, 15–16 October 2026. An experiment in showing a port's direction on its own, with no
+        port or wire to point an arrow along: a fount for a port that gives, a drain for one that takes.
+        Not used in the end; kept for reference.
+      </p>
+
+      <div class="card">
+        <div class="row" id="large"><span class="label">Moving</span></div>
+        <div class="row" id="still"><span class="label">Still</span></div>
+        <div class="row" id="small"><span class="label">At icon sizes</span></div>
+      </div>
+
+      <h2>The idea</h2>
+      <p>
+        The user's drawings. Giving: "circles moving outward, becoming thinner and fainter as they go.
+        Like dropping a pebble in a lake." Taking: "a circle moves inwards, contracting and becoming
+        more angular as it does so, as parts of the circle collapse inwards. Like water draining down
+        a hole." The hope was that seeing these wherever directions came up would make them familiar
+        by the time they mattered.
+      </p>
+      <div class="drawings">
+        <img src="drawing-giving-taking.png" alt="The user's drawing: concentric circles for giving, a ring collapsing into a star for taking" />
+        <img src="drawing-rays.png" alt="The user's sketch of rays around the giving circles" style="max-width: 200px" />
+      </div>
+
+      <h2>How it went</h2>
+      <ol>
+        <li>
+          Three rings each, a fixed rim for the drain with rings turning as they shrank. Too small to
+          read: "they just kinda look like circles". The panel re-rendered on every pointer move,
+          restarting the animation, so the fount looked still; fixed by putting every icon on one clock.
+          (<code>cfb918a</code>)
+        </li>
+        <li>
+          The drain's rim itself creasing inward, without turning (that "becomes a pretty flower ...
+          doesn't illustrate draining"). Made lopsided to match the drawing, which wasn't wanted: the
+          drawing was only hand-drawn. (<code>4161dcb</code>)
+        </li>
+        <li>
+          Symmetric creases, valleys falling faster than tips; each new rim fading in slowly, like a
+          Shepard tone, so it feels ever-falling rather than pulsing outwards. Rays on the fount, so it
+          reads as sending out even when still. But the faint rim never looked like a circle, the star
+          faded out too visibly, and the fount became a sun with its moving rings too small to see.
+          (<code>270262e</code>)
+        </li>
+        <li>
+          This page: the drain comes in as a full circle and creases only once inside, and thins and
+          shrinks to nothing instead of fading; the fount's rings use the whole icon while moving, with
+          rays only when still. (<code>c9946a7</code>)
+        </li>
+      </ol>
+      <p>
+        Each round's code: <code>git show &lt;commit&gt;:src/ui/PolarityIcon.tsx</code> (the last:
+        <code>git show c9946a7:src/dev/fountDrain.tsx</code>). The app went with the badge's old port-and-arrow, the head
+        moving out of the port for giving and in towards it for taking: clearer at icon size and less
+        attention-grabbing. The user: "a fun but failed experiment".
+      </p>
+    </main>
+
+    <script>
+      const NS = "http://www.w3.org/2000/svg";
+      const RINGS = 2;
+      const DUR = 2.7;
+      const RIM = 11;
+      const RAYS = 12;
+      const RAYS_FROM = 8.6;
+
+      const el = (name, attrs, ...kids) => {
+        const e = document.createElementNS(NS, name);
+        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+        e.append(...kids);
+        return e;
+      };
+      const loop = (i, n, attrs) => el("animate", { dur: `${DUR}s`, begin: `${(-i * DUR) / n}s`, repeatCount: "indefinite", ...attrs });
+
+      /** Rings from the pebble outwards; rays only when still, so moving rings get the whole icon. */
+      function giving(moving) {
+        const from = 2.2;
+        const to = moving ? RIM : 7.4;
+        const parts = [];
+        if (!moving)
+          for (let i = 0; i < RAYS; i++) {
+            const a = (i / RAYS) * 2 * Math.PI;
+            parts.push(el("line", { x1: RAYS_FROM * Math.cos(a), y1: RAYS_FROM * Math.sin(a), x2: RIM * Math.cos(a), y2: RIM * Math.sin(a), "stroke-width": 1.1, "stroke-linecap": "round" }));
+          }
+        parts.push(el("circle", { r: from, "stroke-width": 1.6 }));
+        for (let i = 0; i < RINGS; i++) {
+          const t = (i + 0.5) / RINGS;
+          const ring = el("circle", { r: from + (to - from) * t, "stroke-width": 1.4 - 0.6 * t, opacity: 1 - 0.6 * t });
+          if (moving)
+            ring.append(
+              loop(i, RINGS, { attributeName: "r", values: `${from};${to}` }),
+              loop(i, RINGS, { attributeName: "stroke-width", values: "1.4;0.8" }),
+              loop(i, RINGS, { attributeName: "opacity", values: "1;0.75;0", keyTimes: "0;0.6;1" }),
+            );
+          parts.push(ring);
+        }
+        return parts;
+      }
+
+      /** Rings that start as the rim and collapse straight inwards into a star, thinning to nothing. */
+      function taking(moving) {
+        const rings = 3;
+        const frames = 18;
+        const values = Array.from({ length: frames + 1 }, (_, k) => drain(k / frames)).join(";");
+        return [0, 0.4, 0.8].map((t, i) => {
+          const ring = el("path", { d: drain(t), "stroke-width": 1.8 - 0.6 * t, "stroke-linejoin": "round" });
+          if (moving)
+            ring.append(
+              loop(i, rings, { attributeName: "d", values }),
+              loop(i, rings, { attributeName: "stroke-width", values: "1.8;1.4;0", keyTimes: "0;0.6;1" }),
+              loop(i, rings, { attributeName: "opacity", values: "0;1;1", keyTimes: "0;0.25;1" }),
+            );
+          return ring;
+        });
+      }
+
+      // Control points evenly round the ring, alternating creases (which sink) and arms (which sink
+      // much less), so the valleys fall in faster than the tips.
+      const CREASES = 5;
+      const ARMS_SINK = 0.15;
+      const CONTROLS = CREASES * 2;
+      const ANGLES = Array.from({ length: CONTROLS }, (_, i) => (i / CONTROLS) * 2 * Math.PI - Math.PI / 2);
+      const SAMPLES = 60;
+
+      /** The draining ring at t (0 to 1): a circle at the rim, then creasing inward into a small star. */
+      function drain(t) {
+        const radius = RIM - 10.6 * Math.pow(t, 0.9);
+        const depth = 0.62 * Math.pow(Math.max(0, (t - 0.25) / 0.75), 0.8);
+        const sink = (j) => (j % 2 ? 1 : ARMS_SINK);
+        const pts = Array.from({ length: SAMPLES }, (_, n) => {
+          const a = ANGLES[0] + (n / SAMPLES) * 2 * Math.PI;
+          let j = 0;
+          while (j < CONTROLS - 1 && ANGLES[j + 1] <= a) j++;
+          const from = ANGLES[j];
+          const to = j < CONTROLS - 1 ? ANGLES[j + 1] : ANGLES[0] + 2 * Math.PI;
+          const u = (a - from) / (to - from);
+          const w = ((1 - Math.cos(Math.PI * u)) / 2) * (1 - t) + u * t;
+          const r = radius * (1 - depth * (sink(j) + (sink(j + 1) - sink(j)) * w));
+          return { x: r * Math.cos(a), y: r * Math.sin(a) };
+        });
+        const k = 1 / 6;
+        const f = (n) => n.toFixed(2);
+        let d = `M${f(pts[0].x)} ${f(pts[0].y)}`;
+        for (let i = 0; i < SAMPLES; i++) {
+          const p0 = pts[(i - 1 + SAMPLES) % SAMPLES];
+          const p1 = pts[i];
+          const p2 = pts[(i + 1) % SAMPLES];
+          const p3 = pts[(i + 2) % SAMPLES];
+          d += `C${f(p1.x + (p2.x - p0.x) * k)} ${f(p1.y + (p2.y - p0.y) * k)} ${f(p2.x - (p3.x - p1.x) * k)} ${f(p2.y - (p3.y - p1.y) * k)} ${f(p2.x)} ${f(p2.y)}`;
+        }
+        return d + "Z";
+      }
+
+      const icon = (pol, size, moving) =>
+        el("svg", { class: "icon", viewBox: "-12 -12 24 24", width: size, height: size }, ...(pol === "give" ? giving(moving) : taking(moving)));
+
+      for (const pol of ["give", "take"]) {
+        document.getElementById("large").append(icon(pol, 120, true));
+        document.getElementById("still").append(icon(pol, 120, false));
+      }
+      for (const size of [24, 18]) for (const pol of ["give", "take"]) document.getElementById("small").append(icon(pol, size, true));
+    </script>
+  </body>
+</html>

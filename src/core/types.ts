@@ -100,12 +100,6 @@ export function endSpec(net: Net, sys: System, e: End, freeSpec?: (name: string)
   return specOf(sys, net.agent(e.agent).type, e.slot);
 }
 
-/** What a loose end stands for: the far side of the port it's attached to. */
-export function looseSpec(net: Net, sys: System, name: string): Effective {
-  const p = net.partner({ kind: "free", name });
-  return p?.kind === "port" ? flip(specOf(sys, net.agent(p.agent).type, p.slot)) : {};
-}
-
 /** Wires whose two ends don't fit together. */
 export function badWires(net: Net, sys: System, freeSpec?: (name: string) => Effective | undefined): Map<WireId, Clash> {
   const out = new Map<WireId, Clash>();

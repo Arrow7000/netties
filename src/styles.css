@@ -2556,7 +2556,7 @@ button.type-chip:hover {
 
 .ts-table {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) 214px 190px;
+  grid-template-columns: minmax(170px, 1fr) 256px 190px;
   margin: 0 16px;
   border: 1px solid var(--line);
   border-radius: 10px;

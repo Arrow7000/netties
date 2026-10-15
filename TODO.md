@@ -291,14 +291,19 @@ what's done (at the user's request).
          → gives or ← takes"); "Both give/take" refusals while dragging a
          wire and on "can never meet" rule-grid pairs. Arrows stay as they
          were on ports, palette stubs, wires and the rule editor's ends.
-   - [ ] **The user to pick** on `/polarity.html` (dev only,
-         `src/dev/polarity.tsx`): the animated arrow (in the app now) or the
-         fount and drain from the user's drawings (`src/dev/fountDrain.tsx`:
-         rings rippling out from a pebble; the rim creasing straight inward
-         into a star). Three rounds of the fount and drain didn't read well
-         at icon size; the user called it "a fun but failed experiment" and
-         suggested the arrows, with one more turn for the fount and drain.
-         Then delete the page and the loser.
+   - [x] The user picked the arrows over the fount and drain from their
+         drawings (2026-10-16), after four rounds that didn't read well at
+         icon size ("a fun but failed experiment"). Kept as research:
+         `design/research/fount-and-drain/` (standalone page, the drawings,
+         and what each round tried).
+   - [x] The directions sheet's Directions column widened (214 → 256 px)
+         for the switches with icons.
+   - [x] A loose end on the canvas is the end of a wire, so its hover badge
+         shows the wire's direction (it gives what the port at the other end
+         gives); it showed the flip, as if it were a port of its own. The
+         user thinks the flip may be right for a rule's interface ends,
+         which are ports to the outside (the rule editor has no hover panel
+         yet).
    - [x] Pressing a wired port and letting go no longer unplugs its wire
          (or makes a loose end on an empty port); the gesture starts once
          the pointer moves 3 px.

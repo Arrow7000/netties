@@ -2,7 +2,7 @@ import { For, type JSX, Show, createMemo, createSignal } from "solid-js";
 import type { GroupId } from "../core/groups";
 import { type AgentId, type End, NONE, type WireId } from "../core/net";
 import { pairKey } from "../core/system";
-import { type Effective, canMeet, clash, clashText, endSpec, looseSpec, specOf } from "../core/types";
+import { type Effective, canMeet, clash, clashText, endSpec, specOf } from "../core/types";
 import type { Editor } from "../state/editor";
 import { Menu, MenuItem } from "./Menu";
 import { held } from "./keys";
@@ -129,7 +129,9 @@ export function HoverPanel(props: { ed: Editor }) {
               Loose end <Sym s={h.name} />
             </>
           ),
-          aside: typed() && other ? <PortBadge spec={looseSpec(v.net, v.sys, h.name)} /> : undefined,
+          // A loose end is the end of a wire, not a port of its own: it gives
+          // what the port at the wire's other end gives.
+          aside: typed() && other?.kind === "port" ? <PortBadge spec={specOf(v.sys, v.net.agent(other.agent).type, other.slot)} /> : undefined,
           lines: [{ text: other ? "The net's connection to the outside. Drag it onto a port to plug it in." : "Drag from it to wire it up." }],
         };
       }
