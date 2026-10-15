@@ -14,7 +14,8 @@ import { prefs } from "./prefs";
 type Drag =
   | { kind: "pan"; start: Pt; origin: Pt; moved: boolean }
   | { kind: "marquee"; start: Pt; cur: Pt; additive: boolean; moved: boolean }
-  | { kind: "wire"; g: WireGesture; cur: Pt; target?: End; check?: DropCheck; path?: Pt[] }
+  // A wire gesture only begins once the pointer moves: pressing a port and letting go leaves its wire alone.
+  | { kind: "wire"; g: WireGesture; start: Pt; moved: boolean; cur: Pt; target?: End; check?: DropCheck; path?: Pt[] }
   | { kind: "move"; ids: AgentId[]; groups: GroupId[]; last: Pt; moved: boolean }
   | { kind: "click-wire"; id: WireId; alt: boolean };
 
@@ -392,8 +393,7 @@ export function Canvas(props: CanvasProps) {
     const end = endAt(target);
     if (end) {
       const g = ed.gestureAt(end);
-      setDrag({ kind: "wire", g, cur: w });
-      ed.setHover({ kind: "drag", gesture: g });
+      setDrag({ kind: "wire", g, start: { x: e.clientX, y: e.clientY }, moved: false, cur: w });
       return;
     }
     const agentEl = target.closest("[data-agent]");
@@ -441,12 +441,13 @@ export function Canvas(props: CanvasProps) {
       const moved = d.moved || Math.hypot(cur.x - d.start.x, cur.y - d.start.y) * view().k > 3;
       setDrag({ ...d, cur, moved });
     } else if (d.kind === "wire") {
+      if (!d.moved && Math.hypot(e.clientX - d.start.x, e.clientY - d.start.y) <= 3) return;
       const cur = toWorld(e);
       // Pointer capture sends events to the canvas; look at what's really under the pointer.
       const over = endAt(document.elementFromPoint(e.clientX, e.clientY));
       const target = over && !(d.g.kind === "new" && sameEnd(over, d.g.from)) ? over : undefined;
       const check = target ? ed.checkDrop(d.g, target) : undefined;
-      setDrag({ ...d, cur, target, check });
+      setDrag({ ...d, moved: true, cur, target, check });
       ed.setHover({ kind: "drag", gesture: d.g, target, check });
       cancelAnimationFrame(previewFrame);
       previewFrame = requestAnimationFrame(() => {
@@ -521,7 +522,7 @@ export function Canvas(props: CanvasProps) {
       }
       else if (!d.additive) ed.clearSelection();
     }
-    if (d.kind === "wire") {
+    if (d.kind === "wire" && d.moved) {
       if (!d.target) ed.finishGesture(d.g);
       else if (d.check?.kind === "ok") ed.finishGesture(d.g, d.target);
     }
@@ -575,7 +576,7 @@ export function Canvas(props: CanvasProps) {
 
   const wireDrag = () => {
     const d = drag();
-    return d?.kind === "wire" ? d : undefined;
+    return d?.kind === "wire" && d.moved ? d : undefined;
   };
   const carried = () => {
     const d = wireDrag();
