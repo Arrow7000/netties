@@ -6,8 +6,8 @@ import type { Polarity } from "../core/types";
  * arrow at (the user's drawings, 2026-10-15). Giving is a pebble dropped in
  * a lake: rings leave the middle, thinning and fading as they go. Taking is
  * water down a drain: the rim creases inward and collapses, straight
- * towards the middle, into a jagged star (not turning: that read as a
- * flower, the user said). Used wherever the app talks about giving and taking, so the
+ * towards the middle, into a star (not turning: that read as a flower,
+ * the user said). Used wherever the app talks about giving and taking, so the
  * pictures are familiar by the time they matter.
  *
  * They loop slowly, all on one clock, so an icon that's drawn again (a
@@ -42,7 +42,7 @@ export function PolarityMark(props: { pol: Polarity; playing?: boolean }) {
 }
 
 const STILL = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-// Two moving rings: any more crowd together at icon sizes and read as plain circles.
+// Two moving rings for giving: any more crowd together at icon sizes and read as plain circles.
 const RINGS = 2;
 const DUR = 2.7;
 const RIM = 11;
@@ -50,21 +50,42 @@ const RIM = 11;
 /** Repeating forever, ring `i` of `n` its share of the loop in. */
 const loop = (i: number, n = RINGS) => ({ dur: `${DUR}s`, begin: `${(-i * DUR) / n}s`, repeatCount: "indefinite" as const });
 
-/** Rings from the stone's edge out to the rim. */
+/** How many rays the fount sends out, and the band they fill outside its rings. */
+const RAYS = 12;
+const RAYS_FROM = 8.6;
+
+/**
+ * Rings from the stone's edge out to where the rays begin, and a ring of
+ * short straight rays beyond, so that even standing still it reads as
+ * something sending out, not just circles (the user's sketch, 2026-10-16).
+ */
 function Giving(props: { moving: boolean }) {
-  const from = 2.9;
+  const from = 2.2;
+  const to = 7.4;
   return (
     <>
-      <circle r={from} stroke-width={2} />
+      <For each={Array.from({ length: RAYS }, (_, i) => (i / RAYS) * 2 * Math.PI)}>
+        {(a) => (
+          <line
+            x1={RAYS_FROM * Math.cos(a)}
+            y1={RAYS_FROM * Math.sin(a)}
+            x2={RIM * Math.cos(a)}
+            y2={RIM * Math.sin(a)}
+            stroke-width={1.1}
+            stroke-linecap="round"
+          />
+        )}
+      </For>
+      <circle r={from} stroke-width={1.6} />
       <For each={Array.from({ length: RINGS }, (_, i) => i)}>
         {(i) => {
           // Where this ring is in its journey when standing still.
           const t = (i + 0.5) / RINGS;
           return (
-            <circle r={from + (RIM - from) * t} stroke-width={2 - 1 * t} opacity={1 - 0.6 * t}>
+            <circle r={from + (to - from) * t} stroke-width={1.4 - 0.6 * t} opacity={1 - 0.6 * t}>
               {props.moving && [
-                <animate attributeName="r" values={`${from};${RIM}`} {...loop(i)} />,
-                <animate attributeName="stroke-width" values="2;1" {...loop(i)} />,
+                <animate attributeName="r" values={`${from};${to}`} {...loop(i)} />,
+                <animate attributeName="stroke-width" values="1.4;0.8" {...loop(i)} />,
                 // Clear for most of the way out, so the movement reads even when small.
                 <animate attributeName="opacity" values="1;0.75;0" keyTimes="0;0.6;1" {...loop(i)} />,
               ]}
@@ -78,7 +99,7 @@ function Giving(props: { moving: boolean }) {
 
 /**
  * Rings that start as the rim and collapse: each creases inward as it
- * shrinks, straight towards the middle, until it's a small jagged star.
+ * shrinks, straight towards the middle, until it's a small star.
  * Three, since the shapes differ enough not to blur together.
  */
 function Taking(props: { moving: boolean }) {
@@ -96,7 +117,9 @@ function Taking(props: { moving: boolean }) {
               <animate attributeName="d" values={values} {...loop(i, rings)} />,
               // Thinning as it shrinks, so the star stays open instead of clogging into a blob.
               <animate attributeName="stroke-width" values="1.8;1.2" {...loop(i, rings)} />,
-              <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.06;0.85;1" {...loop(i, rings)} />,
+              // Faint at the rim, coming in slowly, so it feels ever-falling, like a
+              // Shepard tone: a ring that popped in at the rim read as a pulse outward.
+              <animate attributeName="opacity" values="0;0.35;1;1;0" keyTimes="0;0.2;0.45;0.85;1" {...loop(i, rings)} />,
             ]}
           </path>
         );
@@ -106,33 +129,27 @@ function Taking(props: { moving: boolean }) {
 }
 
 /**
- * The collapse is steered by ten control points round the ring, alternating
- * creases (which sink) and the arms between them (which mostly hold). How
- * far each crease sinks, how much each arm gives way, and each point's
- * angle off even spacing are all uneven, so it collapses lopsidedly like
- * the drawing rather than into a regular star.
+ * The collapse is steered by control points evenly round the ring,
+ * alternating creases, which sink, and the arms between them, which sink
+ * much less, so the valleys fall in faster than the tips.
  */
-const DENTS = [1.15, 0.55, 1, 0.8, 1.2];
-const TIPS = [0, 0.4, 0.12, 0.3, 0.2];
-const SKEW = [0, 0.3, -0.25, 0.1, 0.35, -0.2, 0.15, 0.4, -0.3, 0.05];
-const CONTROLS = DENTS.length * 2;
-const ANGLES = Array.from({ length: CONTROLS }, (_, i) => ((i + SKEW[i]!) / CONTROLS) * 2 * Math.PI - 1.2);
+const CREASES = 5;
+const ARMS_SINK = 0.15;
+const CONTROLS = CREASES * 2;
+const ANGLES = Array.from({ length: CONTROLS }, (_, i) => (i / CONTROLS) * 2 * Math.PI - Math.PI / 2);
 /** The ring is drawn through this many points, each at a fixed angle, so every one moves straight in. */
 const SAMPLES = 60;
 
 /**
  * The draining ring at `t` (0 to 1): a circle at the rim at 0, shrinking and
- * creasing inward until it's a small jagged star. The same number of curves
+ * creasing inward until it's a small star. The same number of curves
  * at every `t`, so the shapes in between interpolate.
  */
 function drain(t: number): string {
   const radius = RIM - 8.6 * Math.pow(t, 0.9);
   // Creases start shallow and deepen as it goes down.
   const depth = 0.62 * Math.pow(t, 0.8);
-  const sink = (j: number) => {
-    const i = j % CONTROLS;
-    return i % 2 ? DENTS[(i - 1) / 2]! : TIPS[i / 2]!;
-  };
+  const sink = (j: number) => (j % 2 ? 1 : ARMS_SINK);
   const pts = Array.from({ length: SAMPLES }, (_, n) => {
     const a = ANGLES[0]! + (n / SAMPLES) * 2 * Math.PI;
     // Between which two control points, and how far along.

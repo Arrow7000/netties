@@ -281,11 +281,16 @@ what's done (at the user's request).
 4. **Done** (2026-10-15), from the user's drawings:
    - [x] A direction on its own, as a looping animation
          (`src/ui/PolarityIcon.tsx`): giving is rings rippling out from a
-         pebble, thinning and fading; taking is the rim itself creasing
-         inward and collapsing, straight towards the middle, into a
-         lopsided star, like water down a drain (a first version kept the
-         rim fixed and turned the rings as they shrank: "a pretty flower",
-         not draining). Two moving rings for giving (three read as plain
+         pebble, thinning and fading, inside a ring of 12 short straight
+         rays (added 2026-10-16: standing still, it "just looks like
+         circles"); taking is the rim itself, a perfect circle, creasing
+         inward at five even points, valleys falling faster than tips,
+         straight towards the middle into a star, like water down a drain.
+         Each new rim fades in slowly, like a Shepard tone, so it feels
+         ever-falling rather than pulsing outwards. Both are rotationally
+         symmetric: the mess in the user's drawings wasn't intended. (A
+         first version kept the rim fixed and turned the rings as they
+         shrank: "a pretty flower", not draining.) Two moving rings for giving (three read as plain
          circles at icon size), three for taking. All on one clock so a re-rendered icon carries on instead of
          restarting (the hover panel re-renders on every pointer move, which
          is why the first version looked still). Still frames under reduced
