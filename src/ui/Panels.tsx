@@ -7,7 +7,7 @@ import type { Editor } from "../state/editor";
 import { Menu, MenuItem } from "./Menu";
 import { held } from "./keys";
 import { Glyph } from "./Glyph";
-import { ClashIcons, PolarityIcon } from "./PolarityIcon";
+import { PairIcons, PolarityIcon } from "./PolarityIcon";
 import { Trash } from "./icons";
 
 /** A symbol set the way the nets set it. */
@@ -201,18 +201,25 @@ export function HoverPanel(props: { ed: Editor }) {
         const c = h.check;
         if (h.target && c?.kind === "refuse") {
           const pol = c.clash?.kind === "pol" ? c.clash.pol : undefined;
-          return { title, lines: [{ text: pol ? <><ClashIcons pol={pol} /> {c.why}</> : c.why, tone: "bad" }] };
+          return { title, lines: [{ text: pol ? <><PairIcons left={pol} right={pol} /> {c.why}</> : c.why, tone: "bad" }] };
         }
         if (h.target && c?.kind === "back") return { title, lines: [{ text: "Let go to put it back." }] };
         if (h.target && c?.kind === "ok") {
+          // The ends the wire would join, facing: the one that stays, and the one
+          // under the pointer (for a loose end, the port at the far end of its wire).
+          const anchor = g.kind === "new" ? g.from : g.anchor;
+          const far = h.target.kind === "free" ? v.net.partner(h.target) : h.target;
+          const left = m.specAt(anchor).pol;
+          const right = far ? m.specAt(far).pol : undefined;
           return {
             title,
             lines: [
               {
-                text: c.join ? (
-                  <>Let go to join it to {n.end(h.target)}.</>
-                ) : (
-                  <>Let go to connect it to {n.end(h.target)}.</>
+                text: (
+                  <>
+                    {left && right && <PairIcons left={left} right={right} />}{" "}
+                    {c.join ? <>Let go to join it to {n.end(h.target)}.</> : <>Let go to connect it to {n.end(h.target)}.</>}
+                  </>
                 ),
                 tone: "accent",
               },
@@ -282,7 +289,7 @@ export function HoverPanel(props: { ed: Editor }) {
               {
                 text: (
                   <>
-                    Their principal ports don't fit. {never.kind === "pol" && <ClashIcons pol={never.pol} />}
+                    Their principal ports don't fit. {never.kind === "pol" && <PairIcons left={never.pol} right={never.pol} />}
                     {clashText(never).split(". ")[0]}.
                   </>
                 ),

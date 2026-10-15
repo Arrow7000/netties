@@ -73,14 +73,15 @@ export function DirWords(props: { text: string }) {
 }
 
 /**
- * The clash when both ends of a wire give, or both take: two of the same
- * direction facing each other, like the wire's two ends, the second
- * mirrored. Giving still means away from its own port, so two that give run
- * head-on into each other, and two that take pull apart.
+ * A wire's two ends facing each other, the second mirrored: the first is
+ * the end on the left, the second the end on the right. Giving still means
+ * away from its own port, so a pair that fits flows one way across
+ * (○→ →○), two that give run head-on (○→ ←○), and two that take pull
+ * apart (○← →○).
  */
-export const ClashIcons = (props: { pol: Polarity }) => (
-  <span class="clash-icons">
-    <PolarityIcon pol={props.pol} />
-    <PolarityIcon pol={props.pol} class="mirrored" />
+export const PairIcons = (props: { left: Polarity; right: Polarity }) => (
+  <span class="pair-icons">
+    <PolarityIcon pol={props.left} />
+    <PolarityIcon pol={props.right} class="mirrored" />
   </span>
 );

@@ -292,7 +292,10 @@ what's done (at the user's request).
          wire and on "can never meet" rule-grid pairs, as the wire's two
          ends facing each other, the second mirrored (○→ ←○ run head-on;
          ○← →○ pull apart). Mirroring keeps the meaning, which was always
-         "away from its own port gives", not "rightwards gives". Arrows stay as they
+         "away from its own port gives", not "rightwards gives". A drop
+         that fits shows the harmonious pair (○→ →○ from an end that gives,
+         ○← ←○ from one that takes); for a loose end, the port at its
+         wire's far end counts. Arrows stay as they
          were on ports, palette stubs, wires and the rule editor's ends.
    - [x] The user picked the arrows over the fount and drain from their
          drawings (2026-10-16), after four rounds that didn't read well at
