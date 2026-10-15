@@ -278,8 +278,17 @@ what's done (at the user's request).
      "only flagged"; drawings the checks fault are outlined, and clicking
      one opens it large with the faulty wires marked. First finding: T39
      in Auto has a long S-curve brushing a γ.
-4. **Waiting on the user**: the taking/giving wave animation (a drawing
-   is coming).
+4. **Done** (2026-10-15), from the user's drawings:
+   - [x] The hover panel's gives/takes badge shows a direction on its own
+         as a looping animation (`src/ui/PolarityIcon.tsx`): giving is rings
+         rippling out from a pebble, thinning and fading; taking is rings
+         inside a rim closing in, turning and collapsing into a lopsided
+         star, like water down a drain. Still frames under reduced motion.
+         Only there: the user wants arrows kept on ports, stubs and wires,
+         since the animation would grab too much attention on the canvas.
+   - [x] Pressing a wired port and letting go no longer unplugs its wire
+         (or makes a loose end on an empty port); the gesture starts once
+         the pointer moves 3 px.
 5. **Design and research, one at a time**:
    - [ ] Reduction strategies. Worth knowing first: interaction nets are
          strongly confluent, so every order of firing reaches the same
@@ -312,7 +321,7 @@ what's done (at the user's request).
   - i think this should work throughout the app. but i think maybe the first part – highlight buttons on the same first half of the shortcut – should only happen if the button actually displays the shortcut. otherwise it might be confusing why that button is highlighted when you don't know that it's a ⌘\_ action? hm.
   - ok no, on second thought i do think all such shortkeyed buttons should highlight. with a consistent enough affordance the user will quickly learn that the reason that button highlighted is bc it shares the ⌘\_ shortcut.
   - but: for this to be effective ideally most buttons with such actions would have the shortcut displayed. although we can omit this in the case of where buttons are small, like the undo/redo things in the top right. but when you have a larger button with a proper word label on it, then yes it should display the shortcut chord on it.
-- [ ] maybe instead of the symbols for taking and giving we could have a little wave animation thing moving inward for "taking" and outward for "giving" (i will draw something to explain what i mean)
+- [x] maybe instead of the symbols for taking and giving we could have a little wave animation thing moving inward for "taking" and outward for "giving" (i will draw something to explain what i mean)
 - [x] when i click on a wire it doesn't look any different, it's only when i move my mouse away that i can see that its colour has changed into the selected mode. not sure why this is
 - [x] when a wire is highlighted (either selected or active) you can see the rounding of the end as it goes into the agent's primary port. i don't like this. makes it look quite amateur svg ish.
 - [x] i think manual mode should only affect agents, not wires. i think wires should still keep their automatic routing. atm when i switch to manual, the wires no longer avoid intersecting or going behind their agents. i don't think there's a reason for that to happen. seeing as wires can't themselves be moved, i don't think their behaviour should change in manual mode.
@@ -324,4 +333,4 @@ what's done (at the user's request).
   - hm other than "fully parallel" and whnf is there anything else? worth having a selector for just two strategies? and for the single step, since it only does one thing at a time, what should we choose then, still prioritising external-first? does that mean the strategy only meaningfully affects the other 2, the multi-step buttons?
 - [ ] maybe we should fade out nets that (have no empty ports but) are unconnected to any external ports? because that basically means that whatever computation results from that will be unobservable from the outside? like e.g. the leftovers of a non-chosen if branch, which would ordinarily just result in attaching an eliminator agent and nomnomming its way through whatever remained there. in that case, we may as well show that that subnet is no longer really relevant to us and thus whatever happens there will no longer affect anything else.
   - this would fit nicely with the whnf strategy, since in that strategy unconnected subnets will never be evaluated. basically i want to make it for that, to show that if a thing is isolated, we don't _need_ to evaluate it anymore, because we're going to get our computation anyway. but may not make so much sense to have this with the other strategies. unless the strats only affect prioritisation, and not exclusion altogether? ok idk, needs some thought.
-- [ ] clicking a port that has a wire plugged into it currently unplugs the wire. that shouldn't happen unless i actually drag the wire out
+- [x] clicking a port that has a wire plugged into it currently unplugs the wire. that shouldn't happen unless i actually drag the wire out

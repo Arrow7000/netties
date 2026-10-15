@@ -7,23 +7,20 @@ import type { Editor } from "../state/editor";
 import { Menu, MenuItem } from "./Menu";
 import { held } from "./keys";
 import { Glyph } from "./Glyph";
+import { PolarityIcon } from "./PolarityIcon";
 import { Trash } from "./icons";
 
 /** A symbol set the way the nets set it. */
 const Sym = (props: { s: string }) => <i class="sym">{props.s}</i>;
 
-/** A port's direction as a little arrow (out of the port if it gives, into it if it takes), and its type as a chip. */
+/** A port's direction as rings rippling out (gives) or draining in (takes), and its type as a chip. */
 export function PortBadge(props: { spec: Effective }) {
   return (
     <span class="port-badge">
       <Show when={props.spec.pol}>
         {(pol) => (
           <span class="dir" classList={{ give: pol() === "give", take: pol() === "take" }}>
-            <svg viewBox="0 0 23 10" aria-hidden="true">
-              <circle cx={2.8} cy={5} r={2.2} />
-              <path d={pol() === "give" ? "M5 5H17" : "M5 5H21.5"} />
-              <path d={pol() === "give" ? "M15.5 1.6L21 5 15.5 8.4z" : "M11 1.6L5.5 5 11 8.4z"} class="head" />
-            </svg>
+            <PolarityIcon pol={pol()} />
             {pol() === "give" ? "gives" : "takes"}
           </span>
         )}
