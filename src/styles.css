@@ -2374,60 +2374,58 @@ kbd {
 }
 
 .port-badge .dir svg {
-  width: 24px;
-  height: 24px;
-  stroke: var(--ink);
+  width: 30px;
+  height: 12px;
 }
 
-/* Directions on their own: a fount for giving, a drain for taking (src/ui/PolarityIcon.tsx) */
+/* A direction on its own: a port's circle, and an arrowhead moving out of it or into it (src/ui/PolarityIcon.tsx) */
 
 .pol-icon {
-  width: 1.6em;
-  height: 1.6em;
+  width: 2.3em;
+  height: 0.9em;
   flex: none;
+  vertical-align: -0.05em;
+}
+
+.pol-icon .port {
+  fill: var(--paper);
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+
+.pol-icon .shaft {
   fill: none;
   stroke: currentColor;
-  vertical-align: -0.4em;
+  stroke-width: 1.3;
+}
+
+.pol-icon .head {
+  fill: currentColor;
+}
+
+.port-badge .dir .pol-icon {
+  color: var(--ink);
 }
 
 .dir-seg button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .dir-seg .pol-icon {
-  width: 18px;
-  height: 18px;
+  width: 26px;
+  height: 10px;
 }
 
 .dir-word .pol-icon {
-  margin-right: 2px;
+  margin-right: 3px;
 }
 
 .clash-icons {
   display: inline-flex;
-  gap: 1px;
-  vertical-align: -0.4em;
-  margin-right: 3px;
-}
-
-.clash-icons .pol-icon {
-  vertical-align: 0;
-}
-
-.iface-mark {
-  fill: none;
-  stroke: var(--stuck);
-  pointer-events: none;
-}
-
-.iface-mark.ok {
-  stroke: var(--accent);
-}
-
-.iface-mark.dim {
-  stroke: var(--faint);
+  gap: 4px;
+  margin-right: 4px;
 }
 
 .type-chip {

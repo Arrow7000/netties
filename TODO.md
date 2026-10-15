@@ -279,32 +279,26 @@ what's done (at the user's request).
      one opens it large with the faulty wires marked. First finding: T39
      in Auto has a long S-curve brushing a γ.
 4. **Done** (2026-10-15), from the user's drawings:
-   - [x] A direction on its own, as a looping animation
-         (`src/ui/PolarityIcon.tsx`): giving is rings rippling out from a
-         pebble, thinning and fading, inside a ring of 12 short straight
-         rays (added 2026-10-16: standing still, it "just looks like
-         circles"); taking is the rim itself, a perfect circle, creasing
-         inward at five even points, valleys falling faster than tips,
-         straight towards the middle into a star, like water down a drain.
-         Each new rim fades in slowly, like a Shepard tone, so it feels
-         ever-falling rather than pulsing outwards. Both are rotationally
-         symmetric: the mess in the user's drawings wasn't intended. (A
-         first version kept the rim fixed and turned the rings as they
-         shrank: "a pretty flower", not draining.) Two moving rings for giving (three read as plain
-         circles at icon size), three for taking. All on one clock so a re-rendered icon carries on instead of
-         restarting (the hover panel re-renders on every pointer move, which
-         is why the first version looked still). Still frames under reduced
-         motion. Used wherever directions are talked about, so the pictures
-         are familiar by the time they matter (the user's idea): the hover
-         badge (24 px); the Gives/Takes switches (still until pointed at,
-         since the directions sheet has one per port); the directions
-         sheet's notes ("Every port ◎ gives or ◎ takes"); "Both give/take"
-         refusals while dragging a wire and on "can never meet" rule-grid
-         pairs (two of the same side by side); and the rule editor's empty
-         interface ends, drawn as a red fount or drain instead of a ring and
-         arrow. The user isn't sure about the rule editor yet ("let's try it
-         out"). Arrows stay on ports, palette stubs and wires: clearer there,
-         and less attention-grabbing.
+   - [x] A direction on its own (`src/ui/PolarityIcon.tsx`): the badge's
+         old port-circle-and-arrow, with the head moving along the line, out
+         of the circle for giving and in towards it for taking. All icons
+         on one clock, so a re-rendered one carries on instead of restarting
+         (the hover panel re-renders on every pointer move). Still under
+         reduced motion. Used wherever directions are talked about, so it's
+         familiar by the time it matters (the user's idea): the hover
+         badge; the Gives/Takes switches (still until pointed at, since the
+         directions sheet has one per port); the sheet's notes ("Every port
+         → gives or ← takes"); "Both give/take" refusals while dragging a
+         wire and on "can never meet" rule-grid pairs. Arrows stay as they
+         were on ports, palette stubs, wires and the rule editor's ends.
+   - [ ] **The user to pick** on `/polarity.html` (dev only,
+         `src/dev/polarity.tsx`): the animated arrow (in the app now) or the
+         fount and drain from the user's drawings (`src/dev/fountDrain.tsx`:
+         rings rippling out from a pebble; the rim creasing straight inward
+         into a star). Three rounds of the fount and drain didn't read well
+         at icon size; the user called it "a fun but failed experiment" and
+         suggested the arrows, with one more turn for the fount and drain.
+         Then delete the page and the loser.
    - [x] Pressing a wired port and letting go no longer unplugs its wire
          (or makes a loose end on an empty port); the gesture starts once
          the pointer moves 3 px.

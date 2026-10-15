@@ -7,7 +7,6 @@ import { type Box, G, type Placed, type Pt, boxOf, insidePolygon, portPos, segme
 import type { StepPlan, StepPreview } from "../layout/replace";
 import { flattenPath, polylinePath, resample, roundedPath } from "../render/path";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
-import { PolarityMark } from "./PolarityIcon";
 import type { DropCheck, NetModel, WireGesture } from "../state/model";
 import { held } from "./keys";
 import { prefs } from "./prefs";
@@ -945,40 +944,31 @@ const TYPE_CH = 5.9;
 /**
  * An end of a rule's interface: hollow like a loose end, since it can be
  * empty, but wider and ringed, since it's fixed: it stands for a wire the
- * pair held. Its ring turns red while it still needs a wire. An empty end
- * with a direction is drawn as its direction instead, a fount or a drain
- * (`PolarityMark`), since an arrow needs a wire or a port to point along.
+ * pair held. Its ring turns red while it still needs a wire, and an empty
+ * one shows its direction the way an empty port does.
  */
 function IfaceEnd(props: { ed: NetModel; name: string; at: { x: number; y: number; dir: "up" | "down" }; state: EndState; label: string }) {
   const empty = () => (props.ed.rev(), props.ed.net.free.get(props.name) === NONE);
   const out = () => (props.at.dir === "up" ? -1 : 1);
-  // An end that gives sends its wire into the result.
-  const mark = () => (empty() ? props.ed.specAt(free(props.name)).pol : undefined);
+  const arrow = () => {
+    const pol = props.ed.specAt(free(props.name)).pol;
+    if (!pol || !empty() || props.state === "target" || props.state === "refuse") return undefined;
+    // An end that gives sends its wire into the result.
+    const into = -out();
+    const tone = props.state === "candidate" ? "ok" : props.state === "blocked" ? "dim" : "";
+    return { at: { x: props.at.x, y: props.at.y + into * 11 }, dx: 0, dy: pol === "give" ? into : -into, scale: 0.82, class: `port-arrow ${tone}` };
+  };
   const c = (cls: string, r: number) => <circle class={cls} cx={props.at.x} cy={props.at.y} r={r} />;
   return (
     <g class="free-end iface-end">
-      <Show
-        when={mark()}
-        fallback={<circle class="iface-ring" classList={{ need: empty() }} cx={props.at.x} cy={props.at.y} r={6.6} />}
-      >
-        {(pol) => (
-          <g
-            class="iface-mark"
-            classList={{ ok: props.state === "candidate", dim: props.state === "blocked" }}
-            transform={`translate(${props.at.x} ${props.at.y}) scale(0.75)`}
-          >
-            <PolarityMark pol={pol()} />
-          </g>
-        )}
-      </Show>
+      <circle class="iface-ring" classList={{ need: empty() }} cx={props.at.x} cy={props.at.y} r={6.6} />
       <Show when={props.state === "hover"}>{c("iface-hover", 9.6)}</Show>
       <Show when={props.state === "candidate"}>{c("port-candidate", 9)}</Show>
       <Show when={props.state === "blocked"}>{c("port-blocked", 8)}</Show>
       <Show when={props.state === "target"}>{c("port-target", 9.6)}</Show>
       <Show when={props.state === "refuse"}>{c("port-refuse", 9.6)}</Show>
-      <Show when={!mark()}>
-        <circle class="iface-dot" cx={props.at.x} cy={props.at.y} r={3.8} />
-      </Show>
+      <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
+      <circle class="iface-dot" cx={props.at.x} cy={props.at.y} r={3.8} />
       <Show when={props.state === "origin"}>{c("port-origin", 4.6)}</Show>
       <text class="iface-label" x={props.at.x} y={props.at.y + out() * IFACE_LABEL}>
         {props.label}
