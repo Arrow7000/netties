@@ -234,7 +234,15 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     return undefined;
   };
 
-  dismissOnClickOutside(() => panel, ed.closeRule, dirty, () => flash(), ".palette, .top-right");
+  // Escape lets go of a pending delete, then the selection, then closes.
+  const escape = () => {
+    if (confirmDelete()) setConfirmDelete(false);
+    else if (rhs.selection() || rhs.armed()) {
+      rhs.clearSelection();
+      rhs.clearArmed();
+    } else tryClose();
+  };
+  dismissOnClickOutside(() => panel, ed.closeRule, dirty, () => flash(), ".palette, .top-right", escape);
 
   onMount(() => {
     setSubEditor({ m: rhs, camera: rcam, centre, canLeave: () => (dirty() ? (flash(), false) : true) });
@@ -248,10 +256,10 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
       if ((e.target as Element).closest("input, textarea, select")) {
-        // In the description: Enter and Escape leave the field; saving still works.
+        // In the description: Enter leaves the field, as Escape does; saving still works.
         if (mod && key === "s") (e.preventDefault(), saveHere());
         else if (mod && e.key === "Enter") (e.preventDefault(), save());
-        else if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLElement).blur();
+        else if (e.key === "Enter") (e.target as HTMLElement).blur();
         else return;
         e.stopImmediatePropagation();
         return;
@@ -272,13 +280,6 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
       } else if (mod) return;
       else if (e.key === "Delete" || e.key === "Backspace") rhs.deleteSelection();
       else if (key === "x") rhs.flipAgents(rhs.selectedAgents());
-      else if (e.key === "Escape") {
-        if (confirmDelete()) setConfirmDelete(false);
-        else if (rhs.selection() || rhs.armed()) {
-          rhs.clearSelection();
-          rhs.clearArmed();
-        } else tryClose();
-      }
     };
     window.addEventListener("keydown", onKey, { capture: true });
     onCleanup(() => window.removeEventListener("keydown", onKey, { capture: true }));

@@ -1,4 +1,4 @@
-import { For, type JSX, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, type JSX, Show, createMemo, createSignal } from "solid-js";
 import { type Level, missing, portName } from "../core/types";
 import type { Editor } from "../state/editor";
 import { Glyph, dirsOf } from "./Glyph";
@@ -123,20 +123,10 @@ export function TypesSheet(props: { ed: Editor }) {
     </div>
   );
 
-  // Changes apply at once, so a click outside closes the sheet, unless a switch to Required is waiting on ports.
+  // Changes apply at once, so a click outside closes the sheet, and so does Escape.
+  // A click outside leaves it open while a switch to Required is waiting on ports.
   let sheet!: HTMLDivElement;
-  dismissOnClickOutside(() => sheet, ed.closeTypes, () => !!pending());
-
-  onMount(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !(e.target as Element).closest("input, select")) {
-        e.stopImmediatePropagation();
-        ed.closeTypes();
-      }
-    };
-    window.addEventListener("keydown", key, { capture: true });
-    onCleanup(() => window.removeEventListener("keydown", key, { capture: true }));
-  });
+  dismissOnClickOutside(() => sheet, ed.closeTypes, () => !!pending(), undefined, undefined, ed.closeTypes);
 
   const off = (d: Dim) => level(d) === "off";
   const shade = (d: Dim) => {

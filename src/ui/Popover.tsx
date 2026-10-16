@@ -1,5 +1,6 @@
 import { type JSX, Show, createSignal, onCleanup, onMount } from "solid-js";
 import { Portal } from "solid-js/web";
+import { closeOnEscape } from "./dismiss";
 
 /**
  * A menu-like panel pinned under (or above) the element that opened it.
@@ -18,26 +19,19 @@ export function Popover(props: { anchor: HTMLElement; onClose: () => void; class
     setPos(below < 260 && r.top > below ? { ...x, bottom: window.innerHeight - r.top + 6 } : { ...x, top: r.bottom + 6 });
   };
 
+  closeOnEscape(() => props.onClose(), true);
   onMount(() => {
     place();
     const down = (e: PointerEvent) => {
       const t = e.target as Node;
       if (!el.contains(t) && !props.anchor.contains(t)) props.onClose();
     };
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopImmediatePropagation();
-        props.onClose();
-      }
-    };
     const scroll = (e: Event) => !el.contains(e.target as Node) && props.onClose();
     document.addEventListener("pointerdown", down, true);
-    window.addEventListener("keydown", key, { capture: true });
     window.addEventListener("scroll", scroll, true);
     window.addEventListener("resize", props.onClose);
     onCleanup(() => {
       document.removeEventListener("pointerdown", down, true);
-      window.removeEventListener("keydown", key, { capture: true });
       window.removeEventListener("scroll", scroll, true);
       window.removeEventListener("resize", props.onClose);
     });

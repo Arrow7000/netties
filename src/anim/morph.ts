@@ -1,4 +1,4 @@
-import type { AgentId, End, Net, WireId } from "../core/net";
+import { type AgentId, type End, NONE, type Net, type WireId } from "../core/net";
 import type { StepRecord } from "../core/reduce";
 import type { System } from "../core/system";
 import { G, type Orient, type Placed, type Placement, type Pt, portPos } from "../layout/geometry";
@@ -200,6 +200,32 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
   /** Loose ends that weren't there before start where their wire's end was (as when undoing a connection). */
   const freeStart = new Map<string, Pt>();
 
+  /**
+   * A wire between two ports that's now two wires, one from each port to a
+   * loose end that wasn't there, as when undoing a join of two loose ends'
+   * wires: it splits at its halfway point, and each half springs back from
+   * there. Keyed by the new wire, each half runs from its port.
+   */
+  const halves = new Map<WireId, Pt[]>();
+  for (const [id, r] of before.routed.wires) {
+    const old = before.net.wires.get(id);
+    if (!old || old.ends.some((e) => e.kind !== "port")) continue;
+    const parts = old.ends.map((e) => {
+      const w = after.net.wireAt(e);
+      const other = w === NONE ? undefined : after.net.partner(e);
+      return other?.kind === "free" && !before.routed.free.has(other.name) ? w : undefined;
+    });
+    if (parts[0] === undefined || parts[1] === undefined || parts[0] === parts[1]) continue;
+    const path = flattenPath(r, G.radius);
+    const s0 = startOf(old.ends[0]);
+    if (path.length < 2 || !s0) continue;
+    const fwd = dist(path[0]!, s0) <= dist(path[path.length - 1]!, s0) ? path : [...path].reverse();
+    const [first, second] = splitHalfway(fwd);
+    halves.set(parts[0], first);
+    halves.set(parts[1], second.reverse());
+    used.add(id);
+  }
+
   const wires: WireTrack[] = [];
   for (const [id, w] of after.net.wires) {
     const r = after.routed.wires.get(id);
@@ -210,8 +236,13 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     const s0 = startOf(w.ends[0]);
     const s1 = startOf(w.ends[1]);
     const pieces = srcs.map(oldShape).filter((p): p is Pt[] => !!p && p.length > 0);
+    const half = halves.get(id);
     // Chain the old pieces from an end that was there, so the far end of the chain is where the other end was.
-    const from = !pieces.length
+    const from = half
+      ? w.ends[0].kind === "port"
+        ? half
+        : [...half].reverse()
+      : !pieces.length
       ? (peel(s0, w.ends[1], to[to.length - 1]!) ?? peel(s1, w.ends[0], to[0]!)?.reverse() ?? [s0 ?? to[0]!, s1 ?? to[to.length - 1]!])
       : s0 || !s1
         ? chain(pieces, s0 ?? to[0]!)
@@ -307,6 +338,22 @@ function chain(pieces: Pt[][], start: Pt): Pt[] {
     cur = pts[pts.length - 1]!;
   }
   return out;
+}
+
+/** A polyline cut in two at half its length, both halves running the same way as it. */
+function splitHalfway(path: Pt[]): [Pt[], Pt[]] {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += dist(path[i - 1]!, path[i]!);
+  let left = total / 2;
+  for (let i = 1; i < path.length; i++) {
+    const d = dist(path[i - 1]!, path[i]!);
+    if (d >= left && d > 0) {
+      const mid = lerpPt(path[i - 1]!, path[i]!, left / d);
+      return [[...path.slice(0, i), mid], [mid, ...path.slice(i)]];
+    }
+    left -= d;
+  }
+  return [path, [path[path.length - 1]!]];
 }
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);

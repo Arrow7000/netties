@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { AgentType } from "../core/net";
 import { type PortSpec, portName, portsFor, typingOn } from "../core/types";
 import { portPos, shape } from "../layout/geometry";
@@ -93,22 +93,20 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
     props.onClose();
   };
 
-  // A click outside closes the editor unless something has been changed.
+  // A click outside or Escape closes the editor unless something has been changed; then Cancel and Save glow.
   let form!: HTMLFormElement;
+  let cancelBtn!: HTMLButtonElement;
+  let saveBtn!: HTMLButtonElement;
   const draft = () => JSON.stringify([symbol(), name(), arity(), filled(), ports()]);
   const pristine = draft();
-  dismissOnClickOutside(() => form, props.onClose, () => draft() !== pristine);
-
-  onMount(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopImmediatePropagation();
-        props.onClose();
-      }
-    };
-    window.addEventListener("keydown", key, { capture: true });
-    onCleanup(() => window.removeEventListener("keydown", key, { capture: true }));
-  });
+  const flash = () => {
+    for (const b of [cancelBtn, saveBtn]) {
+      b.classList.remove("flash-warm");
+      void b.offsetWidth;
+      b.classList.add("flash-warm");
+    }
+  };
+  dismissOnClickOutside(() => form, props.onClose, () => draft() !== pristine, flash);
 
   // The preview: the agent drawn large, with its ports marked and numbered.
   const preview = () => {
@@ -336,10 +334,10 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
             </button>
           </Show>
           <span class="push" />
-          <button type="button" class="btn" onClick={props.onClose}>
+          <button ref={cancelBtn} type="button" class="btn" onClick={props.onClose}>
             Cancel
           </button>
-          <button type="submit" class="btn primary" disabled={!!missingWhy()}>
+          <button ref={saveBtn} type="submit" class="btn primary" disabled={!!missingWhy()}>
             {conflicts().length
               ? `Save and cut ${conflicts().length === 1 ? "1 wire" : `${conflicts().length} wires`}`
               : initial

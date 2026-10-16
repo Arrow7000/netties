@@ -127,3 +127,22 @@ export function polylinePath(pts: Pt[]): string {
   const f = (n: number) => Math.round(n * 100) / 100;
   return pts.map((p, i) => `${i ? "L" : "M"}${f(p.x)} ${f(p.y)}`).join(" ");
 }
+
+/** The point halfway along a polyline, the direction it runs there, and its length. */
+export function midway(pts: Pt[]): { at: Pt; dx: number; dy: number; len: number } | undefined {
+  if (pts.length < 2) return undefined;
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+  let left = total / 2;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len >= left && len > 0) {
+      const t = left / len;
+      return { at: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, dx: (b.x - a.x) / len, dy: (b.y - a.y) / len, len: total };
+    }
+    left -= len;
+  }
+  return undefined;
+}

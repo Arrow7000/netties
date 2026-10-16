@@ -18,7 +18,7 @@ function ExampleThumbnail(props: { ex: Example }) {
   const sys = props.ex.system();
   const net = props.ex.net(sys);
   const layout = autoLayout(net);
-  const svg = toSVG(net, sys, layout.placement, layout.routed, { paper: "var(--paper)", ink: "var(--ink)" }, 12);
+  const svg = toSVG(net, sys, layout.placement, layout.routed, { paper: "var(--paper)", ink: "var(--ink)" }, 12, false);
   return <span class="example-thumb" aria-hidden="true" innerHTML={svg} />;
 }
 

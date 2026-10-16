@@ -155,8 +155,6 @@ in the triaged list; these checkboxes are left as written.
 
 ## Rough edges in directions and types
 
-- SVG export omits the direction arrows shown on the canvas, so a directed
-  net loses its flow cues when exported.
 - The agent editor covers the canvas, so the wires it would cut (marked
   red) are often hidden. The prototype slid the canvas aside.
 - The combinator translation ignores types; for systems with directions it
@@ -576,6 +574,25 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
        version had rails at the top and bottom of the canvas that wires
        were dragged into; that only served the deliberate case).
 
+## Done 2026-10-16, from the end of "Others"
+
+- Escape closes whatever was opened last: a popover or menu first, then
+  the panel under it (rule grid, types sheet, agent editor, rule editor),
+  one per press. A panel with unsaved changes stays open and its Cancel
+  and Save glow, as on a click outside; Escape in a text field leaves the
+  field first. One stack in `src/ui/dismiss.ts` (`closeOnEscape`) replaces
+  each panel's own Escape handler, so the agent editor no longer throws
+  away changes on Escape. The full-screen editors (text, translation,
+  component) keep their own handling until the editors design round.
+- Undoing a join of two loose ends' wires splits the joined wire at its
+  halfway point, and each half springs back to its own loose end
+  (`halves` in `src/anim/morph.ts`). Not for undoing a wire dragged from
+  an empty port onto a loose end: that looks the same to the animation as
+  undoing a loose end plugged into a port, where the end sliding back is
+  right, so it still recedes into the loose end's place.
+- SVG export draws the direction arrows (wires and empty ports) as the
+  canvas does. Example thumbnails leave them out.
+
 ## Others
 
 - [ ] can we use a compression tool for share links? they're currently huge. let's look into what we use for `../fhm`'s web playground, bc that one seems really efficient
@@ -602,5 +619,5 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.25.22.png
 - [x] i don't really understand the logic behind this positioning? is it possible that here too we are using the rule editor logic that ensures that loose ends always appear either above or below all nets? im not sure we want that on the main canvas. but even if we do, why are the two identical nets flipped upside down relative to each other? what's the logic there?
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.30.54.png
-- [ ] escape should also close the expanded rule grid, as it should all panels (unless they have unsaved state)
-- [ ] when you connect two wires and then undo it, the animation is a bit awkward, because the destination wire recedes all the way from the port it's no longer connected to. instead i think it'll look better if we just split the wire in two from its halfway point. then the two wires should spring back naturally
+- [x] escape should also close the expanded rule grid, as it should all panels (unless they have unsaved state)
+- [x] when you connect two wires and then undo it, the animation is a bit awkward, because the destination wire recedes all the way from the port it's no longer connected to. instead i think it'll look better if we just split the wire in two from its halfway point. then the two wires should spring back naturally

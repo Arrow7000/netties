@@ -5,7 +5,7 @@ import { type AgentId, type End, NONE, type WireId, free, port, sameEnd } from "
 import { type System, pairKey } from "../core/system";
 import { type Box, G, type Placed, type Pt, boxOf, insidePolygon, portPos, segmentHitsBox, shape } from "../layout/geometry";
 import type { StepPlan, StepPreview } from "../layout/replace";
-import { flattenPath, polylinePath, resample, roundedPath } from "../render/path";
+import { flattenPath, midway, polylinePath, resample, roundedPath } from "../render/path";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { NetModel, WireGesture } from "../state/model";
 import { onEscapeCancels } from "./escape";
@@ -1179,25 +1179,6 @@ function wireType(ed: NetModel, id: WireId): string | undefined {
   if (!v.wires.has(id)) return undefined;
   const [a, b] = v.wire(id).ends;
   return ed.specAt(a).type ?? ed.specAt(b).type;
-}
-
-/** The point halfway along a polyline, the direction it runs there, and its length. */
-function midway(pts: Pt[]): { at: Pt; dx: number; dy: number; len: number } | undefined {
-  if (pts.length < 2) return undefined;
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
-  let left = total / 2;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1]!;
-    const b = pts[i]!;
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    if (len >= left && len > 0) {
-      const t = left / len;
-      return { at: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, dx: (b.x - a.x) / len, dy: (b.y - a.y) / len, len: total };
-    }
-    left -= len;
-  }
-  return undefined;
 }
 
 /** A small arrowhead at a point, pointing along (dx, dy). */

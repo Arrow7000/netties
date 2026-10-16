@@ -1,4 +1,5 @@
-import { type JSX, Show, createSignal, onCleanup, onMount } from "solid-js";
+import { type JSX, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { closeOnEscape } from "./dismiss";
 import { Chevron } from "./icons";
 
 /** A button that opens a dropdown menu below it. The menu closes on a pick, a click outside, or Escape. */
@@ -16,14 +17,10 @@ export function Menu(props: {
 
   onMount(() => {
     const down = (e: PointerEvent) => open() && !root.contains(e.target as Node) && close();
-    const key = (e: KeyboardEvent) => open() && e.key === "Escape" && close();
     document.addEventListener("pointerdown", down);
-    document.addEventListener("keydown", key);
-    onCleanup(() => {
-      document.removeEventListener("pointerdown", down);
-      document.removeEventListener("keydown", key);
-    });
+    onCleanup(() => document.removeEventListener("pointerdown", down));
   });
+  createEffect(() => open() && closeOnEscape(close, true));
 
   return (
     <div class="menu-wrap" ref={root}>
