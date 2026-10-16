@@ -178,6 +178,25 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     const t = tracks.get(e.agent);
     return t ? portAt(t, t.from, e.slot) : undefined;
   };
+  /**
+   * A wire that's new, from an end that was there to a loose end that
+   * wasn't, as when undoing a join: it peels off whichever old wire ran from
+   * that end, as the stretch from the end to the point nearest where the
+   * loose end goes.
+   */
+  const peel = (known: Pt | undefined, other: End, goes: Pt): Pt[] | undefined => {
+    if (!known || other.kind !== "free" || before.routed.free.has(other.name)) return undefined;
+    for (const r of before.routed.wires.values()) {
+      const f = flattenPath(r, G.radius);
+      if (f.length < 2) continue;
+      const path = dist(f[0]!, known) < 1 ? f : dist(f[f.length - 1]!, known) < 1 ? [...f].reverse() : undefined;
+      if (!path) continue;
+      let cut = 1;
+      path.forEach((q, i) => i > 0 && dist(q, goes) < dist(path[cut]!, goes) && (cut = i));
+      return path.slice(0, cut + 1);
+    }
+    return undefined;
+  };
   /** Loose ends that weren't there before start where their wire's end was (as when undoing a connection). */
   const freeStart = new Map<string, Pt>();
 
@@ -193,7 +212,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     const pieces = srcs.map(oldShape).filter((p): p is Pt[] => !!p && p.length > 0);
     // Chain the old pieces from an end that was there, so the far end of the chain is where the other end was.
     const from = !pieces.length
-      ? [s0 ?? to[0]!, s1 ?? to[to.length - 1]!]
+      ? (peel(s0, w.ends[1], to[to.length - 1]!) ?? peel(s1, w.ends[0], to[0]!)?.reverse() ?? [s0 ?? to[0]!, s1 ?? to[to.length - 1]!])
       : s0 || !s1
         ? chain(pieces, s0 ?? to[0]!)
         : chain(pieces, s1).reverse();

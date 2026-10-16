@@ -376,7 +376,8 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
      or cancelled with Escape, glides back instead of jumping; animation
      frames draw the ends as the canvas does (a rule's interface ends
      vanished while wires moved); interface labels use the main canvas's
-     italic serif (the user's preference).
+     italic serif (the user's preference); undoing a join peels the loose
+     end's wire off the joined one (it appeared at its final shape).
    - Checked in the browser with synthetic pointer events; the animation
      itself only at its first frame (the test tab was hidden, so it ran no
      animation frames). Not yet checked by eye:
@@ -384,18 +385,78 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
      the wire after letting go (they can differ slightly in shape, since
      the preview holds the end in place and the final route bends in).
 
-2. **Layout** (second):
-   - [ ] Wires keep their automatic-layout columns in manual mode and while
-         dragging (stored relative to their agent, moving with it). Today
-         both reroute every wire without columns, which is why shapes
-         change.
-   - [ ] Loose ends sit at their own net's top or bottom edge, not the
-         whole drawing's (the user's pick). Today they hang off the shared
-         edge, so the flip search turns one of two similar nets upside down
-         to shorten its loose wires. The user's framing: a loose end is
-         usually scratch ("leave it loose where it is"), not a deliberate
-         interface; a later idea is a separate external rail for the
-         deliberate kind.
+2. **Layout** (next; not started). Handoff notes from the session that
+   diagnosed it, 2026-10-16. Do these one at a time; check each in
+   `/layouts.html` (Auto and Manual) and with `scripts/route-check.ts`.
+
+   - [ ] **Wires keep their automatic-layout columns in manual mode and
+         while dragging.** The user: "why do the wires change shape while
+         im dragging an agent, like i'd switched into manual layout? for
+         that matter, why do the wires look different in manual mode to
+         auto mode in the first place?"
+     - What a column is: while laying out each tree, `place.ts` reserves a
+       vertical lane for each aux wire that leaves the tree (`Tree.cols`),
+       and `autoLayout` returns them as `columns: Map<endKey(port),
+       absolute x>` (place.ts, end of `autoLayout`). The router uses one in
+       `leg()` (route.ts, ~line 131): the wire leaves the port with an
+       S-jog over to that x. That's what keeps wires straight and parallel.
+     - Why shapes change: the columns are absolute x positions, only right
+       for that exact automatic drawing. In `model.ts`'s `layout` memo, the
+       auto-mode drag branch (`autoDrag`) and the manual branch both call
+       `route(v.net, placement, { pins })` without columns, so during an
+       agent drag every wire, not just the moved agent's, loses its
+       column. `setMode("manual")` keeps the positions
+       (`positionsFromAuto`) but nothing keeps the columns. `settleFrom`
+       does pass `before.columns`.
+     - Suggested fix: keep columns as offsets from their port's agent
+       (`col - placement.get(agent).x`), turn them back into absolute x
+       with the agent's current position whenever routing, and so:
+       during an auto drag, columns of moved agents move with them; on
+       switching to manual (and on Tidy), store them in the model next to
+       `positions`. They need to go into undo snapshots (`Snapshot` in
+       model.ts) and the saved doc (`persist.ts` stores `positions`), or be
+       recomputed on load. Drop a port's column when its wire changes or
+       its agent is flipped, since the column belonged to the old wire or
+       orientation. A carried loose end's preview going through its old
+       column was exactly this mistake; the wire preview leaves columns out
+       for that reason (`previewWire` in model.ts).
+     - Check: does the router fall back to a detour when a kept column now
+       runs through an agent, or alongside another wire, after a hand
+       move? The detour logic (route.ts, "Agents placed anywhere else…")
+       may need to treat a column like any other lane. The test "routes the
+       examples as well once switched to manual, where wires lose their
+       columns" (layout.test.ts) will need rethinking: manual should now
+       draw exactly like auto until something moves.
+   - [ ] **Loose ends sit at their own net's top or bottom edge**, not the
+         whole drawing's (the user's pick). Today the router puts every
+         free port on "common lines above and below everything" (route.ts,
+         ~line 334: `top`/`bottom` over all boxes, caps, cups and legs, then
+         `G.freeMargin`). So a short net beside a tall one gets long loose
+         wires, and the flip search in `place.ts` (cost = crossings·300 +
+         arounds·400 + total wire length) flips units to shorten them.
+     - Reproduced (Desktop screenshot 11.30.54): T–if(0, S(0), b) beside
+       F–if(a, S(e), 0), typingLab system. Each alone lays out the same way
+       up; together, the search flips one, about 15% less wire length
+       (566 → 474). Which one flips depends on unrelated things (a stray
+       lone agent changed it). Without a shared edge there's no length to
+       save, so flips should stop.
+     - Suggested fix: compute connected components of the routed net
+       (`Net` has the wires; loose ends belong to their wire's component),
+       and give each component its own top and bottom from its own boxes,
+       caps, cups and legs. Bare wires (loose end to loose end) and empty
+       free ports with no wire (`bareX`, near the end of `route`) need a
+       spot too. Pinned ports (a rule's interface) are a separate path
+       (`pins`) and should stay as they are.
+     - The user's framing: there are two uses of a loose end. Usually it's
+       scratch ("leave a loose wire loose where it is"); sometimes it's a
+       deliberate interface to the whole net. For now each net just gets
+       its own edge. A later idea: a separate external rail for the
+       deliberate kind (an old version had rails at the top and bottom of
+       the canvas that wires were dragged into; that only served the
+       deliberate case).
+     - Step previews and settling hold loose ends where they're drawn
+       (`routeHoldingEnds` in replace.ts), so they should follow along,
+       but check the step animations in the gallery.
 
 ## Others
 
