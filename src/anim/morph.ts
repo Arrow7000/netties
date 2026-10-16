@@ -172,11 +172,14 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     return r ? flattenPath(r, G.radius) : undefined;
   };
 
+  /** Where an end was drawn before, if it was. */
   const startOf = (e: End): Pt | undefined => {
-    if (e.kind === "free") return before.routed.free.get(e.name) ?? after.routed.free.get(e.name);
+    if (e.kind === "free") return before.routed.free.get(e.name);
     const t = tracks.get(e.agent);
     return t ? portAt(t, t.from, e.slot) : undefined;
   };
+  /** Loose ends that weren't there before start where their wire's end was (as when undoing a connection). */
+  const freeStart = new Map<string, Pt>();
 
   const wires: WireTrack[] = [];
   for (const [id, w] of after.net.wires) {
@@ -185,10 +188,18 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     const to = resample(flattenPath(r, G.radius), SAMPLES);
     const srcs = (origin.get(id) ?? [id]).filter((o) => before.routed.wires.has(o));
     srcs.forEach((s) => used.add(s));
-    const s0 = startOf(w.ends[0]) ?? to[0]!;
-    const s1 = startOf(w.ends[1]) ?? to[to.length - 1]!;
+    const s0 = startOf(w.ends[0]);
+    const s1 = startOf(w.ends[1]);
     const pieces = srcs.map(oldShape).filter((p): p is Pt[] => !!p && p.length > 0);
-    const from = pieces.length ? chain(pieces, s0) : [s0, s1];
+    // Chain the old pieces from an end that was there, so the far end of the chain is where the other end was.
+    const from = !pieces.length
+      ? [s0 ?? to[0]!, s1 ?? to[to.length - 1]!]
+      : s0 || !s1
+        ? chain(pieces, s0 ?? to[0]!)
+        : chain(pieces, s1).reverse();
+    w.ends.forEach((e, k) => {
+      if (e.kind === "free" && !(k === 0 ? s0 : s1)) freeStart.set(e.name, k === 0 ? from[0]! : from[from.length - 1]!);
+    });
     wires.push({ id: String(id), ends: w.ends, from: resample(from, SAMPLES), to, fade: false });
   }
   for (const [id, r] of before.routed.wires) {
@@ -197,7 +208,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     wires.push({ id: `gone-${id}`, from: pts, to: pts, fade: true });
   }
 
-  const free = [...after.routed.free].map(([name, f]) => ({ name, from: before.routed.free.get(name) ?? f, to: f }));
+  const free = [...after.routed.free].map(([name, f]) => ({ name, from: before.routed.free.get(name) ?? freeStart.get(name) ?? f, to: f }));
 
   return {
     at(raw: number): Frame {

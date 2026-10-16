@@ -462,7 +462,9 @@ export function createNetModel(opts: NetModelOptions) {
    * it can go there, or else to `pt`. A loose end it would join is drawn as
    * where the wire goes to, since that's what's under the pointer. Everything
    * else is routed as drawn now, ends held where they are, so the preview
-   * shows what's on screen rather than the net as it would settle.
+   * shows what's on screen rather than the net as it would settle. Automatic
+   * layout's columns are left out: the one at the anchor was for where the
+   * wire went before.
    */
   function previewWire(g: WireGesture, to: End | undefined, pt: Pt): Pt[] | undefined {
     const v = view();
@@ -494,7 +496,7 @@ export function createNetModel(opts: NetModelOptions) {
     }
     try {
       const id = tmp.connect(anchor, other);
-      return routeHoldingEnds(tmp, placement, { columns: l.columns, pins: pins() }, l.routed.free).wires.get(id);
+      return routeHoldingEnds(tmp, placement, { pins: pins() }, l.routed.free).wires.get(id);
     } catch {
       return undefined;
     }
@@ -538,6 +540,15 @@ export function createNetModel(opts: NetModelOptions) {
     if (before) animate(before, [], true, 260);
   };
 
+  /** A carried wire let go of without a change: it glides back from where it was dragged to. */
+  function returnWire(g: WireGesture, shown?: { path?: Pt[]; at: Pt }) {
+    if (g.kind !== "carry" || !shown?.path) return;
+    pending = animSnapshot();
+    const loose = g.moving.kind === "free" && freePorts.scratch ? g.moving.name : undefined;
+    animateFromDrag(shown, g.wire, g.wire, loose);
+    animate(pending!, [], true);
+  }
+
   const flipAgents = (viewIds: AgentId[]) => {
     const ids = viewIds.filter((id) => positions.has(id) && mode() === "manual" && !view().box.has(id));
     if (!ids.length) return;
@@ -569,6 +580,7 @@ export function createNetModel(opts: NetModelOptions) {
     setDoomed,
     checkDrop,
     previewWire,
+    returnWire,
     specAt,
     freeSpec: opts.freeSpec,
 
@@ -604,9 +616,9 @@ export function createNetModel(opts: NetModelOptions) {
      * change animates from there.
      */
     finishGesture(g: WireGesture, to?: End, shown?: { path?: Pt[]; at: Pt }) {
-      if (to && checkDrop(g, to).kind !== "ok") return;
+      if (to && checkDrop(g, to).kind !== "ok") return returnWire(g, shown);
       const nothing = to ? undefined : freePorts.dropOnNothing(g);
-      if (nothing === "back" || nothing === "nothing") return;
+      if (nothing === "back" || nothing === "nothing") return returnWire(g, shown);
       const v = view();
       checkpoint();
       const anchor = v.toReal(g.kind === "new" ? g.from : g.anchor);

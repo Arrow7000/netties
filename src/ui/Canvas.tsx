@@ -425,6 +425,10 @@ export function Canvas(props: CanvasProps) {
         const at = was?.kind === "wire" ? was.cur : undefined;
         return ed.finishGesture(fx.g, fx.to, at && { path: wirePath(), at });
       }
+      case "return-wire": {
+        const at = was?.kind === "wire" ? was.cur : undefined;
+        return ed.returnWire(fx.g, at && { path: wirePath(), at });
+      }
       case "fire":
         return props.onFire?.(fx.id);
       case "stuck":
@@ -735,7 +739,7 @@ export function Canvas(props: CanvasProps) {
         aria-label="Net canvas"
       >
         <g transform={`translate(${view().x} ${view().y}) scale(${view().k})`}>
-          <Show when={ed.frame()}>{(f) => <Animated frame={f()} freeLabel={props.freeLabel} />}</Show>
+          <Show when={ed.frame()}>{(f) => <Animated frame={f()} freeLabel={props.freeLabel} iface={iface()} />}</Show>
           <g style={{ display: ed.frame() ? "none" : undefined }}>
             <For each={hulls()}>
               {(h) => (
@@ -1428,7 +1432,7 @@ function Agent(props: {
 }
 
 /** One frame of a change being animated. */
-function Animated(props: { frame: Frame; freeLabel?: (name: string) => string }) {
+function Animated(props: { frame: Frame; freeLabel?: (name: string) => string; iface: boolean }) {
   return (
     <g class="animated" style={{ "pointer-events": "none" }}>
       <Index each={props.frame.wires}>
@@ -1479,11 +1483,26 @@ function Animated(props: { frame: Frame; freeLabel?: (name: string) => string })
         }}
       </Index>
       <Index each={props.frame.free}>
-        {(f) => (
-          <text class="free-label" x={f().x} y={f().dir === "up" ? f().y - 7 : f().y + 13} text-anchor="middle">
-            {props.freeLabel?.(f().name) ?? f().name}
-          </text>
-        )}
+        {(f) => {
+          const label = () => props.freeLabel?.(f().name) ?? f().name;
+          // Drawn as on the canvas, so ends don't change look while things move.
+          return props.iface ? (
+            <g class="free-end iface-end">
+              <circle class="iface-ring" cx={f().x} cy={f().y} r={6.6} />
+              <circle class="iface-dot" cx={f().x} cy={f().y} r={3.8} />
+              <text class="iface-label" x={f().x} y={f().y + (f().dir === "up" ? -IFACE_LABEL : IFACE_LABEL)}>
+                {label()}
+              </text>
+            </g>
+          ) : (
+            <g class="free-end">
+              <circle class="end-dot" cx={f().x} cy={f().y} r={2.4} />
+              <text class="free-label" x={f().x} y={f().dir === "up" ? f().y - 7 : f().y + 13} text-anchor="middle">
+                {label()}
+              </text>
+            </g>
+          );
+        }}
       </Index>
     </g>
   );

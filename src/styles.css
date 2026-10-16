@@ -959,7 +959,9 @@ kbd {
 }
 
 .iface-label {
-  font: 600 10.5px var(--ui-font);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 11.5px;
   fill: var(--text);
   text-anchor: middle;
   dominant-baseline: central;

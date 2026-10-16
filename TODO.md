@@ -346,7 +346,7 @@ The last six items under "Others", in two threads, one at a time:
 
 1. **Dragging, as one explicit state machine** (done 2026-10-16).
    Pointer gestures are states (`press | wire | move | marquee | pan |
-   click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
+click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
    (tests beside it); the canvas only turns DOM events into messages and
    carries out the effects. The main canvas and the rule editor are two
    surfaces chosen once (`src/state/surface.ts`), replacing the
@@ -354,6 +354,7 @@ The last six items under "Others", in two threads, one at a time:
    API for both layout modes (`beginMove`/`moveBy`/`endMove`/`cancelMove`),
    and only starts after 3 px, so clicking an agent in manual mode no longer
    leaves an empty undo step.
+
    - [x] Escape cancels any drag (wire, move, marquee, pan, palette carry)
          before the rule editor or the selection hear it (`src/ui/escape.ts`).
          A cancelled manual move goes back and leaves no undo step.
@@ -362,12 +363,20 @@ The last six items under "Others", in two threads, one at a time:
    - [x] The rule editor's interface ends are fixed and evenly spaced
          (`Pins.held` in `route.ts`), set when the rule opens and on Tidy.
          The rows move outwards only while an agent is past them. Previews
-         route with every end held where it's drawn (and with automatic
-         layout's columns).
+         route with every end held where it's drawn, but without automatic
+         layout's columns: passing them made a carried loose end's preview
+         detour through its old column (the user's screenshot, 12:09).
    - [x] Letting go animates from what the drag showed: the wire's dragged
          shape, a new loose end from where it was let go, a joined wire
          along both old pieces. (`morph.ts` hadn't changed since 10-09, so
          it wasn't a regression.)
+   - Follow-ups from the user's testing (2026-10-16): undo animates a
+     loose end from where its wire's end was (it sprang to its final spot,
+     the same bug as letting go); a carried wire let go of without a change,
+     or cancelled with Escape, glides back instead of jumping; animation
+     frames draw the ends as the canvas does (a rule's interface ends
+     vanished while wires moved); interface labels use the main canvas's
+     italic serif (the user's preference).
    - Checked in the browser with synthetic pointer events; the animation
      itself only at its first frame (the test tab was hidden, so it ran no
      animation frames). Not yet checked by eye:
@@ -414,3 +423,4 @@ The last six items under "Others", in two threads, one at a time:
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.25.22.png
 - [ ] i don't really understand the logic behind this positioning? is it possible that here too we are using the rule editor logic that ensures that loose ends always appear either above or below all nets? im not sure we want that on the main canvas. but even if we do, why are the two identical nets flipped upside down relative to each other? what's the logic there?
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.30.54.png
+- [ ] escape should also close the expanded rule grid, as it should all panels (unless they have unsaved state)

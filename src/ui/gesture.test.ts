@@ -72,11 +72,11 @@ describe("pointer gestures", () => {
     expect(state).toMatchObject({ kind: "wire", target: undefined });
   });
 
-  it("cancels a wire drag with nothing done", () => {
+  it("cancels a wire drag, sending a carried wire back", () => {
     const g: WireGesture = { kind: "carry", wire: 3, moving: p, anchor: free("a") };
     const { state, fx } = run([down({ kind: "end", end: p }), move(20, 0), { kind: "cancel" }], ctx({ gestureAt: () => g }));
     expect(state).toBeUndefined();
-    expect(fx).toEqual([]);
+    expect(fx).toEqual([{ kind: "return-wire", g }]);
   });
 
   it("selects an agent at once but only moves it after the pointer moves, catching up with it", () => {

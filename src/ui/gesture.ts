@@ -55,6 +55,8 @@ export type Effect =
   | { kind: "select-in"; marquee: Extract<Gesture, { kind: "marquee" }> }
   | { kind: "clear-selection" }
   | { kind: "finish-wire"; g: WireGesture; to?: End }
+  /** A wire drag called off: a carried wire goes back. */
+  | { kind: "return-wire"; g: WireGesture }
   | { kind: "fire"; id: WireId }
   | { kind: "stuck"; id: WireId }
   | { kind: "select-wire"; id: WireId };
@@ -173,6 +175,8 @@ function up(s: Gesture, msg: Extract<Msg, { kind: "up" }>, ctx: Ctx): Effect[] {
 
 function cancel(s: Gesture): Effect[] {
   switch (s.kind) {
+    case "wire":
+      return [{ kind: "return-wire", g: s.g }];
     case "move":
       return [{ kind: "cancel-move" }];
     case "pan":
