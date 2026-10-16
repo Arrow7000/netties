@@ -511,6 +511,40 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
        units in a net together (the other suggestion), or scoring symmetry
        directly. Try those if lopsided copies turn up again.
 
+   - [x] **Sliding settles fully** (done 2026-10-16). The user saw the
+         S's in Two lengths, one list step 2 bend slightly towards their #'s,
+         and straighten when they deleted the other net: "should we actually
+         be bending around other nets like that?" It wasn't the other net.
+         Units slid only 8 rounds to line up with what they connect to,
+         stopping a little short (2.9 units here), and any later layout,
+         after any edit, slid them a little further (2.9, 1.4, 0.6, 0).
+     - Now the flip search still judges each way of turning units by 8
+       rounds (`QUICK_SLIDE`), then the arrangement it picks slides until
+       nothing moves (up to `SLIDE_ROUNDS`), kept if it scores no worse.
+       Judging every candidate by settled slides was tried: it turned units
+       differently in 17 example steps, reshuffling nets between steps
+       (Square of a sum, One number two calculations), and settled
+       drawings sometimes line units up so wires must detour, hence the
+       check.
+     - 96 example steps change, 78 by under 2 units; the bigger ones all
+       straighten (Length of a list 1, Add two list lengths 2, 3 × 2), and
+       Two lengths, one list step 2 is straight and symmetric, the left
+       net's δ centred under its two S's. The copies test now also checks
+       the S–# wires are straight. ~15 ms for 300 agents (was ~13).
+     - Still open: with no previous drawing (a net loaded from text), the
+       S's there stop 5.3 short however long they slide. Units pushed apart
+       to keep their spacing in a row keep the whole net creeping sideways,
+       and units aimed at where a neighbour was trail it. Fixing that means
+       solving for the positions at once rather than sliding in rounds.
+       And laying a drawing out again from itself still moves things in 31
+       of 176 example steps (mostly the flip search choosing differently
+       with a different previous drawing), so an edit elsewhere can still
+       redraw a net.
+   - [x] Fixed on the way: with each net's loose ends on its own edge
+         (above), a net placed by hand among another's agents could leave a
+         loose end right on top of one (a rare failure of the hand-placed
+         routing test). A loose wire's lane now keeps clear past its end.
+
      - The user's framing for later: there are two uses of a loose end.
        Usually it's scratch ("leave a loose wire loose where it is");
        sometimes it's a deliberate interface to the whole net. A later

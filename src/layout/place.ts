@@ -147,6 +147,16 @@ function treeLayout(net: Net, children: Map<AgentId, (AgentId | undefined)[]>) {
   return lay;
 }
 
+/**
+ * How many rounds units slide to line up with what they connect to: a few
+ * while the flip search compares ways of turning them, then until nothing
+ * moves (or this many). Stopping early leaves a unit short of what it lines
+ * up with, and the next layout, after any edit even elsewhere, straightened
+ * it a little more.
+ */
+const QUICK_SLIDE = 8;
+const SLIDE_ROUNDS = 100;
+
 /** What two S-curves crossing in an X cost, as a share of any other crossing. */
 const X_CROSSING = 1 / 6;
 
@@ -298,7 +308,13 @@ function layoutNet(net: Net, opts: AutoLayoutOptions): AutoLayout {
       if (!improved) break;
     }
   }
-  return best;
+  // The search judges each way of turning units by a quick slide; the one
+  // it picked then settles fully, if that draws it no worse. (Judged by
+  // settled slides, the search picks differently, not better, and
+  // reshuffles nets between steps; and settled, units sometimes line up
+  // so that wires have to detour round each other.)
+  const settled = arrange(net, units, opts.pins, opts.prev, SLIDE_ROUNDS);
+  return cost(settled) <= cost(best) + 0.5 ? settled : best;
 }
 
 /**
@@ -357,7 +373,8 @@ function geom(net: Net, u: Unit): UnitGeom {
   return g;
 }
 
-function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement): AutoLayout {
+/** `rounds`: at most how many times units slide to line up with what they connect to. */
+function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement, rounds = QUICK_SLIDE): AutoLayout {
   const geoms = units.map((u) => geom(net, u));
   // Where each unit sat last time, judged by its agents that were there.
   const prevX = geoms.map((g) => {
@@ -451,7 +468,8 @@ function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement): AutoLa
       pack(lv, [...x]);
     }
   }
-  for (let it = 0; it < 8; it++) {
+  for (let it = 0; it < rounds; it++) {
+    const before = [...x];
     const want = [...x];
     const sum = units.map(() => 0);
     const weight = units.map(() => 0);
@@ -471,6 +489,7 @@ function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement): AutoLa
       if (weight[u]) want[u] = sum[u]! / weight[u]!;
     });
     for (const lv of levels) pack(lv, want);
+    if (x.every((v, u) => Math.abs(v - before[u]!) < 0.05)) break;
   }
   // Separate nets sit side by side, a set gap apart, in the order they
   // came out. Left to the steps above, where they were last time would

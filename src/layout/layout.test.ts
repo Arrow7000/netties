@@ -127,7 +127,7 @@ describe("auto layout", () => {
     );
   });
 
-  it("draws copies made side by side the same way up, crossing in Lafont's X rather than reaching round", () => {
+  it("draws copies made side by side the same way up and straight, crossing in Lafont's X rather than reaching round", () => {
     // Two lengths, one list: δ copies the list, and the two copies' # and ∷
     // meet the same way. Charged in full, the X between them lost to a
     // lopsided drawing with one crossing fewer.
@@ -143,6 +143,13 @@ describe("auto layout", () => {
         expect(ways.size, `step ${i}, ${type}`).toBeLessThanOrEqual(1);
       }
       expect(routed.arounds, `step ${i}`).toBe(0);
+      // Each S stands straight over its #: sliding settles rather than stopping a little short.
+      for (const w of net.wires.values()) {
+        const types = w.ends.map((e) => (e.kind === "port" ? net.agent(e.agent).type : "")).sort().join("");
+        if (types !== "#S") continue;
+        const xs = routed.wires.get(w.id)!.map((p) => p.x);
+        expect(Math.max(...xs) - Math.min(...xs), `step ${i}, wire ${w.id}`).toBeLessThan(0.5);
+      }
       parallelStep(net, s);
     }
   });
