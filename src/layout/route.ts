@@ -24,7 +24,8 @@ import {
  * - two ports pointing down are joined by a cup ∪;
  * - ports pointing away from each other are joined by going round the side,
  *   down a vertical lane between parts of the net;
- * - free ports sit along the top or bottom edge, whichever way the port faces.
+ * - free ports sit along the top or bottom edge of their own net (the agents
+ *   wires join them to), whichever way the port faces.
  *
  * Caps (and cups) are placed narrowest first, so wider ones nest outside them.
  *
@@ -156,6 +157,25 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
   const pinSide = (name: string): "up" | "down" | undefined =>
     opts.pins?.top.includes(name) ? "up" : opts.pins?.bottom.includes(name) ? "down" : undefined;
 
+  // Which net each agent is part of: agents joined by wires, whatever else is drawn beside them.
+  const netOf = new Map<AgentId, AgentId>();
+  const find = (a: AgentId): AgentId => {
+    const up = netOf.get(a) ?? a;
+    if (up === a) return a;
+    const root = find(up);
+    netOf.set(a, root);
+    return root;
+  };
+  for (const w of net.wires.values()) {
+    const [e0, e1] = w.ends;
+    if (e0.kind === "port" && e1.kind === "port") netOf.set(find(e0.agent), find(e1.agent));
+  }
+  /** The net a wire is part of, if it reaches an agent. */
+  const wireNet = (id: WireId) => {
+    const e = net.wire(id).ends.find((e) => e.kind === "port");
+    return e?.kind === "port" ? find(e.agent) : undefined;
+  };
+
   // Classify every wire.
   const jobs: Job[] = [];
   for (const w of net.wires.values()) {
@@ -278,7 +298,7 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       let ys: number[];
       if (job.kind === "detour") [xs, ys] = [[job.a.t.x, job.b.t.x], [near(job.a.t), near(job.b.t)]];
       else if (job.kind === "drop" || job.kind === "rise")
-        [xs, ys] = [[job.leg.t.x], [near(job.leg.t), job.kind === "drop" ? drawn.bottom : drawn.top]];
+        [xs, ys] = [[job.leg.t.x], [near(job.leg.t), drawn.edge(job.id, job.kind)]];
       else continue;
       // Every height the lane has had to cover so far, so it never goes back to a place that didn't work.
       const was = reach.get(job.id) ?? [];
@@ -335,19 +355,30 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     /** Where the run out from a port settled, if it has one. */
     const outY = (key: string, t: Terminal) => (t.dir === "up" ? caps : cups).get(key)?.y;
 
-    // Free ports sit on common lines above and below everything.
+    // Free ports sit on lines above and below their own net. A rule's
+    // interface ends, and wires with no agent at either end, use lines
+    // above and below everything.
     let bottom = -Infinity;
     let top = Infinity;
-    for (const b of boxes) [top, bottom] = [Math.min(top, b.y0), Math.max(bottom, b.y1)];
-    for (const c of cups.values()) bottom = Math.max(bottom, c.y);
-    for (const c of caps.values()) top = Math.min(top, c.y);
-    for (const job of jobs) {
-      if (job.kind === "drop") bottom = Math.max(bottom, job.leg.t.y);
-      if (job.kind === "rise") top = Math.min(top, job.leg.t.y);
-      if (job.kind === "pin") [top, bottom] = [Math.min(top, job.leg.t.y), Math.max(bottom, job.leg.t.y)];
-    }
+    const extent = new Map<AgentId | undefined, [number, number]>();
+    const extend = (n: AgentId | undefined, y0: number, y1: number) => {
+      [top, bottom] = [Math.min(top, y0), Math.max(bottom, y1)];
+      const r = extent.get(n);
+      extent.set(n, r ? [Math.min(r[0], y0), Math.max(r[1], y1)] : [y0, y1]);
+    };
+    for (const b of boxes) extend(find(shapes.get(b)!.id), b.y0, b.y1);
+    // Runs are keyed by their wire's id, and a letter for one end of it.
+    for (const [k, c] of cups) extend(wireNet(parseInt(k)), c.y, c.y);
+    for (const [k, c] of caps) extend(wireNet(parseInt(k)), c.y, c.y);
+    for (const job of jobs)
+      if (job.kind === "drop" || job.kind === "rise" || job.kind === "pin") extend(wireNet(job.id), job.leg.t.y, job.leg.t.y);
     bottom = (Number.isFinite(bottom) ? bottom : 0) + G.freeMargin;
     top = (Number.isFinite(top) ? top : 0) - G.freeMargin;
+    /** Where a wire to a free port ends: below its net, or above it. */
+    const edge = (id: WireId, kind: "drop" | "rise") => {
+      const r = extent.get(wireNet(id))!;
+      return kind === "drop" ? r[1] + G.freeMargin : r[0] - G.freeMargin;
+    };
 
     // Pinned ports keep their order, but sit as close as they can to where
     // their wires naturally arrive.
@@ -426,17 +457,17 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
         case "drop":
         case "rise": {
           const t = job.leg.t;
-          const edge = job.kind === "drop" ? bottom : top;
+          const end = edge(job.id, job.kind);
           const pts: Pt[] = [...job.leg.prefix, t];
           const lx = detour.get(job.id);
-          if (lx === undefined) pts.push({ x: t.x, y: edge });
+          if (lx === undefined) pts.push({ x: t.x, y: end });
           else {
-            const jog = jogs(t, lx, edge);
+            const jog = jogs(t, lx, end);
             const y = outY(`${job.id}a`, t) ?? (jog ? jogEnd(t) : undefined);
             if (jog) pts.push({ x: lx, y: y!, s: true });
             else if (y !== undefined) pts.push({ x: t.x, y }, { x: lx, y });
-            pts.push({ x: lx, y: edge });
-            lanes.set(job.id, [Math.min(y ?? t.y, edge), Math.max(y ?? t.y, edge)]);
+            pts.push({ x: lx, y: end });
+            lanes.set(job.id, [Math.min(y ?? t.y, end), Math.max(y ?? t.y, end)]);
           }
           free.set(job.free, { ...pts[pts.length - 1]!, dir: job.kind === "drop" ? "down" : "up" });
           wires.set(job.id, job.legFirst ? pts : reversePath(pts));
@@ -445,14 +476,14 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
         case "pin": {
           const t = job.leg.t;
           const up = job.side === "up";
-          const edge = up ? top : bottom;
+          const line = up ? top : bottom;
           const end = { x: pinX.get(job.free)!, y: up ? pinTop : pinBottom, s: true };
           let pts: Pt[];
-          if (!job.around) pts = [...job.leg.prefix, t, { x: t.x, y: edge }, end];
+          if (!job.around) pts = [...job.leg.prefix, t, { x: t.x, y: line }, end];
           else {
             const lx = laneX.get(job.id)!;
             const y = (t.dir === "up" ? caps : cups).get(`${job.id}`)!.y;
-            pts = [...job.leg.prefix, t, { x: t.x, y }, { x: lx, y }, { x: lx, y: edge }, end];
+            pts = [...job.leg.prefix, t, { x: t.x, y }, { x: lx, y }, { x: lx, y: line }, end];
           }
           free.set(job.free, { x: end.x, y: end.y, dir: job.side });
           wires.set(job.id, job.legFirst ? pts : reversePath(pts));
@@ -498,7 +529,7 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       free.set(name, { x: bareX, y: bottom, dir: "down" });
       bareX += G.portGap;
     }
-    return { wires, free, lanes, top, bottom };
+    return { wires, free, lanes, edge };
   }
 
   const { wires, free } = drawn;

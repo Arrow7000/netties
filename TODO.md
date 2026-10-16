@@ -433,36 +433,49 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
        them with. Columns only show where an agent has a subtree under one
        aux port and a loose wire on another, rare in rule results.
 
-   - [ ] **Loose ends sit at their own net's top or bottom edge**, not the
-         whole drawing's (the user's pick). Today the router puts every
-         free port on "common lines above and below everything" (route.ts,
-         ~line 334: `top`/`bottom` over all boxes, caps, cups and legs, then
-         `G.freeMargin`). So a short net beside a tall one gets long loose
-         wires, and the flip search in `place.ts` (cost = crossings·300 +
-         arounds·400 + total wire length) flips units to shorten them.
-     - Reproduced (Desktop screenshot 11.30.54): T–if(0, S(0), b) beside
-       F–if(a, S(e), 0), typingLab system. Each alone lays out the same way
-       up; together, the search flips one, about 15% less wire length
-       (566 → 474). Which one flips depends on unrelated things (a stray
-       lone agent changed it). Without a shared edge there's no length to
-       save, so flips should stop.
-     - Suggested fix: compute connected components of the routed net
-       (`Net` has the wires; loose ends belong to their wire's component),
-       and give each component its own top and bottom from its own boxes,
-       caps, cups and legs. Bare wires (loose end to loose end) and empty
-       free ports with no wire (`bareX`, near the end of `route`) need a
-       spot too. Pinned ports (a rule's interface) are a separate path
-       (`pins`) and should stay as they are.
-     - The user's framing: there are two uses of a loose end. Usually it's
-       scratch ("leave a loose wire loose where it is"); sometimes it's a
-       deliberate interface to the whole net. For now each net just gets
-       its own edge. A later idea: a separate external rail for the
-       deliberate kind (an old version had rails at the top and bottom of
-       the canvas that wires were dragged into; that only served the
-       deliberate case).
-     - Step previews and settling hold loose ends where they're drawn
-       (`routeHoldingEnds` in replace.ts), so they should follow along,
-       but check the step animations in the gallery.
+   - [x] **Loose ends sit at their own net's top or bottom edge**, not the
+         whole drawing's (the user's pick; done 2026-10-16). The user: "i
+         don't really understand the logic behind this positioning? ... why
+         are the two identical nets flipped upside down relative to each
+         other?" (Desktop screenshot 11.30.54: T–if(0, S(0), b) beside
+         F–if(a, S(e), 0), typingLab.)
+     - Why: every loose end sat on one line above or below everything, so
+       a short net beside a tall one got long loose wires, and the flip
+       search in `place.ts` (cost = crossings·300 + arounds·400 + total
+       wire length) turned one of them over to shorten them (566 → 474).
+       Which one depended on unrelated things (a stray lone agent changed
+       it).
+     - Now the router (`route.ts`) groups agents into nets (agents joined by
+       wires) and gives each its own top and bottom, from its own agents,
+       caps, cups and legs. A rule's interface ends (pins), wires with no
+       agent at either end, and empty loose ends still use the lines above
+       and below everything. Step previews and settling hold loose ends as
+       stand-in agents, so they never used these lines.
+     - The two ifs now both point up, as each does alone, in either order
+       and with a stray agent (new test in `layout.test.ts`). 19 of 175
+       example steps changed, all for the better by eye: loose ends sit just
+       past their own net (Erasing a tree, One number two calculations), the
+       big net in One number step 4 lost its wires round the side, and in
+       Copying a feedback loop step 2 the copies keep facing as they did the
+       step before, so `a` stays on top instead of being pulled down to the
+       shared line. Routing checks unchanged (0 problems in the examples;
+       hand-placed: 43 squeezed pairs, was 46).
+   - [ ] **Separate nets still share level rows.** Over 300 random pairs of
+         tangles, a net laid out beside another turned differently from
+         laid out alone in 87 (133 before the change above). What's left:
+         `arrange` in `place.ts` stacks units into rows across the whole
+         drawing, and a row's height comes from its tallest unit, so a tall
+         net beside a short one changes the short one's row spacing, and
+         with it what the flip search picks. Lanes in the gap between two
+         nets are shared too. Fix: lay out each net on its own (rows, slide,
+         flip search) and only then put them side by side, as the end of
+         `arrange` already does. Not started; ask the user first.
+     - The user's framing for later: there are two uses of a loose end.
+       Usually it's scratch ("leave a loose wire loose where it is");
+       sometimes it's a deliberate interface to the whole net. A later
+       idea: a separate external rail for the deliberate kind (an old
+       version had rails at the top and bottom of the canvas that wires
+       were dragged into; that only served the deliberate case).
 
 ## Others
 
@@ -488,6 +501,6 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
 - [x] why do the wires change shape while im dragging an agent, like i'd switched into manual layout? for that matter, why do the wires look different in manual mode to auto mode in the first place? i still don't get that.
 - [x] the rule editor appears to be a bit buggy. here im hovering over x₃ and still the wire preview appears to be connected to x₂. when i let go, the ends seem to move over horizontally, so maybe that logic is to blame. in any case i feel like the rule editor's logic for shifting things around is a bit temperamental. is there a way we can fix this at the root, perhaps by making a clearer distinction between regular canvas and rule editor and clearly switching logic based on that. think more state machine, pattern matching on state, and availing yourself of atomic functions in both states, but wiring them together differently based on state. not one path with isolated checks inside functions that change things locally. think more elm than javascript.
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.25.22.png
-- [ ] i don't really understand the logic behind this positioning? is it possible that here too we are using the rule editor logic that ensures that loose ends always appear either above or below all nets? im not sure we want that on the main canvas. but even if we do, why are the two identical nets flipped upside down relative to each other? what's the logic there?
+- [x] i don't really understand the logic behind this positioning? is it possible that here too we are using the rule editor logic that ensures that loose ends always appear either above or below all nets? im not sure we want that on the main canvas. but even if we do, why are the two identical nets flipped upside down relative to each other? what's the logic there?
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.30.54.png
 - [ ] escape should also close the expanded rule grid, as it should all panels (unless they have unsaved state)

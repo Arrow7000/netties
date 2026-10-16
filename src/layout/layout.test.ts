@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { examples } from "../core/examples";
 import { type End, Net, free, port } from "../core/net";
-import { combinators } from "../core/presets";
+import { combinators, typingLab } from "../core/presets";
 import { interact, parallelStep, redexes } from "../core/reduce";
 import { parse } from "../core/text";
 import { G, type Placement, boxOf, portPos } from "./geometry";
@@ -74,6 +74,39 @@ describe("auto layout", () => {
         checkLayout(net);
         if (!parallelStep(net, s).length) break;
       }
+    }
+  });
+
+  it("turns a net the same way whether or not another stands beside it", () => {
+    // The user's T–if(0, S(0), b) beside F–if(a, S(e), 0): when loose ends
+    // shared one line under everything, one net flipped to shorten its wires.
+    const sys = typingLab();
+    const build = (which: ("T" | "F")[], stray = false) => {
+      const net = new Net();
+      const add = (t: string) => net.addAgent(sys.type(t));
+      const zero = () => port(add("0"), 0);
+      const succ = (x: End) => {
+        const s = add("S");
+        net.connect(port(s, 1), x);
+        return port(s, 0);
+      };
+      const ifs = new Map<string, number>();
+      for (const c of which) {
+        const i = add("if");
+        net.connect(port(i, 0), port(add(c), 0));
+        net.connect(port(i, 1), free(c === "T" ? "b" : "a"));
+        net.connect(port(i, 2), succ(c === "T" ? zero() : free("e")));
+        net.connect(port(i, 3), zero());
+        ifs.set(c, i);
+      }
+      if (stray) add("T");
+      const { placement } = autoLayout(net);
+      return (c: string) => placement.get(ifs.get(c)!)!.orient;
+    };
+    const [t, f] = [build(["T"])("T"), build(["F"])("F")];
+    for (const both of [build(["T", "F"]), build(["F", "T"]), build(["T", "F"], true)]) {
+      expect(both("T")).toBe(t);
+      expect(both("F")).toBe(f);
     }
   });
 
