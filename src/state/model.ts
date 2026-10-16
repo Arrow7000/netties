@@ -2,12 +2,12 @@ import { batch, createMemo, createSignal } from "solid-js";
 import { type Frame, type Snapshot as AnimSnapshot, buildMorph } from "../anim/morph";
 import { cutOut, graft, looseName } from "../core/clip";
 import { type Defs, type GroupId, Groups, type GroupsJSON, collapse, instantiate } from "../core/groups";
-import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, free, port, sameEnd } from "../core/net";
+import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, endKey, free, port, sameEnd } from "../core/net";
 import { type StepRecord, redexes } from "../core/reduce";
 import type { System } from "../core/system";
 import { type Clash, type Effective, clash, clashText, endSpec, specOf } from "../core/types";
 import { G, type Placed, type Placement, type Pt, boxOf, portPos } from "../layout/geometry";
-import { autoLayout } from "../layout/place";
+import { autoLayout, columnOffsets, columnsAt } from "../layout/place";
 import { routeHoldingEnds } from "../layout/replace";
 import { type Pins, type Routed, route } from "../layout/route";
 import { FREE_PORTS, type Surface } from "./surface";
@@ -244,6 +244,9 @@ export function createNetModel(opts: NetModelOptions) {
     return l;
   });
 
+  /** Automatic layout's columns, as offsets from their agents, so wires keep them wherever the agents are. */
+  const offsets = createMemo(() => columnOffsets(view().net));
+
   const layout = createMemo<Layout>(() => {
     const v = view();
     if (mode() === "auto") {
@@ -255,7 +258,8 @@ export function createNetModel(opts: NetModelOptions) {
         const p = placement.get(id);
         if (p) placement.set(id, { ...p, x: p.x + drag.dx, y: p.y + drag.dy });
       }
-      return { placement, routed: route(v.net, placement, { pins: pins() }) };
+      const columns = columnsAt(offsets(), placement);
+      return { placement, columns, routed: route(v.net, placement, { columns, pins: pins() }) };
     }
     // Agents without a position yet (new ones) get one next to the others;
     // boxes sit where their members are.
@@ -273,7 +277,8 @@ export function createNetModel(opts: NetModelOptions) {
         placement.set(id, { x: ps.reduce((s, p) => s + p.x, 0) / n, y: ps.reduce((s, p) => s + p.y, 0) / n, orient: "down" });
       }
     }
-    return { placement, routed: route(v.net, placement, { pins: pins() }) };
+    const columns = columnsAt(offsets(), placement);
+    return { placement, columns, routed: route(v.net, placement, { columns, pins: pins() }) };
   });
 
   /** Hold a rule's interface ends where the net as drawn now puts them (evenly spaced round its middle). */
@@ -462,9 +467,9 @@ export function createNetModel(opts: NetModelOptions) {
    * it can go there, or else to `pt`. A loose end it would join is drawn as
    * where the wire goes to, since that's what's under the pointer. Everything
    * else is routed as drawn now, ends held where they are, so the preview
-   * shows what's on screen rather than the net as it would settle. Automatic
-   * layout's columns are left out: the one at the anchor was for where the
-   * wire went before.
+   * shows what's on screen rather than the net as it would settle, other
+   * wires keeping their columns. The wire's own ends leave theirs out: the
+   * one at the anchor was for where the wire went before.
    */
   function previewWire(g: WireGesture, to: End | undefined, pt: Pt): Pt[] | undefined {
     const v = view();
@@ -496,7 +501,10 @@ export function createNetModel(opts: NetModelOptions) {
     }
     try {
       const id = tmp.connect(anchor, other);
-      return routeHoldingEnds(tmp, placement, { pins: pins() }, l.routed.free).wires.get(id);
+      const columns = new Map(l.columns);
+      columns.delete(endKey(anchor));
+      columns.delete(endKey(other));
+      return routeHoldingEnds(tmp, placement, { columns, pins: pins() }, l.routed.free).wires.get(id);
     } catch {
       return undefined;
     }

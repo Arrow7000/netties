@@ -385,48 +385,54 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
      the wire after letting go (they can differ slightly in shape, since
      the preview holds the end in place and the final route bends in).
 
-2. **Layout** (next; not started). Handoff notes from the session that
+2. **Layout** (under way). Handoff notes from the session that
    diagnosed it, 2026-10-16. Do these one at a time; check each in
    `/layouts.html` (Auto and Manual) and with `scripts/route-check.ts`.
 
-   - [ ] **Wires keep their automatic-layout columns in manual mode and
-         while dragging.** The user: "why do the wires change shape while
-         im dragging an agent, like i'd switched into manual layout? for
-         that matter, why do the wires look different in manual mode to
-         auto mode in the first place?"
-     - What a column is: while laying out each tree, `place.ts` reserves a
-       vertical lane for each aux wire that leaves the tree (`Tree.cols`),
-       and `autoLayout` returns them as `columns: Map<endKey(port),
-       absolute x>` (place.ts, end of `autoLayout`). The router uses one in
-       `leg()` (route.ts, ~line 131): the wire leaves the port with an
-       S-jog over to that x. That's what keeps wires straight and parallel.
-     - Why shapes change: the columns are absolute x positions, only right
-       for that exact automatic drawing. In `model.ts`'s `layout` memo, the
-       auto-mode drag branch (`autoDrag`) and the manual branch both call
-       `route(v.net, placement, { pins })` without columns, so during an
-       agent drag every wire, not just the moved agent's, loses its
-       column. `setMode("manual")` keeps the positions
-       (`positionsFromAuto`) but nothing keeps the columns. `settleFrom`
-       does pass `before.columns`.
-     - Suggested fix: keep columns as offsets from their port's agent
-       (`col - placement.get(agent).x`), turn them back into absolute x
-       with the agent's current position whenever routing, and so:
-       during an auto drag, columns of moved agents move with them; on
-       switching to manual (and on Tidy), store them in the model next to
-       `positions`. They need to go into undo snapshots (`Snapshot` in
-       model.ts) and the saved doc (`persist.ts` stores `positions`), or be
-       recomputed on load. Drop a port's column when its wire changes or
-       its agent is flipped, since the column belonged to the old wire or
-       orientation. A carried loose end's preview going through its old
-       column was exactly this mistake; the wire preview leaves columns out
-       for that reason (`previewWire` in model.ts).
-     - Check: does the router fall back to a detour when a kept column now
-       runs through an agent, or alongside another wire, after a hand
-       move? The detour logic (route.ts, "Agents placed anywhere else…")
-       may need to treat a column like any other lane. The test "routes the
-       examples as well once switched to manual, where wires lose their
-       columns" (layout.test.ts) will need rethinking: manual should now
-       draw exactly like auto until something moves.
+   - [x] **Wires keep their automatic-layout columns in manual mode and
+         while dragging** (done 2026-10-16). The user: "why do the wires
+         change shape while im dragging an agent, like i'd switched into
+         manual layout? for that matter, why do the wires look different in
+         manual mode to auto mode in the first place?"
+     - What a column is: when automatic layout draws a tree, an aux port
+       whose wire leaves the tree gets a lane of its own, out past the
+       subtrees beside it (`Tree.cols` in place.ts). The wire jogs over to
+       it with a short S-curve and runs straight down it. Columns were
+       absolute x positions, only right for that exact drawing, so dragging
+       (every wire, not just the moved agent's) and manual mode dropped
+       them all.
+     - Now: a column's offset from its own agent depends only on the tree
+       (how wide the subtrees beside the port are), so `columnOffsets(net)`
+       works them out from the net and `columnsAt` adds wherever the agents
+       are now (turned with an agent that points up). The model routes with
+       them in every mode: while dragging, a moved agent's columns move with
+       it; manual mode draws exactly as automatic until something moves.
+       Nothing new to store: no undo, save or share-link changes, and a
+       wire change recomputes them as automatic layout would.
+     - A column whose jog, or the first layer of its run, now passes an
+       agent (one moved into the way) is dropped, and the wire routes as
+       before. Trying "without columns first" on any wire that needs a
+       detour made automatic layout worse (a squiggle in 3 × 2 step 7), so
+       it's only this static check; automatic drawings are unchanged, step
+       for step.
+     - The wire preview keeps the other wires' columns, but not the ones at
+       its own ends (the old mistake of the carried loose end detouring
+       through its old column).
+     - Measured: examples unchanged (0 problems). Example drawings with 1–3
+       agents nudged by hand (505, agents not overlapping) route as cleanly
+       with columns as without (2 drawings with problems either way, both
+       there before). 300 random hand-placed tangles: 0 wires through agents
+       either way; 46 pairs squeezed to half a gap with columns, 45 without.
+     - The layout gallery's Auto/Manual switch, now meaningless, became Laid
+       out / Nudged: nudged moves 1–3 agents of each drawing a little
+       (seeded by its label), as manual mode would draw them. Nothing new is
+       flagged when nudged. Checked in the app: switching the user's net to
+       manual left all 61 wire paths identical.
+     - Not done: step previews route a rule's new agents without their
+       columns, as before, though the rule editor (always manual) now draws
+       them with. Columns only show where an agent has a subtree under one
+       aux port and a loose wire on another, rare in rule results.
+
    - [ ] **Loose ends sit at their own net's top or bottom edge**, not the
          whole drawing's (the user's pick). Today the router puts every
          free port on "common lines above and below everything" (route.ts,
@@ -467,7 +473,7 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
   - ok no, on second thought i do think all such shortkeyed buttons should highlight. with a consistent enough affordance the user will quickly learn that the reason that button highlighted is bc it shares the ⌘\_ shortcut.
   - but: for this to be effective ideally most buttons with such actions would have the shortcut displayed. although we can omit this in the case of where buttons are small, like the undo/redo things in the top right. but when you have a larger button with a proper word label on it, then yes it should display the shortcut chord on it.
 - [x] i think manual mode should only affect agents, not wires. i think wires should still keep their automatic routing. atm when i switch to manual, the wires no longer avoid intersecting or going behind their agents. i don't think there's a reason for that to happen. seeing as wires can't themselves be moved, i don't think their behaviour should change in manual mode.
-  - [ ] ok this is not actually fully fixed, see the wire change shape question below
+  - [x] ok this is not actually fully fixed, see the wire change shape question below
 - [x] there's a big gap after the "click to fire" and "click to select the wire" text in their pills
 - [x] when select-dragging i think we should include any touched wire, not only if we've included both its ends
   - there is also the more advanced mode which i vaguely remember from sketchup, which is that if you drag from left to right it selects everything touched, whereas if you drag from rtl it only selects things that are completely in the box. or the other way round. is this a common convention? do programs still do this? worth implementing or nah?
@@ -479,7 +485,7 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
 - [x] when i disconnect a wire, the end seems to jump to its final destination immediately, while the rest of the wire still morphs gradually. this results in an awkward and unnatural looking wire animation. im fairly sure this is a regression, that the whole wire including the end used to move more naturally
 - [x] pressing escape while dragging should cancel the drag
 - [x] when i drag a wire over a compatible wire's end, the preview line jumps to looking as it would after the two wires are unified. but that means it's no longer showing me the preview where my pointer is. nor does it change anything about the destination wire, so now my pointer and the destination wire both look isolated. see here, im dragging from the S to the if and my pointer is over the `a` end: `~/Desktop/Screenshot 2026-10-16 at 11.16.10.png`
-- [ ] why do the wires change shape while im dragging an agent, like i'd switched into manual layout? for that matter, why do the wires look different in manual mode to auto mode in the first place? i still don't get that.
+- [x] why do the wires change shape while im dragging an agent, like i'd switched into manual layout? for that matter, why do the wires look different in manual mode to auto mode in the first place? i still don't get that.
 - [x] the rule editor appears to be a bit buggy. here im hovering over x₃ and still the wire preview appears to be connected to x₂. when i let go, the ends seem to move over horizontally, so maybe that logic is to blame. in any case i feel like the rule editor's logic for shifting things around is a bit temperamental. is there a way we can fix this at the root, perhaps by making a clearer distinction between regular canvas and rule editor and clearly switching logic based on that. think more state machine, pattern matching on state, and availing yourself of atomic functions in both states, but wiring them together differently based on state. not one path with isolated checks inside functions that change things locally. think more elm than javascript.
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.25.22.png
 - [ ] i don't really understand the logic behind this positioning? is it possible that here too we are using the rule editor logic that ensures that loose ends always appear either above or below all nets? im not sure we want that on the main canvas. but even if we do, why are the two identical nets flipped upside down relative to each other? what's the logic there?

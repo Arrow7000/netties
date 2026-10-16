@@ -3,21 +3,23 @@
  * open /layouts.html on the dev server. Every drawing has a short label to
  * point at (E3.2 is example 3 after 2 steps; R, T and H are generated nets).
  * Drawings the checks in `routeCheck.ts` find fault with are outlined, and
- * the wires at fault are marked when a drawing is opened.
+ * the wires at fault are marked when a drawing is opened. "Nudged" moves a
+ * few agents of each laid-out drawing a little, as if by hand, and routes it
+ * as manual mode would.
  */
 import { examples } from "../core/examples";
 import { type End, Net, type WireId, free, port } from "../core/net";
 import { combinators } from "../core/presets";
 import { parallelStep } from "../core/reduce";
 import type { System } from "../core/system";
-import { G, type Placement } from "../layout/geometry";
-import { autoLayout } from "../layout/place";
+import { G, type Placement, boxOf } from "../layout/geometry";
+import { autoLayout, columnOffsets, columnsAt } from "../layout/place";
 import { type Routed, route } from "../layout/route";
 import { wiresThroughAgents, wiresTooClose } from "../layout/routeCheck";
 import { roundedPath } from "../render/path";
 import { toSVG } from "../render/svg";
 
-type Mode = "auto" | "manual";
+type Mode = "laid-out" | "nudged";
 
 interface Drawing {
   label: string;
@@ -25,15 +27,13 @@ interface Drawing {
   net: Net;
   sys: System;
   placement: Placement;
-  /** Columns from automatic layout; manual mode routes without them, as the app does. */
-  columns?: Map<string, number>;
 }
 
 interface Section {
   key: string;
   heading: string;
   about: string;
-  /** Whether switching to manual changes these drawings. */
+  /** Whether nudging changes these drawings (not those already placed by hand). */
   modal: boolean;
   drawings: () => Drawing[];
 }
@@ -129,9 +129,40 @@ function scatter(net: Net, seed: number): Placement {
   return placement;
 }
 
+/**
+ * The drawing with one to three of its agents moved by up to 40 across and
+ * 30 down or up, each kept clear of the others, as if nudged by hand. Seeded
+ * by the label, so it's the same every time.
+ */
+function nudged(d: Drawing): Placement {
+  const r = rng([...d.label].reduce((h, c) => h * 31 + c.charCodeAt(0), 7));
+  const placement = new Map(d.placement);
+  const ids = [...placement.keys()];
+  const box = (id: number, p = placement.get(id)!) => boxOf(p, d.net.agent(id).wires.length - 1);
+  const m = 6;
+  for (let n = 1 + r(3); n > 0 && ids.length; n--) {
+    const id = ids[r(ids.length)]!;
+    for (let tries = 0; tries < 10; tries++) {
+      const p = placement.get(id)!;
+      const q = { ...p, x: p.x + r(81) - 40, y: p.y + r(61) - 30 };
+      const a = box(id, q);
+      const clear = ids.every((o) => {
+        if (o === id) return true;
+        const b = box(o);
+        return a.x1 + m < b.x0 || b.x1 + m < a.x0 || a.y1 + m < b.y0 || b.y1 + m < a.y0;
+      });
+      if (clear) {
+        placement.set(id, q);
+        break;
+      }
+    }
+  }
+  return placement;
+}
+
 const auto = (label: string, title: string, net: Net, s: System = sys): Drawing => {
   const l = autoLayout(net);
-  return { label, title, net, sys: s, placement: l.placement, columns: l.columns };
+  return { label, title, net, sys: s, placement: l.placement };
 };
 
 const sections: Section[] = [
@@ -149,7 +180,7 @@ const sections: Section[] = [
         for (let step = 0; step < 12; step++) {
           const l = autoLayout(net, { prev });
           prev = l.placement;
-          out.push({ label: `E${i}.${step}`, title: ex.name, net: net.clone(), sys: s, placement: l.placement, columns: l.columns });
+          out.push({ label: `E${i}.${step}`, title: ex.name, net: net.clone(), sys: s, placement: l.placement });
           if (!parallelStep(net, s).length) break;
         }
         return out;
@@ -181,7 +212,7 @@ const sections: Section[] = [
   {
     key: "H",
     heading: "Placed by hand",
-    about: "Generated: tangles with their agents scattered on a loose grid, as if dragged there, routed as in manual mode.",
+    about: "Generated: tangles with their agents scattered on a loose grid, as if dragged there.",
     modal: false,
     drawings: () =>
       Array.from({ length: 40 }, (_, k) => {
@@ -246,7 +277,7 @@ const store = {
   },
 };
 
-let mode: Mode = store.get("mode") === "manual" ? "manual" : "auto";
+let mode: Mode = store.get("mode") === "nudged" ? "nudged" : "laid-out";
 let onlyFlagged = store.get("flagged") === "1";
 let scale = Number(store.get("scale")) || 0.5;
 let theme = store.get("theme") ?? "system";
@@ -262,6 +293,8 @@ const ink = { paper: "var(--paper)", ink: "var(--ink)" };
 
 interface Shown {
   d: Drawing;
+  /** Where its agents are drawn: as laid out, or nudged. */
+  placement: Placement;
   routed: Routed;
   /** What the checks found, if anything; `bad` for wires through or by agents, or too close. */
   note: string;
@@ -271,8 +304,10 @@ interface Shown {
 }
 
 function show(d: Drawing, modal: boolean): Shown {
-  const routed = d.columns && !(modal && mode === "manual") ? route(d.net, d.placement, { columns: d.columns }) : route(d.net, d.placement);
-  const through = wiresThroughAgents(d.net, d.placement, routed, 3);
+  // Wires keep automatic layout's columns wherever the agents are, as in the app.
+  const placement = modal && mode === "nudged" ? nudged(d) : d.placement;
+  const routed = route(d.net, placement, { columns: columnsAt(columnOffsets(d.net), placement) });
+  const through = wiresThroughAgents(d.net, placement, routed, 3);
   const close = wiresTooClose(routed);
   const tight = close.filter((c) => c.gap < G.wireGap / 2 - 0.01);
   const notes: string[] = [];
@@ -283,11 +318,11 @@ function show(d: Drawing, modal: boolean): Shown {
   const marked = new Map<WireId, "warn" | "bad">();
   for (const c of close) for (const w of [c.a, c.b]) marked.set(w, c.gap < G.wireGap / 2 - 0.01 ? "bad" : (marked.get(w) ?? "warn"));
   for (const h of through) marked.set(h.wire, "bad");
-  return { d, routed, note: notes.join(", "), level, marked };
+  return { d, placement, routed, note: notes.join(", "), level, marked };
 }
 
 function svgFor(s: Shown, width?: number): string {
-  const svg = toSVG(s.d.net, s.d.sys, s.d.placement, s.routed, ink, 16);
+  const svg = toSVG(s.d.net, s.d.sys, s.placement, s.routed, ink, 16);
   if (width === undefined) return svg;
   // Scale the drawing by rewriting its size; the view box keeps the contents.
   return svg.replace(/width="([\d.]+)" height="([\d.]+)"/, (_, w, h) => `width="${(w * width) / 2}" height="${(h * width) / 2}"`);
@@ -303,8 +338,8 @@ function render() {
   header.innerHTML = `
     <h1>Layouts</h1>
     <div class="group">
-      <button data-mode="auto" ${pressed(mode === "auto")} title="Route with automatic layout's columns">Auto</button>
-      <button data-mode="manual" ${pressed(mode === "manual")} title="Same positions, routed as in manual mode">Manual</button>
+      <button data-mode="laid-out" ${pressed(mode === "laid-out")} title="Agents where their layout put them">Laid out</button>
+      <button data-mode="nudged" ${pressed(mode === "nudged")} title="A few agents in each drawing moved a little, as if by hand">Nudged</button>
     </div>
     <div class="group">
       ${[0.35, 0.5, 0.75, 1].map((s) => `<button data-scale="${s}" ${pressed(scale === s)}>${s * 100}%</button>`).join("")}
@@ -320,7 +355,7 @@ function render() {
   for (const sec of sections) {
     if (!cache.has(sec.key)) cache.set(sec.key, sec.drawings());
     const el = document.createElement("section");
-    el.innerHTML = `<h2>${sec.key}: ${sec.heading}</h2><p>${sec.about}${sec.modal ? "" : " Auto and Manual draw these the same."}</p><div class="grid"></div>`;
+    el.innerHTML = `<h2>${sec.key}: ${sec.heading}</h2><p>${sec.about}${sec.modal ? "" : " Nudging leaves these as they are."}</p><div class="grid"></div>`;
     const grid = el.querySelector(".grid")!;
     for (const d of cache.get(sec.key)!) {
       const s = show(d, sec.modal);

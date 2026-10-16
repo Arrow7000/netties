@@ -124,6 +124,21 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     shapes.set(box, { id, outline: agentOutline(p, arity(id)), inner: agentOutline(p, arity(id), 0.5) });
   }
 
+  const agentsByX = new ByX(boxes);
+  /** Whether a wire runs through an agent, or too near one other than those at its ends. */
+  const hitsAgent = (id: WireId, pts: Pt[]) => {
+    const own = net.wire(id).ends.flatMap((e) => (e.kind === "port" ? [e.agent] : []));
+    const m = CLEARANCE;
+    for (let i = 1; i < pts.length; i++)
+      for (const [a, b] of pieces(pts[i - 1]!, pts[i]!))
+        for (const box of agentsByX.over(Math.min(a.x, b.x) - m, Math.max(a.x, b.x) + m)) {
+          if (Math.max(a.y, b.y) < box.y0 - m || Math.min(a.y, b.y) > box.y1 + m) continue;
+          const s = shapes.get(box)!;
+          if (own.includes(s.id) ? segmentHitsPolygon(a, b, s.inner) : segmentNearPolygon(a, b, s.outline, CLEARANCE)) return true;
+        }
+    return false;
+  };
+
   const leg = (e: Extract<End, { kind: "port" }>): Leg => {
     const p = placement.get(e.agent);
     if (!p) throw new Error(`agent ${e.agent} has no position`);
@@ -131,7 +146,11 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     const col = opts.columns?.get(endKey(e));
     if (col === undefined || Math.abs(col - t.x) < 0.5) return { prefix: [t], t };
     const s = t.dir === "up" ? -1 : 1;
-    return { prefix: [t], t: { x: col, y: t.y + s * 2 * JOG, dir: t.dir, s: true } };
+    const to: Terminal = { x: col, y: t.y + s * 2 * JOG, dir: t.dir, s: true };
+    // Automatic layout leaves a column clear of agents. One that isn't (an
+    // agent has been moved into the way) is no longer worth keeping.
+    if (hitsAgent(net.wireAt(e), [t, to, { x: col, y: to.y + s * G.layerH }])) return { prefix: [t], t };
+    return { prefix: [t], t: to };
   };
 
   const pinSide = (name: string): "up" | "down" | undefined =>
@@ -215,20 +234,6 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
 
   // Draw, then send wires that run through an agent or alongside another wire
   // round as detours, and lanes that turned out badly to be chosen again.
-  const agentsByX = new ByX(boxes);
-  /** Whether a wire runs through an agent, or too near one other than those at its ends. */
-  const hitsAgent = (id: WireId, pts: Pt[]) => {
-    const own = net.wire(id).ends.flatMap((e) => (e.kind === "port" ? [e.agent] : []));
-    const m = CLEARANCE;
-    for (let i = 1; i < pts.length; i++)
-      for (const [a, b] of pieces(pts[i - 1]!, pts[i]!))
-        for (const box of agentsByX.over(Math.min(a.x, b.x) - m, Math.max(a.x, b.x) + m)) {
-          if (Math.max(a.y, b.y) < box.y0 - m || Math.min(a.y, b.y) > box.y1 + m) continue;
-          const s = shapes.get(box)!;
-          if (own.includes(s.id) ? segmentHitsPolygon(a, b, s.inner) : segmentNearPolygon(a, b, s.outline, CLEARANCE)) return true;
-        }
-    return false;
-  };
   /** How far up and down each detour's lane has had to reach. */
   const reach = new Map<WireId, [number, number]>();
   let drawn = draw();

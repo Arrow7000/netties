@@ -99,8 +99,8 @@ export interface AutoLayoutOptions {
   prev?: Placement;
 }
 
-export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
-  const { children, roots } = structure(net);
+/** Lays out the tree under each agent: children stacked behind it, each loose aux wire in a column of its own. */
+function treeLayout(net: Net, children: Map<AgentId, (AgentId | undefined)[]>) {
   const arity = (id: AgentId) => net.agent(id).wires.length - 1;
 
   const lay = (a: AgentId): Tree => {
@@ -143,6 +143,13 @@ export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
     });
     return tree;
   };
+
+  return lay;
+}
+
+export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
+  const { children, roots } = structure(net);
+  const lay = treeLayout(net, children);
 
   // Group roots into units: active pairs, and lone trees.
   const units: Unit[] = [];
@@ -208,6 +215,38 @@ export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
     }
   }
   return best;
+}
+
+/**
+ * Automatic layout's columns, for agents placed anywhere: each one as an
+ * offset from its port's agent. The offset comes from the tree alone (how
+ * wide the subtrees beside the port are), so it holds wherever the agent is,
+ * and turns with it when it points up. For the agents of an automatic
+ * drawing, these are exactly the columns it drew.
+ */
+export function columnOffsets(net: Net): Map<string, { agent: AgentId; dx: number }> {
+  const { children, roots } = structure(net);
+  const lay = treeLayout(net, children);
+  const out = new Map<string, { agent: AgentId; dx: number }>();
+  for (const r of roots) {
+    const t = lay(r);
+    const at = new Map(t.nodes.map(([id, dx]) => [id, dx]));
+    for (const [k, dx] of t.cols) {
+      const agent = Number(k.split(":")[0]);
+      out.set(k, { agent, dx: dx - at.get(agent)! });
+    }
+  }
+  return out;
+}
+
+/** Columns as absolute x positions, for the agents where they're placed now. */
+export function columnsAt(offsets: Map<string, { agent: AgentId; dx: number }>, placement: Placement): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [k, { agent, dx }] of offsets) {
+    const p = placement.get(agent);
+    if (p) out.set(k, p.x + (p.orient === "down" ? dx : -dx));
+  }
+  return out;
 }
 
 function geom(net: Net, u: Unit): UnitGeom {

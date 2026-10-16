@@ -1,7 +1,8 @@
 /**
  * How well wires are routed: counts wires drawn through agents and wires
  * running alongside each other, over every step of the examples (laid out
- * automatically) and over random nets with agents placed as if by hand.
+ * automatically) and over random nets with agents placed as if by hand
+ * (wires keeping automatic layout's columns, as in manual mode).
  *
  *   npx vite-node scripts/route-check.ts [--svg DIR] [--all]
  *
@@ -17,7 +18,7 @@ import { combinators } from "../src/core/presets";
 import { parallelStep } from "../src/core/reduce";
 import { roundedPath } from "../src/render/path";
 import { G, type Placement } from "../src/layout/geometry";
-import { autoLayout } from "../src/layout/place";
+import { autoLayout, columnOffsets, columnsAt } from "../src/layout/place";
 import { type Routed, route } from "../src/layout/route";
 import { outline, wiresThroughAgents, wiresTooClose } from "../src/layout/routeCheck";
 
@@ -124,7 +125,7 @@ const report = (what: string, t: Record<string, number>) =>
       placement.set(id, { x: (c % 4) * 90 + next(20), y: Math.floor(c / 4) * 80 + next(16), orient: next(2) ? "up" : "down" });
     }
     const t0 = performance.now();
-    const routed = route(net, placement);
+    const routed = route(net, placement, { columns: columnsAt(columnOffsets(net), placement) });
     totals.slowest = Math.max(totals.slowest, performance.now() - t0);
     tally(totals, net, placement, routed, `hand-placed #${n}`, `hand-${n}`);
   });

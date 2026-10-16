@@ -6,7 +6,7 @@ import { combinators } from "../core/presets";
 import { interact, parallelStep, redexes } from "../core/reduce";
 import { parse } from "../core/text";
 import { G, type Placement, boxOf, portPos } from "./geometry";
-import { autoLayout } from "./place";
+import { autoLayout, columnOffsets, columnsAt } from "./place";
 import { route } from "./route";
 import { wiresThroughAgents, wiresTooClose } from "./routeCheck";
 
@@ -116,7 +116,29 @@ describe("routing", () => {
     }
   });
 
-  it("routes the examples as well once switched to manual, where wires lose their columns", () => {
+  it("draws the examples the same once switched to manual, where wires keep their columns", () => {
+    for (const ex of examples) {
+      const s = ex.system();
+      const net = ex.net(s);
+      let prev: Placement | undefined;
+      for (let i = 0; i < 40; i++) {
+        const l = autoLayout(net, { prev });
+        prev = l.placement;
+        const columns = columnsAt(columnOffsets(net), l.placement);
+        const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+        expect([...columns.keys()].sort(), `${ex.name}, step ${i}`).toEqual([...l.columns.keys()].sort());
+        for (const [k, x] of columns) expect(near(x, l.columns.get(k)!), `${ex.name}, step ${i}, ${k}`).toBe(true);
+        const wires = route(net, l.placement, { columns }).wires;
+        for (const [id, pts] of l.routed.wires) {
+          const same = wires.get(id)?.length === pts.length && pts.every((p, j) => near(p.x, wires.get(id)![j]!.x) && near(p.y, wires.get(id)![j]!.y));
+          expect(same, `${ex.name}, step ${i}, wire ${id}`).toBe(true);
+        }
+        if (!parallelStep(net, s).length) break;
+      }
+    }
+  });
+
+  it("routes the examples as well without automatic layout's columns", () => {
     for (const ex of examples) {
       const s = ex.system();
       const net = ex.net(s);
@@ -151,13 +173,13 @@ describe("routing", () => {
 
   it("routes round agents placed by hand", () => {
     fc.assert(
-      fc.property(arbPlaced, ({ net, placement }) => {
-        const routed = route(net, placement);
+      fc.property(arbPlaced, fc.boolean(), ({ net, placement }, keep) => {
+        const routed = route(net, placement, keep ? { columns: columnsAt(columnOffsets(net), placement) } : {});
         expect(wiresThroughAgents(net, placement, routed, 3)).toEqual([]);
         // Where there's no room for the full gap they squeeze up, but not onto each other.
         expect(wiresTooClose(routed, G.wireGap / 4)).toEqual([]);
       }),
-      { numRuns: 150 },
+      { numRuns: 300 },
     );
   });
 });
