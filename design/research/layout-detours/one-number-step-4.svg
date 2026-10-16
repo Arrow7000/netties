@@ -1,0 +1,309 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920.276008492569 760" width="920.276008492569" height="760" font-family="system-ui, sans-serif"><rect width="100%" height="100%" fill="#fff"/><text x="101.65544296360069" y="22" font-size="16" font-weight="600" text-anchor="middle">Before (d8098bf)</text>
+<text x="101.65544296360069" y="42" font-size="13" fill="#555" text-anchor="middle">the drawing before the halfway fix</text>
+<svg x="0" y="55" viewBox="-60.106493688264926 -216.9671717171717 273.59836363346244 942" width="203.31088592720138" height="700">
+<rect x="-60.106493688264926" y="-216.9671717171717" width="273.59836363346244" height="942" fill="#fff"/>
+<g fill="none" stroke-linecap="round">
+<path d="M177.49 109.03 C177.49 94.03 177.49 94.03 177.49 79.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M177.49 109.03 C177.49 94.03 177.49 94.03 177.49 79.03" stroke="#111" stroke-width="1.4"/>
+<path d="M177.49 169.03 C177.49 154.03 177.49 154.03 177.49 139.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M177.49 169.03 C177.49 154.03 177.49 154.03 177.49 139.03" stroke="#111" stroke-width="1.4"/>
+<path d="M156.64 -182.97 L156.64 -152.97" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M156.64 -182.97 L156.64 -152.97" stroke="#111" stroke-width="1.4"/>
+<path d="M86.49 691.03 L86.49 123.03 C86.49 111.03 80.49 111.03 80.49 99.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M86.49 691.03 L86.49 123.03 C86.49 111.03 80.49 111.03 80.49 99.03" stroke="#111" stroke-width="1.4"/>
+<path d="M64.49 99.03 C64.49 114.03 55.49 114.03 55.49 129.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M64.49 99.03 C64.49 114.03 55.49 114.03 55.49 129.03" stroke="#111" stroke-width="1.4"/>
+<path d="M156.64 -122.97 C156.64 -107.97 156.64 -107.97 156.64 -92.97" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M156.64 -122.97 C156.64 -107.97 156.64 -107.97 156.64 -92.97" stroke="#111" stroke-width="1.4"/>
+<path d="M72.49 69.03 C72.49 54.03 50.99 54.03 50.99 39.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M72.49 69.03 C72.49 54.03 50.99 54.03 50.99 39.03" stroke="#111" stroke-width="1.4"/>
+<path d="M19.14 589.03 C19.14 556.03 5.56 556.03 5.56 523.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M19.14 589.03 C19.14 556.03 5.56 556.03 5.56 523.03" stroke="#111" stroke-width="1.4"/>
+<path d="M35.14 589.03 C35.14 404.03 55.49 404.03 55.49 219.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M35.14 589.03 C35.14 404.03 55.49 404.03 55.49 219.03" stroke="#111" stroke-width="1.4"/>
+<path d="M55.49 159.03 C55.49 174.03 55.49 174.03 55.49 189.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M55.49 159.03 C55.49 174.03 55.49 174.03 55.49 189.03" stroke="#111" stroke-width="1.4"/>
+<path d="M27.14 645.03 C27.14 632.03 27.14 632.03 27.14 619.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M27.14 645.03 C27.14 632.03 27.14 632.03 27.14 619.03" stroke="#111" stroke-width="1.4"/>
+<path d="M-2.44 437.03 C-2.44 404.03 -16.11 404.03 -16.11 371.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-2.44 437.03 C-2.44 404.03 -16.11 404.03 -16.11 371.03" stroke="#111" stroke-width="1.4"/>
+<path d="M13.56 437.03 C13.56 268.03 13.49 268.03 13.49 99.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M13.56 437.03 C13.56 268.03 13.49 268.03 13.49 99.03" stroke="#111" stroke-width="1.4"/>
+<path d="M34.99 39.03 C34.99 54.03 13.49 54.03 13.49 69.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M34.99 39.03 C34.99 54.03 13.49 54.03 13.49 69.03" stroke="#111" stroke-width="1.4"/>
+<path d="M5.56 493.03 C5.56 480.03 5.56 480.03 5.56 467.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M5.56 493.03 C5.56 480.03 5.56 480.03 5.56 467.03" stroke="#111" stroke-width="1.4"/>
+<path d="M156.64 -2.97 C156.64 101.03 146.49 101.03 146.49 205.03 C146.49 217.03 152.49 217.03 152.49 229.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M156.64 -2.97 C156.64 101.03 146.49 101.03 146.49 205.03 C146.49 217.03 152.49 217.03 152.49 229.03" stroke="#111" stroke-width="1.4"/>
+<path d="M156.64 -62.97 C156.64 -47.97 156.64 -47.97 156.64 -32.97" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M156.64 -62.97 C156.64 -47.97 156.64 -47.97 156.64 -32.97" stroke="#111" stroke-width="1.4"/>
+<path d="M177.49 199.03 C177.49 214.03 168.49 214.03 168.49 229.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M177.49 199.03 C177.49 214.03 168.49 214.03 168.49 229.03" stroke="#111" stroke-width="1.4"/>
+<path d="M-19.38 -80.97 C-19.38 -68.97 -33.51 -68.97 -33.51 -56.97 C-33.51 114.03 -24.11 114.03 -24.11 285.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-19.38 -80.97 C-19.38 -68.97 -33.51 -68.97 -33.51 -56.97 C-33.51 114.03 -24.11 114.03 -24.11 285.03" stroke="#111" stroke-width="1.4"/>
+<path d="M-3.38 -80.97 C-3.38 -65.97 13.74 -65.97 13.74 -50.97" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-3.38 -80.97 C-3.38 -65.97 13.74 -65.97 13.74 -50.97" stroke="#111" stroke-width="1.4"/>
+<path d="M5.74 -20.97 C5.74 -8.97 -12.51 -8.97 -12.51 3.03 C-12.51 144.03 -8.11 144.03 -8.11 285.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M5.74 -20.97 C5.74 -8.97 -12.51 -8.97 -12.51 3.03 C-12.51 144.03 -8.11 144.03 -8.11 285.03" stroke="#111" stroke-width="1.4"/>
+<path d="M42.99 9.03 C42.99 -5.97 21.74 -5.97 21.74 -20.97" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M42.99 9.03 C42.99 -5.97 21.74 -5.97 21.74 -20.97" stroke="#111" stroke-width="1.4"/>
+<path d="M-16.11 341.03 C-16.11 328.03 -16.11 328.03 -16.11 315.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-16.11 341.03 C-16.11 328.03 -16.11 328.03 -16.11 315.03" stroke="#111" stroke-width="1.4"/>
+<path d="M160.49 259.03 C160.49 272.03 160.49 272.03 160.49 285.03" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M160.49 259.03 C160.49 272.03 160.49 272.03 160.49 285.03" stroke="#111" stroke-width="1.4"/>
+<path d="M-11.38 -110.97 C-11.38 -123.97 -11.38 -123.97 -11.38 -136.97" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-11.38 -110.97 C-11.38 -123.97 -11.38 -123.97 -11.38 -136.97" stroke="#111" stroke-width="1.4"/>
+</g>
+<polygon points="3.144515605343365,589.0328282828283 51.144515605343365,589.0328282828283 27.144515605343365,619.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="27.144515605343365" y="599.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<circle cx="27.144515605343365" cy="653.0328282828283" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="27.144515605343365" y="653.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<polygon points="-18.443829838221024,437.0328282828283 29.556170161778976,437.0328282828283 5.556170161778976,467.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="5.556170161778976" y="447.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<polygon points="-10.443829838221024,523.0328282828283 21.556170161778976,523.0328282828283 5.556170161778976,493.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="5.556170161778976" y="513.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="-40.106493688264926,285.0328282828283 7.893506311735074,285.0328282828283 -16.106493688264926,315.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-16.106493688264926" y="295.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<polygon points="-32.106493688264926,371.0328282828283 -0.10649368826492633,371.0328282828283 -16.106493688264926,341.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-16.106493688264926" y="361.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<circle cx="-11.38313005480248" cy="-144.9671717171717" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-11.38313005480248" y="-144.9671717171717" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<polygon points="-35.38313005480248,-80.9671717171717 12.61686994519752,-80.9671717171717 -11.38313005480248,-110.9671717171717" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-11.38313005480248" y="-90.9671717171717" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">×</text>
+<polygon points="-10.258130054802486,-20.967171717171695 37.741869945197514,-20.967171717171695 13.741869945197514,-50.967171717171695" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="13.741869945197514" y="-30.967171717171695" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="18.991869945197514,39.032828282828305 66.99186994519752,39.032828282828305 42.991869945197514,9.032828282828305" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="42.991869945197514" y="29.032828282828305" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="48.49186994519752,99.0328282828283 96.49186994519752,99.0328282828283 72.49186994519752,69.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="72.49186994519752" y="89.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="39.491869945197514,159.0328282828283 71.49186994519752,159.0328282828283 55.491869945197514,129.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="55.491869945197514" y="149.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="39.491869945197514,219.0328282828283 71.49186994519752,219.0328282828283 55.491869945197514,189.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="55.491869945197514" y="209.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="-2.5081300548024856,99.0328282828283 29.491869945197514,99.0328282828283 13.491869945197514,69.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="13.491869945197514" y="89.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="140.64399659572936,-122.96717171717171 172.64399659572936,-122.96717171717171 156.64399659572936,-152.9671717171717" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="156.64399659572936" y="-132.9671717171717" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="140.64399659572936,-62.967171717171695 172.64399659572936,-62.967171717171695 156.64399659572936,-92.9671717171717" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="156.64399659572936" y="-72.9671717171717" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="140.64399659572936,-2.967171717171695 172.64399659572936,-2.967171717171695 156.64399659572936,-32.967171717171695" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="156.64399659572936" y="-12.967171717171695" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="136.49186994519752,229.0328282828283 184.49186994519752,229.0328282828283 160.49186994519752,259.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="160.49186994519752" y="239.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="161.49186994519752,169.0328282828283 193.49186994519752,169.0328282828283 177.49186994519752,199.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="177.49186994519752" y="179.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="161.49186994519752,109.0328282828283 193.49186994519752,109.0328282828283 177.49186994519752,139.0328282828283" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="177.49186994519752" y="119.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<circle cx="177.49186994519752" cy="71.0328282828283" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="177.49186994519752" y="71.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<circle cx="160.49186994519752" cy="293.0328282828283" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="160.49186994519752" y="293.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<text x="156.64399659572936" y="-186.9671717171717" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="9" text-anchor="middle" fill="#111">sum</text>
+<text x="86.49186994519752" y="700.0328282828283" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="9" text-anchor="middle" fill="#111">product</text>
+</svg>
+<text x="460.1380042462845" y="22" font-size="16" font-weight="600" text-anchor="middle">Now (8cfcd44)</text>
+<text x="460.1380042462845" y="42" font-size="13" fill="#555" text-anchor="middle">boxy: wires detour round each other</text>
+<svg x="300" y="55" viewBox="-196.6662662476216 -134.52272727272725 431 676" width="320.27600849256896" height="502.33545647558384">
+<rect x="-196.6662662476216" y="-134.52272727272725" width="431" height="676" fill="#fff"/>
+<g fill="none" stroke-linecap="round">
+<path d="M198.33 191.48 C198.33 176.48 198.33 176.48 198.33 161.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M198.33 191.48 C198.33 176.48 198.33 176.48 198.33 161.48" stroke="#111" stroke-width="1.4"/>
+<path d="M198.33 251.48 C198.33 236.48 198.33 236.48 198.33 221.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M198.33 251.48 C198.33 236.48 198.33 236.48 198.33 221.48" stroke="#111" stroke-width="1.4"/>
+<path d="M177.45 -100.52 L177.45 -70.52" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M177.45 -100.52 L177.45 -70.52" stroke="#111" stroke-width="1.4"/>
+<path d="M30.33 507.48 L30.33 219.48 C30.33 207.48 24.33 207.48 24.33 195.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M30.33 507.48 L30.33 219.48 C30.33 207.48 24.33 207.48 24.33 195.48" stroke="#111" stroke-width="1.4"/>
+<path d="M8.33 195.48 C8.33 210.48 -0.67 210.48 -0.67 225.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M8.33 195.48 C8.33 210.48 -0.67 210.48 -0.67 225.48" stroke="#111" stroke-width="1.4"/>
+<path d="M177.45 -40.52 C177.45 -25.52 177.45 -25.52 177.45 -10.52" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M177.45 -40.52 C177.45 -25.52 177.45 -25.52 177.45 -10.52" stroke="#111" stroke-width="1.4"/>
+<path d="M16.33 165.48 C16.33 150.48 -5.17 150.48 -5.17 135.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M16.33 165.48 C16.33 150.48 -5.17 150.48 -5.17 135.48" stroke="#111" stroke-width="1.4"/>
+<path d="M101.33 15.48 L101.33 468.48 C101.33 473.45 97.3 477.48 92.33 477.48 L-35.91 477.48 C-38.67 477.48 -40.91 475.24 -40.91 472.48 L-40.91 467.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M101.33 15.48 L101.33 468.48 C101.33 473.45 97.3 477.48 92.33 477.48 L-35.91 477.48 C-38.67 477.48 -40.91 475.24 -40.91 472.48 L-40.91 467.48" stroke="#111" stroke-width="1.4"/>
+<path d="M85.33 15.48 L85.33 316.48 C85.33 321.45 81.3 325.48 76.33 325.48 L4.33 325.48 C1.57 325.48 -0.67 323.24 -0.67 320.48 L-0.67 315.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M85.33 15.48 L85.33 316.48 C85.33 321.45 81.3 325.48 76.33 325.48 L4.33 325.48 C1.57 325.48 -0.67 323.24 -0.67 320.48 L-0.67 315.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-0.67 255.48 C-0.67 270.48 -0.67 270.48 -0.67 285.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-0.67 255.48 C-0.67 270.48 -0.67 270.48 -0.67 285.48" stroke="#111" stroke-width="1.4"/>
+<path d="M93.33 -40.52 C93.33 -27.52 93.33 -27.52 93.33 -14.52" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M93.33 -40.52 C93.33 -27.52 93.33 -27.52 93.33 -14.52" stroke="#111" stroke-width="1.4"/>
+<path d="M-48.91 381.48 L-48.91 376.48 C-48.91 373.72 -51.15 371.48 -53.91 371.48 L-109.67 371.48 C-114.64 371.48 -118.67 367.45 -118.67 362.48 L-118.67 -71.52 C-118.67 -76.49 -122.7 -80.52 -127.67 -80.52 L-147.67 -80.52 C-150.43 -80.52 -152.67 -78.28 -152.67 -75.52 L-152.67 -70.52" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-48.91 381.48 L-48.91 376.48 C-48.91 373.72 -51.15 371.48 -53.91 371.48 L-109.67 371.48 C-114.64 371.48 -118.67 367.45 -118.67 362.48 L-118.67 -71.52 C-118.67 -76.49 -122.7 -80.52 -127.67 -80.52 L-147.67 -80.52 C-150.43 -80.52 -152.67 -78.28 -152.67 -75.52 L-152.67 -70.52" stroke="#111" stroke-width="1.4"/>
+<path d="M-32.91 381.48 C-32.91 288.48 -42.67 288.48 -42.67 195.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-32.91 381.48 C-32.91 288.48 -42.67 288.48 -42.67 195.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-21.17 135.48 C-21.17 150.48 -42.67 150.48 -42.67 165.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-21.17 135.48 C-21.17 150.48 -42.67 150.48 -42.67 165.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-40.91 437.48 C-40.91 424.48 -40.91 424.48 -40.91 411.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-40.91 437.48 C-40.91 424.48 -40.91 424.48 -40.91 411.48" stroke="#111" stroke-width="1.4"/>
+<path d="M177.45 79.48 C177.45 183.48 167.33 183.48 167.33 287.48 C167.33 299.48 173.33 299.48 173.33 311.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M177.45 79.48 C177.45 183.48 167.33 183.48 167.33 287.48 C167.33 299.48 173.33 299.48 173.33 311.48" stroke="#111" stroke-width="1.4"/>
+<path d="M177.45 19.48 C177.45 34.48 177.45 34.48 177.45 49.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M177.45 19.48 C177.45 34.48 177.45 34.48 177.45 49.48" stroke="#111" stroke-width="1.4"/>
+<path d="M198.33 281.48 C198.33 296.48 189.33 296.48 189.33 311.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M198.33 281.48 C198.33 296.48 189.33 296.48 189.33 311.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-75.54 15.48 C-75.54 27.48 -89.67 27.48 -89.67 39.48 L-89.67 40.48 C-89.67 45.45 -93.7 49.48 -98.67 49.48 L-135.67 49.48 C-140.64 49.48 -144.67 45.45 -144.67 40.48 L-144.67 15.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-75.54 15.48 C-75.54 27.48 -89.67 27.48 -89.67 39.48 L-89.67 40.48 C-89.67 45.45 -93.7 49.48 -98.67 49.48 L-135.67 49.48 C-140.64 49.48 -144.67 45.45 -144.67 40.48 L-144.67 15.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-59.54 15.48 C-59.54 30.48 -42.42 30.48 -42.42 45.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-59.54 15.48 C-59.54 30.48 -42.42 30.48 -42.42 45.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-50.42 75.48 C-50.42 87.48 -68.67 87.48 -68.67 99.48 L-68.67 100.48 C-68.67 105.45 -72.7 109.48 -77.67 109.48 L-151.67 109.48 C-156.64 109.48 -160.67 105.45 -160.67 100.48 L-160.67 15.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-50.42 75.48 C-50.42 87.48 -68.67 87.48 -68.67 99.48 L-68.67 100.48 C-68.67 105.45 -72.7 109.48 -77.67 109.48 L-151.67 109.48 C-156.64 109.48 -160.67 105.45 -160.67 100.48 L-160.67 15.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-13.17 105.48 C-13.17 90.48 -34.42 90.48 -34.42 75.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-13.17 105.48 C-13.17 90.48 -34.42 90.48 -34.42 75.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-152.67 -40.52 C-152.67 -27.52 -152.67 -27.52 -152.67 -14.52" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-152.67 -40.52 C-152.67 -27.52 -152.67 -27.52 -152.67 -14.52" stroke="#111" stroke-width="1.4"/>
+<path d="M181.33 341.48 C181.33 354.48 181.33 354.48 181.33 367.48" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M181.33 341.48 C181.33 354.48 181.33 354.48 181.33 367.48" stroke="#111" stroke-width="1.4"/>
+<path d="M-67.54 -14.52 C-67.54 -27.52 -67.54 -27.52 -67.54 -40.52" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-67.54 -14.52 C-67.54 -27.52 -67.54 -27.52 -67.54 -40.52" stroke="#111" stroke-width="1.4"/>
+</g>
+<circle cx="93.33373375237841" cy="-48.52272727272725" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="93.33373375237841" y="-48.52272727272725" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<polygon points="69.33373375237841,15.477272727272748 117.33373375237841,15.477272727272748 93.33373375237841,-14.522727272727252" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="93.33373375237841" y="5.477272727272748" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<polygon points="-64.908992851746,381.47727272727275 -16.908992851746014,381.47727272727275 -40.908992851746014,411.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-40.908992851746014" y="391.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<polygon points="-56.908992851746014,467.47727272727275 -24.908992851746014,467.47727272727275 -40.908992851746014,437.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-40.908992851746014" y="457.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="-168.6662662476216,-70.52272727272725 -136.6662662476216,-70.52272727272725 -152.6662662476216,-40.52272727272725" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-152.6662662476216" y="-60.52272727272725" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="-176.6662662476216,15.477272727272748 -128.6662662476216,15.477272727272748 -152.6662662476216,-14.522727272727252" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-152.6662662476216" y="5.477272727272748" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<circle cx="-67.54126624762159" cy="-48.52272727272725" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-67.54126624762159" y="-48.52272727272725" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<polygon points="-91.54126624762159,15.477272727272748 -43.54126624762159,15.477272727272748 -67.54126624762159,-14.522727272727252" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-67.54126624762159" y="5.477272727272748" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">×</text>
+<polygon points="-66.41626624762159,75.47727272727275 -18.4162662476216,75.47727272727275 -42.4162662476216,45.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-42.4162662476216" y="65.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="-37.1662662476216,135.47727272727275 10.8337337523784,135.47727272727275 -13.1662662476216,105.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-13.1662662476216" y="125.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="-7.6662662476216,195.47727272727275 40.3337337523784,195.47727272727275 16.3337337523784,165.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="16.3337337523784" y="185.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="-16.6662662476216,255.47727272727275 15.3337337523784,255.47727272727275 -0.6662662476215999,225.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-0.6662662476215999" y="245.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="-16.6662662476216,315.47727272727275 15.3337337523784,315.47727272727275 -0.6662662476215999,285.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-0.6662662476215999" y="305.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="-58.6662662476216,195.47727272727275 -26.6662662476216,195.47727272727275 -42.6662662476216,165.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-42.6662662476216" y="185.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="161.44620195385042,-40.52272727272725 193.44620195385042,-40.52272727272725 177.44620195385042,-70.52272727272725" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="177.44620195385042" y="-50.52272727272725" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="161.44620195385042,19.477272727272748 193.44620195385042,19.477272727272748 177.44620195385042,-10.522727272727252" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="177.44620195385042" y="9.477272727272748" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="161.44620195385042,79.47727272727275 193.44620195385042,79.47727272727275 177.44620195385042,49.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="177.44620195385042" y="69.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="157.3337337523784,311.47727272727275 205.3337337523784,311.47727272727275 181.3337337523784,341.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="181.3337337523784" y="321.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="182.3337337523784,251.47727272727275 214.3337337523784,251.47727272727275 198.3337337523784,281.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="198.3337337523784" y="261.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="182.3337337523784,191.47727272727275 214.3337337523784,191.47727272727275 198.3337337523784,221.47727272727275" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="198.3337337523784" y="201.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<circle cx="198.3337337523784" cy="153.47727272727275" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="198.3337337523784" y="153.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<circle cx="181.3337337523784" cy="375.47727272727275" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="181.3337337523784" y="375.47727272727275" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<text x="177.44620195385042" y="-104.52272727272725" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="9" text-anchor="middle" fill="#111">sum</text>
+<text x="30.3337337523784" y="516.4772727272727" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="9" text-anchor="middle" fill="#111">product</text>
+</svg>
+<text x="763.1718821759896" y="22" font-size="16" font-weight="600" text-anchor="middle">Tried: 600 per detour</text>
+<text x="763.1718821759896" y="42" font-size="13" fill="#555" text-anchor="middle">clean, but turns units in 19 other steps</text>
+<svg x="660.276008492569" y="55" viewBox="-65.03722584792033 -246.91161616161614 276.93689431366346 898" width="205.7917473668412" height="667.3036093418259">
+<rect x="-65.03722584792033" y="-246.91161616161614" width="276.93689431366346" height="898" fill="#fff"/>
+<g fill="none" stroke-linecap="round">
+<path d="M175.9 79.09 C175.9 64.09 175.9 64.09 175.9 49.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M175.9 79.09 C175.9 64.09 175.9 64.09 175.9 49.09" stroke="#111" stroke-width="1.4"/>
+<path d="M175.9 139.09 C175.9 124.09 175.9 124.09 175.9 109.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M175.9 139.09 C175.9 124.09 175.9 124.09 175.9 109.09" stroke="#111" stroke-width="1.4"/>
+<path d="M146.57 -212.91 L146.57 -182.91" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M146.57 -212.91 L146.57 -182.91" stroke="#111" stroke-width="1.4"/>
+<path d="M-35.04 -212.91 L-35.04 355.09 C-35.04 367.09 -29.04 367.09 -29.04 379.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-35.04 -212.91 L-35.04 355.09 C-35.04 367.09 -29.04 367.09 -29.04 379.09" stroke="#111" stroke-width="1.4"/>
+<path d="M-13.04 379.09 C-13.04 364.09 -4.04 364.09 -4.04 349.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-13.04 379.09 C-13.04 364.09 -4.04 364.09 -4.04 349.09" stroke="#111" stroke-width="1.4"/>
+<path d="M146.57 -152.91 C146.57 -137.91 146.57 -137.91 146.57 -122.91" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M146.57 -152.91 C146.57 -137.91 146.57 -137.91 146.57 -122.91" stroke="#111" stroke-width="1.4"/>
+<path d="M-21.04 409.09 C-21.04 424.09 0.46 424.09 0.46 439.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-21.04 409.09 C-21.04 424.09 0.46 424.09 0.46 439.09" stroke="#111" stroke-width="1.4"/>
+<path d="M25.16 -110.91 C25.16 -77.91 43.12 -77.91 43.12 -44.91" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M25.16 -110.91 C25.16 -77.91 43.12 -77.91 43.12 -44.91" stroke="#111" stroke-width="1.4"/>
+<path d="M9.16 -110.91 C9.16 74.09 -4.04 74.09 -4.04 259.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M9.16 -110.91 C9.16 74.09 -4.04 74.09 -4.04 259.09" stroke="#111" stroke-width="1.4"/>
+<path d="M-4.04 319.09 C-4.04 304.09 -4.04 304.09 -4.04 289.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M-4.04 319.09 C-4.04 304.09 -4.04 304.09 -4.04 289.09" stroke="#111" stroke-width="1.4"/>
+<path d="M17.16 -166.91 C17.16 -153.91 17.16 -153.91 17.16 -140.91" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M17.16 -166.91 C17.16 -153.91 17.16 -153.91 17.16 -140.91" stroke="#111" stroke-width="1.4"/>
+<path d="M51.12 41.09 C51.12 74.09 66.57 74.09 66.57 107.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M51.12 41.09 C51.12 74.09 66.57 74.09 66.57 107.09" stroke="#111" stroke-width="1.4"/>
+<path d="M35.12 41.09 C35.12 210.09 37.96 210.09 37.96 379.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M35.12 41.09 C35.12 210.09 37.96 210.09 37.96 379.09" stroke="#111" stroke-width="1.4"/>
+<path d="M16.46 439.09 C16.46 424.09 37.96 424.09 37.96 409.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M16.46 439.09 C16.46 424.09 37.96 424.09 37.96 409.09" stroke="#111" stroke-width="1.4"/>
+<path d="M43.12 -14.91 C43.12 -1.91 43.12 -1.91 43.12 11.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M43.12 -14.91 C43.12 -1.91 43.12 -1.91 43.12 11.09" stroke="#111" stroke-width="1.4"/>
+<path d="M146.57 -32.91 C146.57 71.09 144.9 71.09 144.9 175.09 C144.9 187.09 150.9 187.09 150.9 199.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M146.57 -32.91 C146.57 71.09 144.9 71.09 144.9 175.09 C144.9 187.09 150.9 187.09 150.9 199.09" stroke="#111" stroke-width="1.4"/>
+<path d="M146.57 -92.91 C146.57 -77.91 146.57 -77.91 146.57 -62.91" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M146.57 -92.91 C146.57 -77.91 146.57 -77.91 146.57 -62.91" stroke="#111" stroke-width="1.4"/>
+<path d="M175.9 169.09 C175.9 184.09 166.9 184.09 166.9 199.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M175.9 169.09 C175.9 184.09 166.9 184.09 166.9 199.09" stroke="#111" stroke-width="1.4"/>
+<path d="M70.84 559.09 C70.84 547.09 84.96 547.09 84.96 535.09 C84.96 364.09 74.57 364.09 74.57 193.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M70.84 559.09 C70.84 547.09 84.96 547.09 84.96 535.09 C84.96 364.09 74.57 364.09 74.57 193.09" stroke="#111" stroke-width="1.4"/>
+<path d="M54.84 559.09 C54.84 544.09 37.71 544.09 37.71 529.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M54.84 559.09 C54.84 544.09 37.71 544.09 37.71 529.09" stroke="#111" stroke-width="1.4"/>
+<path d="M45.71 499.09 C45.71 487.09 63.96 487.09 63.96 475.09 C63.96 334.09 58.57 334.09 58.57 193.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M45.71 499.09 C45.71 487.09 63.96 487.09 63.96 475.09 C63.96 334.09 58.57 334.09 58.57 193.09" stroke="#111" stroke-width="1.4"/>
+<path d="M8.46 469.09 C8.46 484.09 29.71 484.09 29.71 499.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M8.46 469.09 C8.46 484.09 29.71 484.09 29.71 499.09" stroke="#111" stroke-width="1.4"/>
+<path d="M66.57 137.09 C66.57 150.09 66.57 150.09 66.57 163.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M66.57 137.09 C66.57 150.09 66.57 150.09 66.57 163.09" stroke="#111" stroke-width="1.4"/>
+<path d="M158.9 229.09 C158.9 242.09 158.9 242.09 158.9 255.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M158.9 229.09 C158.9 242.09 158.9 242.09 158.9 255.09" stroke="#111" stroke-width="1.4"/>
+<path d="M62.84 589.09 C62.84 602.09 62.84 602.09 62.84 615.09" stroke="#fff" stroke-width="6" stroke-linecap="butt"/>
+<path d="M62.84 589.09 C62.84 602.09 62.84 602.09 62.84 615.09" stroke="#111" stroke-width="1.4"/>
+</g>
+<circle cx="17.160205159110678" cy="-174.91161616161614" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="17.160205159110678" y="-174.91161616161614" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<polygon points="-6.839794840889322,-110.91161616161614 41.160205159110674,-110.91161616161614 17.160205159110678,-140.91161616161614" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="17.160205159110678" y="-120.91161616161614" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<polygon points="27.122332730651493,-44.91161616161614 59.12233273065149,-44.91161616161614 43.12233273065149,-14.911616161616138" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="43.12233273065149" y="-34.91161616161614" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="19.122332730651493,41.08838383838386 67.1223327306515,41.08838383838386 43.12233273065149,11.088383838383862" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="43.12233273065149" y="31.088383838383862" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<polygon points="50.57179843287875,107.08838383838386 82.57179843287875,107.08838383838386 66.57179843287875,137.08838383838386" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="66.57179843287875" y="117.08838383838386" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="42.57179843287875,193.08838383838386 90.57179843287875,193.08838383838386 66.57179843287875,163.08838383838386" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="66.57179843287875" y="183.08838383838386" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">δ</text>
+<polygon points="38.837774152079675,559.0883838383838 86.83777415207967,559.0883838383838 62.837774152079675,589.0883838383838" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="62.837774152079675" y="569.0883838383838" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">×</text>
+<polygon points="13.712774152079675,499.08838383838383 61.712774152079675,499.08838383838383 37.712774152079675,529.0883838383838" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="37.712774152079675" y="509.08838383838383" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="-15.537225847920322,439.08838383838383 32.462774152079675,439.08838383838383 8.462774152079678,469.08838383838383" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="8.462774152079678" y="449.08838383838383" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="-45.037225847920325,379.08838383838383 2.962774152079678,379.08838383838383 -21.037225847920322,409.08838383838383" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-21.037225847920322" y="389.08838383838383" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="-20.037225847920322,319.08838383838383 11.962774152079678,319.08838383838383 -4.037225847920322,349.08838383838383" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-4.037225847920322" y="329.08838383838383" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="-20.037225847920322,259.08838383838383 11.962774152079678,259.08838383838383 -4.037225847920322,289.08838383838383" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="-4.037225847920322" y="269.08838383838383" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="21.962774152079675,379.08838383838383 53.962774152079675,379.08838383838383 37.962774152079675,409.08838383838383" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="37.962774152079675" y="389.08838383838383" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<circle cx="62.837774152079675" cy="623.0883838383838" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="62.837774152079675" y="623.0883838383838" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<polygon points="130.57179843287875,-152.91161616161614 162.57179843287875,-152.91161616161614 146.57179843287875,-182.91161616161614" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="146.57179843287875" y="-162.91161616161614" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="130.57179843287875,-92.91161616161614 162.57179843287875,-92.91161616161614 146.57179843287875,-122.91161616161614" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="146.57179843287875" y="-102.91161616161614" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="130.57179843287875,-32.91161616161614 162.57179843287875,-32.91161616161614 146.57179843287875,-62.91161616161614" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="146.57179843287875" y="-42.91161616161614" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="134.89966846574313,199.08838383838386 182.89966846574313,199.08838383838386 158.89966846574313,229.08838383838386" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="158.89966846574313" y="209.08838383838386" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">+</text>
+<polygon points="159.89966846574313,139.08838383838386 191.89966846574313,139.08838383838386 175.89966846574313,169.08838383838386" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="175.89966846574313" y="149.08838383838386" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<polygon points="159.89966846574313,79.08838383838386 191.89966846574313,79.08838383838386 175.89966846574313,109.08838383838386" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="175.89966846574313" y="89.08838383838386" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">S</text>
+<circle cx="175.89966846574313" cy="41.08838383838386" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="175.89966846574313" y="41.08838383838386" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<circle cx="158.89966846574313" cy="263.08838383838383" r="8" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/>
+<text x="158.89966846574313" y="263.08838383838383" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="11" text-anchor="middle" dominant-baseline="central" fill="#111">0</text>
+<text x="146.57179843287875" y="-216.91161616161614" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="9" text-anchor="middle" fill="#111">sum</text>
+<text x="-35.037225847920325" y="-216.91161616161614" font-family="STIX Two Text, Times New Roman, serif" font-style="italic" font-size="9" text-anchor="middle" fill="#111">product</text>
+</svg></svg>

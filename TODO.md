@@ -561,6 +561,9 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
          Square of a sum, Directed cascade, Copying a feedback loop); review
          those by eye before keeping it. 300 wasn't enough for that step.
          Runs forever has one detour every step whatever the charge.
+         Picture: `design/research/layout-detours/one-number-step-4.svg`
+         (One number, two calculations after Step all × 4: before the
+         halfway fix, now, and with 600 per detour).
    - [x] Fixed on the way: with each net's loose ends on its own edge
          (above), a net placed by hand among another's agents could leave a
          loose end right on top of one (a rare failure of the hand-placed
