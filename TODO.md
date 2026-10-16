@@ -394,6 +394,7 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
          change shape while im dragging an agent, like i'd switched into
          manual layout? for that matter, why do the wires look different in
          manual mode to auto mode in the first place?"
+
      - What a column is: when automatic layout draws a tree, an aux port
        whose wire leaves the tree gets a lane of its own, out past the
        subtrees beside it (`Tree.cols` in place.ts). The wire jogs over to
@@ -460,16 +461,39 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
        step before, so `a` stays on top instead of being pulled down to the
        shared line. Routing checks unchanged (0 problems in the examples;
        hand-placed: 43 squeezed pairs, was 46).
-   - [ ] **Separate nets still share level rows.** Over 300 random pairs of
-         tangles, a net laid out beside another turned differently from
-         laid out alone in 87 (133 before the change above). What's left:
-         `arrange` in `place.ts` stacks units into rows across the whole
-         drawing, and a row's height comes from its tallest unit, so a tall
-         net beside a short one changes the short one's row spacing, and
-         with it what the flip search picks. Lanes in the gap between two
-         nets are shared too. Fix: lay out each net on its own (rows, slide,
-         flip search) and only then put them side by side, as the end of
-         `arrange` already does. Not started; ask the user first.
+   - [x] **Each separate net is laid out on its own** (done 2026-10-16).
+         Separate nets shared level rows: `arrange` stacked units into rows
+         across the whole drawing, and a row's height came from its tallest
+         unit, so a tall net beside a short one changed the short one's row
+         spacing, and with it what the flip search picked. Over 300 random
+         pairs of tangles, a net beside another turned differently from
+         alone in 133 (87 once loose ends had their own edges).
+     - Now `autoLayout` splits the drawing into separate nets (agents joined
+       by wires; `splitNet` keeps the order of agents, wires and loose
+       ends, which the layout follows), lays each out with `layoutNet` (the
+       old `autoLayout`: rows, slide, flip search), then sets them side by
+       side a gap apart with their tops level: nets drawn before in the
+       order they were, new ones (like the ε–ε pairs some steps leave) on
+       the right. The whole drawing then shifts as one to stay where it
+       was. 300 of 300 pairs now agree; new test in `layout.test.ts`.
+     - 96 example steps changed; most are shifts or ε–ε pairs moving right.
+       By the flip search's own cost the rest are the same or better (One
+       number, two calculations steps 4 and 8: shorter wires) except Two
+       lengths, one list: at step 2 the right-hand net now draws one chain
+       with a cap round and a long wire down to `a` instead of the two
+       chains symmetric with Lafont X crossings (1 crossing against 3, at
+       300 each, so the cost prefers it), and at step 3 one net lands on a
+       worse arrangement by its own cost (229 against 185; the greedy
+       search stops elsewhere). The user: "it doesn't sound like these
+       regressions are massive either way".
+     - Slower for drawings of many nets, since each now gets the flip
+       search (before, more than 24 units skipped it): 300 agents in many
+       nets take ~14 ms instead of ~6.
+   - [ ] **Crossings cost the same however they look.** The flip search
+         charges 300 per crossing, so a neat X between two S-curves (as in
+         Lafont's figures) counts as much as a messy one; that's what turned
+         Two lengths, one list step 2 (above). Try charging less for two
+         `direct` wires crossing, and check every example step.
      - The user's framing for later: there are two uses of a loose end.
        Usually it's scratch ("leave a loose wire loose where it is");
        sometimes it's a deliberate interface to the whole net. A later
@@ -504,3 +528,4 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
 - [x] i don't really understand the logic behind this positioning? is it possible that here too we are using the rule editor logic that ensures that loose ends always appear either above or below all nets? im not sure we want that on the main canvas. but even if we do, why are the two identical nets flipped upside down relative to each other? what's the logic there?
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.30.54.png
 - [ ] escape should also close the expanded rule grid, as it should all panels (unless they have unsaved state)
+- [ ] when you connect two wires and then undo it, the animation is a bit awkward, because the destination wire recedes all the way from the port it's no longer connected to. instead i think it'll look better if we just split the wire in two from its halfway point. then the two wires should spring back naturally

@@ -110,6 +110,23 @@ describe("auto layout", () => {
     }
   });
 
+  it("lays out a net the same way whatever is drawn beside it", () => {
+    fc.assert(
+      fc.property(arbNet, arbNet, (a, b) => {
+        // b's agents, wires and loose ends added to a copy of a, under new ids and names.
+        const both = a.clone();
+        const id = new Map<number, number>();
+        for (const x of b.agents.values()) id.set(x.id, both.addAgent(sys.type(x.type)));
+        const end = (e: End): End => (e.kind === "port" ? port(id.get(e.agent)!, e.slot) : free(`b${e.name}`));
+        for (const w of b.wires.values()) both.connect(end(w.ends[0]), end(w.ends[1]));
+        const alone = autoLayout(a).placement;
+        const beside = autoLayout(both).placement;
+        for (const [x, p] of alone) expect(beside.get(x)!.orient).toBe(p.orient);
+      }),
+      { numRuns: 100 },
+    );
+  });
+
   it("keeps separate nets together after steps that pushed them apart", () => {
     const { net, system } = parse(`
 agent S 1

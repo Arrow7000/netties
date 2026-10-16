@@ -1,5 +1,5 @@
-import { type AgentId, type Net, endKey, port } from "../core/net";
-import { G, type Orient, type Placement, shape } from "./geometry";
+import { type AgentId, Net, NONE, endKey, port } from "../core/net";
+import { G, type Orient, type Placement, boxOf, shape } from "./geometry";
 import { type Pins, type Routed, crossings, length, route } from "./route";
 
 /**
@@ -148,6 +148,85 @@ function treeLayout(net: Net, children: Map<AgentId, (AgentId | undefined)[]>) {
 }
 
 export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
+  const nets = separateNets(net);
+  if (nets.length <= 1) return layoutNet(net, opts);
+
+  // Each net is laid out on its own, so nothing beside it changes how it's
+  // drawn, then they sit side by side, a set gap apart and tops level:
+  // those that were drawn before in the order they were, then new ones.
+  const subs = splitNet(net, nets);
+  const parts = nets.map((ids, i) => {
+    const placement = layoutNet(subs[i]!, opts).placement;
+    const survives = [...ids].some((id) => opts.prev?.has(id));
+    let [l, r, top] = [Infinity, -Infinity, Infinity];
+    for (const [id, p] of placement) {
+      const b = boxOf(p, net.agent(id).wires.length - 1);
+      [l, r, top] = [Math.min(l, b.x0), Math.max(r, b.x1), Math.min(top, b.y0)];
+    }
+    return { i, placement, survives, l, r, top };
+  });
+  const order = [...parts].sort((p, q) => (p.survives && q.survives ? p.l + p.r - (q.l + q.r) : +q.survives - +p.survives) || p.i - q.i);
+  const top = Math.min(...parts.map((p) => p.top));
+  const placement: Placement = new Map();
+  let right = order[0]!.l - G.netGap;
+  for (const p of order) {
+    const dx = right + G.netGap - p.l;
+    for (const [id, q] of p.placement) placement.set(id, { ...q, x: q.x + dx, y: q.y + top - p.top });
+    right = p.r + dx;
+  }
+  // Packing them together moved them: on the whole, keep them where they were.
+  let [sx, sy, n] = [0, 0, 0];
+  for (const [id, q] of placement) {
+    const was = opts.prev?.get(id);
+    if (was) [sx, sy, n] = [sx + was.x - q.x, sy + was.y - q.y, n + 1];
+  }
+  if (n) for (const [id, q] of placement) placement.set(id, { ...q, x: q.x + sx / n, y: q.y + sy / n });
+  const columns = columnsAt(columnOffsets(net), placement);
+  return { placement, columns, routed: route(net, placement, { columns, pins: opts.pins }) };
+}
+
+/** The agents of each separate net: those joined by wires. */
+function separateNets(net: Net): Set<AgentId>[] {
+  const root = new Map<AgentId, AgentId>();
+  const find = (a: AgentId): AgentId => {
+    const up = root.get(a) ?? a;
+    if (up === a) return a;
+    const r = find(up);
+    root.set(a, r);
+    return r;
+  };
+  for (const w of net.wires.values()) {
+    const [a, b] = w.ends;
+    if (a.kind === "port" && b.kind === "port") root.set(find(a.agent), find(b.agent));
+  }
+  const nets = new Map<AgentId, Set<AgentId>>();
+  for (const id of net.agents.keys()) {
+    const r = find(id);
+    const set = nets.get(r) ?? new Set();
+    set.add(id);
+    nets.set(r, set);
+  }
+  return [...nets.values()];
+}
+
+/** Each separate net on its own, as a net of its own: the same agents, wires and loose ends, in the same order. */
+function splitNet(net: Net, nets: Set<AgentId>[]): Net[] {
+  const subs = nets.map(() => new Net());
+  const which = new Map<AgentId, Net>();
+  nets.forEach((ids, i) => ids.forEach((id) => which.set(id, subs[i]!)));
+  for (const a of net.agents.values()) which.get(a.id)!.addAgent({ id: a.type, name: "", symbol: "", arity: a.wires.length - 1 }, a.id);
+  for (const w of net.wires.values()) {
+    const e = w.ends.find((e) => e.kind === "port");
+    if (!e || e.kind !== "port") continue;
+    const sub = which.get(e.agent)!;
+    for (const f of w.ends) if (f.kind === "free") sub.free.set(f.name, NONE);
+    sub.connect(w.ends[0], w.ends[1], w.id);
+  }
+  return subs;
+}
+
+/** Automatic layout of one net, or of several as if they were one. */
+function layoutNet(net: Net, opts: AutoLayoutOptions): AutoLayout {
   const { children, roots } = structure(net);
   const lay = treeLayout(net, children);
 
