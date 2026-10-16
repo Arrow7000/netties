@@ -230,7 +230,7 @@ export function HoverPanel(props: { ed: Editor }) {
           title,
           lines: [
             {
-              text: m.fixedInterface
+              text: !m.freePorts.scratch
                 ? g.kind === "new"
                   ? "Let go on an empty port to connect it."
                   : "Let go on an empty port to plug it in, or anywhere else to unplug it."

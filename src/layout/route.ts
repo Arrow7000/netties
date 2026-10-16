@@ -70,6 +70,13 @@ export interface Pins {
   bottom: string[];
   /** Room between neighbouring pins along each edge, if more than usual. */
   gaps?: { top?: number; bottom?: number };
+  /**
+   * Hold the pins still: evenly spaced around `mid`, in rows at `top` and
+   * `bottom` (pushed further out only while the net reaches past them),
+   * rather than each drawn towards where its wire arrives. Until those are
+   * known, around the middle of the net and just beyond it.
+   */
+  held?: { mid?: number; top?: number; bottom?: number };
 }
 
 interface Leg {
@@ -340,14 +347,15 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     // Pinned ports keep their order, but sit as close as they can to where
     // their wires naturally arrive.
     const pinX = new Map<string, number>();
-    const pinTop = top - PIN_RISE;
-    const pinBottom = bottom + PIN_RISE;
+    const held = opts.pins?.held;
+    const pinTop = Math.min(top - PIN_RISE, held?.top ?? Infinity);
+    const pinBottom = Math.max(bottom + PIN_RISE, held?.bottom ?? -Infinity);
     if (opts.pins) {
       const natural = new Map<string, number>();
-      for (const job of jobs) {
+      for (const job of held ? [] : jobs) {
         if (job.kind === "pin") natural.set(job.free, job.around ? laneX.get(job.id)! : job.leg.t.x);
       }
-      const mid = boxes.length ? boxes.reduce((s, b) => s + b.x0 + b.x1, 0) / (2 * boxes.length) : 0;
+      const mid = held?.mid ?? (boxes.length ? boxes.reduce((s, b) => s + b.x0 + b.x1, 0) / (2 * boxes.length) : 0);
       const { top: tops, bottom: bottoms, gaps } = opts.pins;
       spread(tops, natural, mid, gaps?.top).forEach((x, n) => pinX.set(n, x));
       spread(bottoms, natural, mid, gaps?.bottom).forEach((x, n) => pinX.set(n, x));

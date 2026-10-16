@@ -62,9 +62,9 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     return 24 + Math.max(...types.map((t) => (t ?? "").length)) * 5.9;
   };
   Object.assign(pins, { gaps: { top: gap(pins.top), bottom: gap(pins.bottom) } });
-  const lhs = createNetModel({ system: sys, pins: () => pins, fixedInterface: true, freeSpec });
+  const lhs = createNetModel({ system: sys, pins: () => pins, surface: "rule", freeSpec });
   lhs.setNet(pairNet(sys(), left, right).net);
-  const rhs = createNetModel({ system: sys, pins: () => pins, fixedInterface: true, freeSpec });
+  const rhs = createNetModel({ system: sys, pins: () => pins, surface: "rule", freeSpec });
   rhs.setNet(existing ? ruleToNet(sys(), existing.rule) : interfaceNet(sys(), left, right));
   // Agents stay where they're put; Tidy lays them out afresh.
   rhs.setMode("manual", false);
@@ -457,14 +457,14 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
       <div class="rp-body">
         <div class="rp-before">
           <span class="rp-cap">Before</span>
-          <Canvas m={lhs} camera={lcam} readonly iface freeLabel={ifaceLabel} pad={{ t: 48, r: 24, b: 48, l: 24 }} />
+          <Canvas m={lhs} camera={lcam} readonly freeLabel={ifaceLabel} pad={{ t: 48, r: 24, b: 48, l: 24 }} />
         </div>
         <div class="rp-arrow" aria-hidden="true">
           →
         </div>
         <div class="rp-after">
           <div ref={afterEl} class="rp-wrap">
-            <Canvas m={rhs} camera={rcam} iface freeLabel={ifaceLabel} pad={{ t: 60, r: 56, b: 60, l: 56 }} />
+            <Canvas m={rhs} camera={rcam} freeLabel={ifaceLabel} pad={{ t: 60, r: 56, b: 60, l: 56 }} />
             <span class="rp-cap">
               After<Show when={!saved().has}> · no rule yet</Show>
             </span>

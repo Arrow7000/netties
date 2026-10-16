@@ -10,6 +10,7 @@ import { Chevron, Close, Component, Expand, Plus } from "./icons";
 import { dismissOnClickOutside } from "./dismiss";
 import { canLeave, subEditor } from "./subEditor";
 import { onThaw } from "./freeze";
+import { onEscapeCancels } from "./escape";
 
 interface Carry {
   what: { kind: "type" | "component"; id: string };
@@ -93,7 +94,9 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       else if (what.kind === "type") ed.dispatch({ kind: "net/add-agent", type: what.id, at, attach });
       else ed.dispatch({ kind: "net/add-component", id: what.id, at });
     };
+    const offEscape = onEscapeCancels(() => (stopCarry(), true));
     cancelCarry = () => {
+      offEscape();
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", stopCarry);

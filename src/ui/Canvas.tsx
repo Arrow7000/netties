@@ -7,18 +7,14 @@ import { type Box, G, type Placed, type Pt, boxOf, insidePolygon, portPos, segme
 import type { StepPlan, StepPreview } from "../layout/replace";
 import { flattenPath, polylinePath, resample, roundedPath } from "../render/path";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
-import type { DropCheck, NetModel, WireGesture } from "../state/model";
+import type { NetModel, WireGesture } from "../state/model";
+import { onEscapeCancels } from "./escape";
+import { type Effect, type Gesture, type Hit, type Msg, update } from "./gesture";
 import { held } from "./keys";
 import { onThaw } from "./freeze";
 import { prefs } from "./prefs";
 
-type Drag =
-  | { kind: "pan"; start: Pt; origin: Pt; moved: boolean }
-  | { kind: "marquee"; start: Pt; cur: Pt; additive: boolean; moved: boolean }
-  // A wire gesture only begins once the pointer moves: pressing a port and letting go leaves its wire alone.
-  | { kind: "wire"; g: WireGesture; start: Pt; moved: boolean; cur: Pt; target?: End; check?: DropCheck; path?: Pt[] }
-  | { kind: "move"; ids: AgentId[]; groups: GroupId[]; last: Pt; moved: boolean }
-  | { kind: "click-wire"; id: WireId; alt: boolean };
+type Marquee = Extract<Gesture, { kind: "marquee" }>;
 
 export interface View {
   x: number;
@@ -119,12 +115,6 @@ export interface CanvasProps {
   pad?: Pad;
   /** Shown over the canvas while the net is empty. */
   empty?: JSX.Element;
-  /**
-   * A rule's canvas: its loose ends are the rule's interface, drawn weightier
-   * than ordinary loose ends, and empty ports and ends are marked as needing
-   * a wire.
-   */
-  iface?: boolean;
   class?: string;
 }
 
@@ -138,8 +128,15 @@ export function Canvas(props: CanvasProps) {
   const view = cam.view;
   const setView = cam.setView;
   const sys = () => ed.view().sys;
+  /**
+   * A rule's canvas: its free ports are the rule's interface, drawn weightier
+   * than loose ends, and empty ports and ends are marked as needing a wire.
+   */
+  const iface = () => ed.freePorts.surface === "rule";
   let svg!: SVGSVGElement;
-  const [drag, setDrag] = createSignal<Drag>();
+  const [drag, setDrag] = createSignal<Gesture>();
+  /** Where the wire being dragged would run, worked out once a frame. */
+  const [wirePath, setWirePath] = createSignal<Pt[]>();
   const [size, setSize] = createSignal({ w: 800, h: 600 });
   const [space, setSpace] = createSignal(false);
 
@@ -157,7 +154,7 @@ export function Canvas(props: CanvasProps) {
    * carry the same type, to the left of the row, otherwise beside each end.
    */
   const ifaceTypes = createMemo(() => {
-    if (!props.iface || tooBig()) return [];
+    if (!iface() || tooBig()) return [];
     const { routed } = ed.layout();
     const out: { x: number; y: number; text: string; anchor: "start" | "end" }[] = [];
     for (const dir of ["up", "down"] as const) {
@@ -175,12 +172,12 @@ export function Canvas(props: CanvasProps) {
     const { routed } = ed.layout();
     const b = { ...routed.bounds };
     // A rule's interface ends carry their names, and types, further out.
-    const room = props.iface ? 24 : 16;
+    const room = iface() ? 24 : 16;
     for (const f of routed.free.values()) {
       b.y0 = Math.min(b.y0, f.y - room);
       b.y1 = Math.max(b.y1, f.y + room);
     }
-    if (props.iface)
+    if (iface())
       for (const t of ifaceTypes()) {
         const w = t.text.length * TYPE_CH;
         b.x0 = Math.min(b.x0, t.anchor === "end" ? t.x - w : t.x);
@@ -366,105 +363,113 @@ export function Canvas(props: CanvasProps) {
     return undefined;
   };
 
-  /** Start dragging the selection in either layout mode. */
-  const startMove = (w: Pt) => {
-    const s = ed.selection();
-    if (s?.kind !== "items") return;
-    if (ed.mode() === "manual") ed.beginSelectionMove();
-    else ed.beginAutoSelectionMove([...s.agents], [...s.groups]);
-    setDrag({ kind: "move", ids: [...s.agents], groups: [...s.groups], last: w, moved: false });
-  };
-
-  const startPan = (e: PointerEvent) => {
-    const v = view();
-    setDrag({ kind: "pan", start: { x: e.clientX, y: e.clientY }, origin: { x: v.x, y: v.y }, moved: false });
-  };
-
-  const onPointerDown = (e: PointerEvent) => {
-    const target = e.target as Element;
-    svg.setPointerCapture(e.pointerId);
-    ed.setHover(undefined);
-    if (e.button === 1 || e.button === 2 || (e.button === 0 && space())) {
-      e.preventDefault();
-      return startPan(e);
-    }
-    if (e.button !== 0) return;
-    if (props.readonly) return startPan(e);
-    const w = toWorld(e);
+  /** What a pointer event is on, for the gesture state machine. */
+  const hitAt = (target: Element): Hit => {
     const end = endAt(target);
-    if (end) {
-      const g = ed.gestureAt(end);
-      setDrag({ kind: "wire", g, start: { x: e.clientX, y: e.clientY }, moved: false, cur: w });
-      return;
-    }
+    if (end) return { kind: "end", end };
     const agentEl = target.closest("[data-agent]");
-    if (agentEl) {
-      const id = Number(agentEl.getAttribute("data-agent"));
-      if (!ed.isSelected(id) || e.shiftKey) ed.pick(id, e.shiftKey);
-      return startMove(w);
-    }
+    if (agentEl) return { kind: "agent", id: Number(agentEl.getAttribute("data-agent")) };
     const collapseEl = target.closest("[data-collapse]");
-    if (collapseEl) {
-      ed.setCollapsed(Number(collapseEl.getAttribute("data-collapse")), true);
-      return;
-    }
+    if (collapseEl) return { kind: "collapse", group: Number(collapseEl.getAttribute("data-collapse")) };
     const hullEl = target.closest("[data-group]");
-    if (hullEl) {
-      const g = Number(hullEl.getAttribute("data-group"));
-      ed.pickGroup(g, e.shiftKey);
-      return startMove(w);
-    }
+    if (hullEl) return { kind: "group", group: Number(hullEl.getAttribute("data-group")) };
     const wireEl = target.closest("[data-wire]");
-    if (wireEl) {
-      const id = Number(wireEl.getAttribute("data-wire"));
-      setDrag({ kind: "click-wire", id, alt: e.altKey });
-      // Still pointing at it: keep its preview up while the button is down.
-      ed.setHover({ kind: "wire", id });
-      return;
+    if (wireEl) return { kind: "wire", id: Number(wireEl.getAttribute("data-wire")) };
+    return { kind: "none" };
+  };
+
+  const ctx = {
+    get readonly() {
+      return !!props.readonly;
+    },
+    gestureAt: ed.gestureAt,
+    checkDrop: ed.checkDrop,
+    isSelected: ed.isSelected,
+    clickable: (id: WireId) =>
+      ed.activeWires().has(id) && props.onFire ? ("fire" as const) : ed.stuckWires().has(id) && props.onStuck ? ("stuck" as const) : undefined,
+    zoom: () => view().k,
+    view: () => view(),
+  };
+
+  /** Carry out what the state machine says, given the gesture it was in. */
+  const perform = (fx: Effect, was: Gesture | undefined) => {
+    switch (fx.kind) {
+      case "hover":
+        return ed.setHover(fx.hover);
+      case "pick":
+        return ed.pick(fx.id, fx.additive);
+      case "pick-group":
+        return ed.pickGroup(fx.group, fx.additive);
+      case "collapse":
+        return ed.setCollapsed(fx.group, true);
+      case "begin-move": {
+        const s = ed.selection();
+        if (s?.kind === "items") ed.beginMove([...s.agents], [...s.groups]);
+        return;
+      }
+      case "move-by":
+        return ed.moveBy(fx.dx, fx.dy);
+      case "end-move":
+        return ed.endMove();
+      case "cancel-move":
+        return ed.cancelMove();
+      case "view":
+        return setView((v) => ({ ...v, x: fx.x, y: fx.y }));
+      case "select-in": {
+        const { agents, wires } = marqueed(fx.marquee);
+        return ed.pickMany([...agents], wires, fx.marquee.additive);
+      }
+      case "clear-selection":
+        return ed.clearSelection();
+      case "finish-wire": {
+        const at = was?.kind === "wire" ? was.cur : undefined;
+        return ed.finishGesture(fx.g, fx.to, at && { path: wirePath(), at });
+      }
+      case "fire":
+        return props.onFire?.(fx.id);
+      case "stuck":
+        return props.onStuck?.(fx.id);
+      case "select-wire":
+        return ed.selectWire(fx.id);
     }
-    setDrag({ kind: "marquee", start: w, cur: w, additive: e.shiftKey, moved: false });
   };
 
   let previewFrame = 0;
-  const onPointerMove = (e: PointerEvent) => {
-    const d = drag();
-    if (!d) {
-      if (!e.buttons) ed.setHover(hoverAt(e.target as Element));
-      return;
-    }
-    if (d.kind === "pan") {
-      const dx = e.clientX - d.start.x;
-      const dy = e.clientY - d.start.y;
-      setView((v) => ({ ...v, x: d.origin.x + dx, y: d.origin.y + dy }));
-      if (!d.moved && Math.hypot(dx, dy) > 3) setDrag({ ...d, moved: true });
-    } else if (d.kind === "marquee") {
-      const cur = toWorld(e);
-      const moved = d.moved || Math.hypot(cur.x - d.start.x, cur.y - d.start.y) * view().k > 3;
-      setDrag({ ...d, cur, moved });
-    } else if (d.kind === "wire") {
-      if (!d.moved && Math.hypot(e.clientX - d.start.x, e.clientY - d.start.y) <= 3) return;
-      const cur = toWorld(e);
-      // Pointer capture sends events to the canvas; look at what's really under the pointer.
-      const over = endAt(document.elementFromPoint(e.clientX, e.clientY));
-      const target = over && !(d.g.kind === "new" && sameEnd(over, d.g.from)) ? over : undefined;
-      const check = target ? ed.checkDrop(d.g, target) : undefined;
-      setDrag({ ...d, moved: true, cur, target, check });
-      ed.setHover({ kind: "drag", gesture: d.g, target, check });
+  const send = (msg: Msg) => {
+    const was = drag();
+    const [next, fx] = update(was, msg, ctx);
+    if (next !== was) setDrag(next);
+    for (const f of fx) perform(f, was);
+    if (next?.kind === "wire") {
+      // Routing the preview is the costly part: once a frame is enough.
       cancelAnimationFrame(previewFrame);
       previewFrame = requestAnimationFrame(() => {
         const now = drag();
         if (now?.kind !== "wire") return;
         const to = now.check?.kind === "ok" ? now.target : undefined;
-        setDrag({ ...now, path: ed.previewWire(now.g, to, now.cur) });
+        setWirePath(ed.previewWire(now.g, to, now.cur));
       });
-    } else if (d.kind === "move") {
-      const w = toWorld(e);
-      const dx = w.x - d.last.x;
-      const dy = w.y - d.last.y;
-      if (ed.mode() === "manual") ed.moveSelectionBy(d.ids, d.groups, dx, dy);
-      else ed.moveAutoSelectionBy(dx, dy);
-      setDrag({ ...d, last: w, moved: true });
+    } else if (was?.kind === "wire") {
+      cancelAnimationFrame(previewFrame);
+      setWirePath(undefined);
     }
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    svg.setPointerCapture(e.pointerId);
+    if (e.button !== 0 || space()) e.preventDefault();
+    const at = toWorld(e);
+    send({ kind: "down", hit: hitAt(e.target as Element), button: e.button, client: { x: e.clientX, y: e.clientY }, at, shift: e.shiftKey, alt: e.altKey, space: space() });
+  };
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (!drag()) {
+      if (!e.buttons) ed.setHover(hoverAt(e.target as Element));
+      return;
+    }
+    // Pointer capture sends events to the canvas; look at what's really under the pointer.
+    const over = drag()?.kind === "wire" || drag()?.kind === "press" ? endAt(document.elementFromPoint(e.clientX, e.clientY)) : undefined;
+    send({ kind: "move", client: { x: e.clientX, y: e.clientY }, at: toWorld(e), over });
   };
 
   /**
@@ -472,7 +477,7 @@ export function Canvas(props: CanvasProps) {
    * agents inside it, and the wires with both ends inside. Dragged leftwards
    * it's a crossing, as in CAD tools: anything it touches.
    */
-  const marqueed = (d: Extract<Drag, { kind: "marquee" }>) => {
+  const marqueed = (d: Marquee) => {
     const x0 = Math.min(d.start.x, d.cur.x);
     const x1 = Math.max(d.start.x, d.cur.x);
     const y0 = Math.min(d.start.y, d.cur.y);
@@ -503,7 +508,7 @@ export function Canvas(props: CanvasProps) {
     return { agents, wires };
   };
   /** A marquee dragged leftwards selects whatever it touches. */
-  const crossing = (d: Extract<Drag, { kind: "marquee" }>) => d.cur.x < d.start.x;
+  const crossing = (d: Marquee) => d.cur.x < d.start.x;
   const preselected = createMemo(() => {
     const d = drag();
     return d?.kind === "marquee" && d.moved ? marqueed(d) : { agents: new Set<AgentId>(), wires: [] as WireId[] };
@@ -511,41 +516,22 @@ export function Canvas(props: CanvasProps) {
   const preselectedWires = createMemo(() => new Set(preselected().wires));
 
   const onPointerUp = (e: PointerEvent) => {
-    const d = drag();
-    setDrag(undefined);
-    cancelAnimationFrame(previewFrame);
-    if (!d) return;
-    if (d.kind === "move" && ed.mode() === "auto") ed.endAutoSelectionMove();
-    if (d.kind === "marquee") {
-      if (d.moved) {
-        const { agents, wires } = marqueed(d);
-        ed.pickMany([...agents], wires, d.additive);
-      }
-      else if (!d.additive) ed.clearSelection();
-    }
-    if (d.kind === "wire" && d.moved) {
-      if (!d.target) ed.finishGesture(d.g);
-      else if (d.check?.kind === "ok") ed.finishGesture(d.g, d.target);
-    }
-    if (d.kind === "click-wire") {
-      const alt = d.alt || e.altKey;
-      if (ed.activeWires().has(d.id) && !alt && props.onFire) props.onFire(d.id);
-      else if (ed.stuckWires().has(d.id) && !alt && props.onStuck) props.onStuck(d.id);
-      else ed.selectWire(d.id);
-    }
+    if (!drag()) return;
+    send({ kind: "up", alt: e.altKey });
     ed.setHover(hoverAt(document.elementFromPoint(e.clientX, e.clientY)));
   };
 
-  const onPointerCancel = () => {
-    const d = drag();
-    setDrag(undefined);
-    cancelAnimationFrame(previewFrame);
-    if (d?.kind === "move" && ed.mode() === "auto") ed.endAutoSelectionMove();
+  /** Drop whatever was being dragged, undoing what it did. Says whether there was anything. */
+  const cancel = () => {
+    if (!drag()) return false;
+    send({ kind: "cancel" });
     ed.setHover(undefined);
+    return true;
   };
 
+  onCleanup(onEscapeCancels(cancel));
   onCleanup(onThaw(() => {
-    onPointerCancel();
+    cancel();
     setSpace(false);
   }));
 
@@ -582,7 +568,7 @@ export function Canvas(props: CanvasProps) {
 
   const wireDrag = () => {
     const d = drag();
-    return d?.kind === "wire" && d.moved ? d : undefined;
+    return d?.kind === "wire" ? d : undefined;
   };
   const carried = () => {
     const d = wireDrag();
@@ -591,16 +577,24 @@ export function Canvas(props: CanvasProps) {
   /** A loose end being carried: it's drawn at the pointer, not where it was. */
   const carriedFree = () => {
     const d = wireDrag();
-    return !props.iface && d?.g.kind === "carry" && d.g.moving.kind === "free" ? d.g.moving.name : undefined;
+    return !iface() && d?.g.kind === "carry" && d.g.moving.kind === "free" ? d.g.moving.name : undefined;
   };
   /**
    * Where a loose end would be if the wire were let go now: at the pointer,
    * unless it's over an end it would plug into. A rule's interface has no
    * loose ends to make, so there the wire's tip is left bare.
    */
+  /** The wire of a loose end that the wire being dragged would join, lit up along with it. */
+  const joining = () => {
+    const d = wireDrag();
+    if (d?.check?.kind !== "ok" || !d.check.join || !d.target) return undefined;
+    const w = ed.view().net.wireAt(d.target);
+    return w === NONE ? undefined : w;
+  };
+
   const tipEnd = () => {
     const d = wireDrag();
-    if (!d || props.iface || (d.target && d.check?.kind === "ok")) return undefined;
+    if (!d || iface() || (d.target && d.check?.kind === "ok")) return undefined;
     return { at: d.cur, label: carriedFree() };
   };
 
@@ -642,7 +636,7 @@ export function Canvas(props: CanvasProps) {
         return k === "ok" ? "target" : k === "back" ? "empty" : "refuse";
       }
       if (d.g.kind === "carry" && sameEnd(e, d.g.moving)) return "empty";
-      const open = ed.view().net.wireAt(e) === NONE || (e.kind === "free" && !ed.fixedInterface);
+      const open = ed.view().net.wireAt(e) === NONE || (e.kind === "free" && ed.freePorts.scratch);
       if (!open) return "none";
       // Ports the wire can't go to, because the types don't fit, are greyed out.
       return ed.checkDrop(d.g, e).kind === "refuse" ? "blocked" : "candidate";
@@ -733,7 +727,7 @@ export function Canvas(props: CanvasProps) {
         onMouseDown={onMouseDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerCancel}
+        onPointerCancel={cancel}
         onPointerLeave={() => !drag() && ed.setHover(undefined)}
         onWheel={onWheel}
         onContextMenu={(e) => e.preventDefault()}
@@ -789,6 +783,7 @@ export function Canvas(props: CanvasProps) {
                   highlighted={highlighted().has(id)}
                   fading={!!firing()?.wires.has(id)}
                   seeThrough={firing()?.agents}
+                  joining={joining() === id}
                   pre={preselectedWires().has(id)}
                 />
               )}
@@ -803,7 +798,7 @@ export function Canvas(props: CanvasProps) {
                   fading={!!firing()?.agents.has(id)}
                   endState={endState}
                   readonly={props.readonly}
-                  need={props.iface && !props.readonly}
+                  need={iface() && !props.readonly}
                 />
               )}
             </For>
@@ -813,7 +808,7 @@ export function Canvas(props: CanvasProps) {
                 return (
                   <Show when={pt()}>
                     {(p) =>
-                      props.iface ? (
+                      iface() ? (
                         <IfaceEnd ed={ed} name={name} at={p()} state={endState(free(name))} label={props.freeLabel?.(name) ?? name} />
                       ) : (
                       <g class="free-end" visibility={carriedFree() === name ? "hidden" : undefined}>
@@ -830,7 +825,7 @@ export function Canvas(props: CanvasProps) {
                 );
               }}
             </For>
-            <Show when={props.iface}>
+            <Show when={iface()}>
               <For each={ifaceTypes()}>
                 {(t) => (
                   <text class="iface-type" x={t.x} y={t.y} text-anchor={t.anchor}>
@@ -856,9 +851,9 @@ export function Canvas(props: CanvasProps) {
             {(d) => {
               const start = () => dragStart(ed, d().g) ?? d().cur;
               return (
-                <g class="drag-wire" classList={{ carried: d().g.kind === "carry" }}>
+                <g class="drag-wire" classList={{ carried: d().g.kind === "carry", joining: joining() !== undefined }}>
                   <Show
-                    when={d().path}
+                    when={wirePath()}
                     fallback={
                       <path
                         class="line"
@@ -869,6 +864,7 @@ export function Canvas(props: CanvasProps) {
                     {(p) => (
                       <>
                         <path class="halo" d={roundedPath(p(), G.radius)} />
+                        <path class="mark" d={roundedPath(p(), G.radius)} />
                         <path class="line" d={roundedPath(p(), G.radius)} />
                         <Show when={dragArrow(p())}>{(a) => <Arrowhead {...a()} />}</Show>
                         <Show when={ed.specAt(gestureAnchor(d().g)).type}>
@@ -905,7 +901,7 @@ export function Canvas(props: CanvasProps) {
               </g>
             )}
           </Show>
-          <Show when={drag()?.kind === "marquee" ? (drag() as Extract<Drag, { kind: "marquee" }>) : undefined}>
+          <Show when={drag()?.kind === "marquee" ? (drag() as Marquee) : undefined}>
             {(d) => (
               <rect
                 class="marquee"
@@ -1231,6 +1227,8 @@ function Wire(props: {
   fading?: boolean;
   /** Agents drawn see-through, which the highlight mustn't run on under. */
   seeThrough?: ReadonlySet<AgentId>;
+  /** A loose end's wire that the wire being dragged would join. */
+  joining?: boolean;
 }) {
   const ed = props.ed;
   const pts = () => ed.layout().routed.wires.get(props.id) ?? [];
@@ -1299,6 +1297,7 @@ function Wire(props: {
         fading: !!props.fading,
         xray: xray(),
         doomed: ed.doomed().has(props.id),
+        joining: !!props.joining,
       }}
       style={{ display: props.hidden ? "none" : undefined }}
       data-wire={props.id}

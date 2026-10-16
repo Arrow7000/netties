@@ -723,6 +723,21 @@ kbd {
   stroke-dasharray: none;
 }
 
+/* A wire being dragged onto a loose end, and that loose end's wire: one wire once let go. */
+.drag-wire .mark {
+  display: none;
+}
+
+.drag-wire.joining .mark,
+.wire.joining .mark {
+  display: inline;
+  stroke: var(--accent);
+  stroke-width: 5.5;
+  stroke-dasharray: none;
+  stroke-linecap: butt;
+  opacity: 0.45;
+}
+
 /* Agents */
 
 .agent .body {

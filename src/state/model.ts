@@ -10,6 +10,7 @@ import { G, type Placed, type Placement, type Pt, boxOf, portPos } from "../layo
 import { autoLayout } from "../layout/place";
 import { routeHoldingEnds } from "../layout/replace";
 import { type Pins, type Routed, route } from "../layout/route";
+import { FREE_PORTS, type Surface } from "./surface";
 
 export type LayoutMode = "auto" | "manual";
 
@@ -34,10 +35,10 @@ export interface NetModelOptions {
   system: () => System;
   /** Component definitions, for drawing instances. */
   defs?: () => Defs;
-  /** Free ports held in place along the edges, as in a rule's interface. */
+  /** What kind of canvas this is, which says what its free ports are (see `Surface`). */
+  surface?: Surface;
+  /** The order of a rule's interface ends along the top and bottom edges. */
   pins?: () => Pins | undefined;
-  /** Free ports are a fixed interface: never create or remove them. */
-  fixedInterface?: boolean;
   /** Extra state to capture alongside the net in undo history. */
   extra?: { save(): unknown; load(x: unknown): void };
   /** What free ports carry, when they stand for something fixed (a rule's interface). */
@@ -126,6 +127,20 @@ export function createNetModel(opts: NetModelOptions) {
   const [frame, setFrame] = createSignal<Frame>();
   let raf = 0;
   const [autoDrag, setAutoDrag] = createSignal<{ ids: ReadonlySet<AgentId>; dx: number; dy: number }>();
+  /**
+   * The agents the pointer is moving, and in manual layout where every agent
+   * was when it began and the history then, to put back if it's cancelled.
+   */
+  let moving: { ids: Set<AgentId>; positions?: Map<AgentId, Placed>; undo?: number; redo?: string[] } | undefined;
+
+  const freePorts = FREE_PORTS[opts.surface ?? "main"];
+  /** Where a rule's interface ends are held, once the net has first been laid out. */
+  const [held, setHeld] = createSignal<{ mid: number; top?: number; bottom?: number }>();
+  /** A rule's interface ends stay where they are: evenly spaced, not following their wires. */
+  const pins = (): Pins | undefined => {
+    const p = opts.pins?.();
+    return p && freePorts.surface === "rule" ? { ...p, held: held() ?? {} } : p;
+  };
 
   /**
    * The net as drawn just before the current edit. The next `bump` animates
@@ -224,15 +239,13 @@ export function createNetModel(opts: NetModelOptions) {
 
   const automatic = createMemo(() => {
     const v = view();
-    const pins = opts.pins?.();
-    const l = autoLayout(v.net, { pins, prev: lastAuto });
+    const l = autoLayout(v.net, { pins: pins(), prev: lastAuto });
     lastAuto = l.placement;
     return l;
   });
 
   const layout = createMemo<Layout>(() => {
     const v = view();
-    const pins = opts.pins?.();
     if (mode() === "auto") {
       const base = automatic();
       const drag = autoDrag();
@@ -242,7 +255,7 @@ export function createNetModel(opts: NetModelOptions) {
         const p = placement.get(id);
         if (p) placement.set(id, { ...p, x: p.x + drag.dx, y: p.y + drag.dy });
       }
-      return { placement, routed: route(v.net, placement, { pins }) };
+      return { placement, routed: route(v.net, placement, { pins: pins() }) };
     }
     // Agents without a position yet (new ones) get one next to the others;
     // boxes sit where their members are.
@@ -260,8 +273,22 @@ export function createNetModel(opts: NetModelOptions) {
         placement.set(id, { x: ps.reduce((s, p) => s + p.x, 0) / n, y: ps.reduce((s, p) => s + p.y, 0) / n, orient: "down" });
       }
     }
-    return { placement, routed: route(v.net, placement, { pins }) };
+    return { placement, routed: route(v.net, placement, { pins: pins() }) };
   });
+
+  /** Hold a rule's interface ends where the net as drawn now puts them (evenly spaced round its middle). */
+  const holdPins = () => {
+    if (freePorts.surface !== "rule") return;
+    setHeld(undefined);
+    const ends = [...layout().routed.free.values()];
+    if (!ends.length) return;
+    const xs = ends.map((f) => f.x);
+    const row = (dir: "up" | "down") => {
+      const ys = ends.filter((f) => f.dir === dir).map((f) => f.y);
+      return ys.length ? (dir === "up" ? Math.min(...ys) : Math.max(...ys)) : undefined;
+    };
+    setHeld({ mid: (Math.min(...xs) + Math.max(...xs)) / 2, top: row("up"), bottom: row("down") });
+  };
 
   /** Place real agents so the visible agents and collapsed boxes match an automatic drawing. */
   const positionsFromAuto = (shown: Placement): Placement => {
@@ -308,7 +335,7 @@ export function createNetModel(opts: NetModelOptions) {
     if (w === NONE) return;
     const other = net.partner(e)!;
     net.disconnect(w);
-    if (opts.fixedInterface) return;
+    if (!freePorts.scratch) return;
     if (other.kind === "free") net.free.delete(other.name);
     if (e.kind === "free") net.free.delete(e.name);
   };
@@ -367,7 +394,7 @@ export function createNetModel(opts: NetModelOptions) {
     const final = layout();
     const placement: Placement = new Map();
     for (const [id, p] of final.placement) placement.set(id, start.get(id) ?? p);
-    const routed = routeHoldingEnds(v.net, placement, { columns: before.columns, pins: opts.pins?.() }, before.free);
+    const routed = routeHoldingEnds(v.net, placement, { columns: before.columns, pins: pins() }, before.free);
     animate({ net: v.net.clone(), sys: v.sys, placement, routed }, [], true, duration);
   }
 
@@ -417,7 +444,7 @@ export function createNetModel(opts: NetModelOptions) {
     }
     const w = v.wireAt(to);
     if (w !== NONE && to.kind === "port") return { kind: "refuse", why: "This port already has a wire. Each port takes exactly one." };
-    if (w !== NONE && opts.fixedInterface) return { kind: "refuse", why: "This interface port already has a wire." };
+    if (w !== NONE && freePorts.occupied) return { kind: "refuse", why: freePorts.occupied };
     // Joining a loose end connects to whatever is at its far side.
     const other = w === NONE ? to : v.partner(to)!;
     const c = !sameEnd(other, anchor) ? clash(specAt(anchor), specAt(other)) : undefined;
@@ -430,7 +457,13 @@ export function createNetModel(opts: NetModelOptions) {
     return endSpec(view().net, view().sys, e, opts.freeSpec);
   }
 
-  /** Where the wire would run if the held end were let go over `to`, or at `pt` over empty canvas. */
+  /**
+   * Where the wire would run if the held end were let go now: into `to`, if
+   * it can go there, or else to `pt`. A loose end it would join is drawn as
+   * where the wire goes to, since that's what's under the pointer. Everything
+   * else is routed as drawn now, ends held where they are, so the preview
+   * shows what's on screen rather than the net as it would settle.
+   */
   function previewWire(g: WireGesture, to: End | undefined, pt: Pt): Pt[] | undefined {
     const v = view();
     const l = layout();
@@ -445,16 +478,14 @@ export function createNetModel(opts: NetModelOptions) {
     }
     let other: End | undefined;
     if (to && checkDrop(g, to).kind === "ok") {
-      const w = tmp.wireAt(to);
-      if (w === NONE) other = to;
-      else if (to.kind === "free") {
-        other = tmp.partner(to);
-        tmp.disconnect(w);
-        tmp.free.delete(to.name);
+      if (tmp.wireAt(to) === NONE) other = to;
+      else {
+        const at = l.routed.free.get((to as { name: string }).name);
+        if (at) pt = at;
       }
     }
     if (!other) {
-      // Over empty canvas: aim at a stand-in port under the pointer, facing the wire.
+      // Aim at a stand-in port at the point, facing the wire.
       const a = portPos(placement.get(anchor.agent)!, tmp.agent(anchor.agent).wires.length - 1, anchor.slot);
       const facing = a.dir === "down" ? (pt.y > a.y ? "up" : "down") : pt.y < a.y ? "down" : "up";
       const probe = tmp.addAgent({ id: "·", name: "", symbol: "", arity: 0 });
@@ -463,11 +494,49 @@ export function createNetModel(opts: NetModelOptions) {
     }
     try {
       const id = tmp.connect(anchor, other);
-      return route(tmp, placement, { pins: opts.pins?.() }).wires.get(id);
+      return routeHoldingEnds(tmp, placement, { columns: l.columns, pins: pins() }, l.routed.free).wires.get(id);
     } catch {
       return undefined;
     }
   }
+
+  /**
+   * Start the animation of a wire edit from how the drag drew it: the wire
+   * along `shown.path`, and a loose end it made where it was let go. `made`
+   * is the wire as it is now; `joined`, a loose end's wire it took in.
+   */
+  function animateFromDrag(shown: { path?: Pt[]; at: Pt }, carried: WireId | undefined, made: WireId | undefined, loose?: string, joined?: WireId) {
+    if (!pending) return;
+    const wires = new Map(pending.routed.wires);
+    const ends = new Map(pending.routed.free);
+    let path = shown.path;
+    if (path && joined !== undefined) {
+      // On through the loose end, along the wire it had.
+      const rest = pending.routed.wires.get(joined);
+      const tip = path[path.length - 1]!;
+      if (rest?.length) {
+        const near = (q: Pt) => Math.hypot(q.x - tip.x, q.y - tip.y);
+        path = [...path, ...(near(rest[0]!) <= near(rest[rest.length - 1]!) ? rest : [...rest].reverse())];
+      }
+      wires.delete(joined);
+    }
+    // A wire taken out fades from where it was dragged.
+    const id = made ?? carried;
+    if (path && id !== undefined) wires.set(id, path);
+    if (loose) ends.set(loose, { x: shown.at.x, y: shown.at.y, dir: "down" });
+    pending = { ...pending, routed: { ...pending.routed, wires, free: ends } };
+  }
+
+  /** The pointer let go of what it was moving. In automatic layout, it settles back. */
+  const endMove = () => {
+    const m = moving;
+    moving = undefined;
+    if (!m || mode() === "manual") return;
+    const drag = autoDrag();
+    const before = drag && (drag.dx || drag.dy) ? animSnapshot() : undefined;
+    setAutoDrag(undefined);
+    if (before) animate(before, [], true, 260);
+  };
 
   const flipAgents = (viewIds: AgentId[]) => {
     const ids = viewIds.filter((id) => positions.has(id) && mode() === "manual" && !view().box.has(id));
@@ -511,7 +580,7 @@ export function createNetModel(opts: NetModelOptions) {
         net.disconnect(id);
         for (const e of ends) {
           if (e.kind === "free") {
-            if (!opts.fixedInterface) net.free.delete(e.name);
+            if (freePorts.scratch) net.free.delete(e.name);
             continue;
           }
           const name = nextFreeName();
@@ -530,15 +599,14 @@ export function createNetModel(opts: NetModelOptions) {
     },
 
     /**
-     * Let go of a wire end: over an end, or over empty canvas (`to` unset),
-     * where it becomes a loose end, a free port of the net.
+     * Let go of a wire end: over an end, or over empty canvas (`to` unset).
+     * `shown` is the wire as the drag drew it, and where it was let go: the
+     * change animates from there.
      */
-    finishGesture(g: WireGesture, to?: End) {
+    finishGesture(g: WireGesture, to?: End, shown?: { path?: Pt[]; at: Pt }) {
       if (to && checkDrop(g, to).kind !== "ok") return;
-      // A loose end let go over nothing stays where it was. In a rule, a wire
-      // pulled off an interface end over nothing comes out, as if deleted.
-      if (!to && g.kind === "carry" && g.moving.kind === "free" && !opts.fixedInterface) return;
-      if (!to && g.kind === "new" && opts.fixedInterface) return;
+      const nothing = to ? undefined : freePorts.dropOnNothing(g);
+      if (nothing === "back" || nothing === "nothing") return;
       const v = view();
       checkpoint();
       const anchor = v.toReal(g.kind === "new" ? g.from : g.anchor);
@@ -548,26 +616,29 @@ export function createNetModel(opts: NetModelOptions) {
         const moving = v.toReal(g.moving);
         net.disconnect(g.wire);
         reuse = g.wire;
-        if (moving.kind === "free" && !opts.fixedInterface) net.free.delete(moving.name);
+        if (moving.kind === "free" && freePorts.scratch) net.free.delete(moving.name);
       }
-      if (!to) {
-        if (!opts.fixedInterface) {
-          const name = nextFreeName();
-          net.free.set(name, NONE);
-          net.connect(anchor, free(name), reuse);
-        }
-      } else {
+      let made: WireId | undefined;
+      let loose: string | undefined;
+      let joined: WireId | undefined;
+      if (nothing === "loose") {
+        loose = nextFreeName();
+        net.free.set(loose, NONE);
+        made = net.connect(anchor, free(loose), reuse);
+      } else if (to) {
         const t = v.toReal(to);
         const w = net.wireAt(t);
-        if (w === NONE) net.connect(anchor, t, reuse);
+        if (w === NONE) made = net.connect(anchor, t, reuse);
         else {
           // Joining a loose end: the two wires become one.
           const other = net.partner(t)!;
           net.disconnect(w);
           if (t.kind === "free") net.free.delete(t.name);
-          net.connect(anchor, other, reuse ?? w);
+          made = net.connect(anchor, other, reuse ?? w);
+          joined = w;
         }
       }
+      if (shown) animateFromDrag(shown, reuse, made, loose, joined);
       setSelection(undefined);
       bump();
     },
@@ -605,6 +676,7 @@ export function createNetModel(opts: NetModelOptions) {
         setArmed(undefined);
         bump();
       });
+      holdPins();
     },
     layout,
     mode,
@@ -624,7 +696,8 @@ export function createNetModel(opts: NetModelOptions) {
     undo,
     redo,
     clearHistory,
-    fixedInterface: !!opts.fixedInterface,
+    /** How this canvas treats its free ports. */
+    freePorts,
 
     /** The current animation frame, while a change is being animated. */
     frame,
@@ -688,16 +761,23 @@ export function createNetModel(opts: NetModelOptions) {
       setItems(agents, gs, new Set(v.wires.keys()));
     },
 
-    /** Begin one undoable selection move; subsequent pointer updates belong to this edit. */
-    beginSelectionMove() {
-      checkpoint();
-    },
-
-    /** Preview a move in auto layout without changing the saved placement. */
-    beginAutoSelectionMove(ids: AgentId[], groupIds: GroupId[]) {
-      noAnimation();
+    /**
+     * Move agents and expanded instances with the pointer. In manual layout
+     * that's one undoable change; in automatic layout they only show moved
+     * while the pointer is down, and settle back when it's let go.
+     */
+    beginMove(ids: AgentId[], groupIds: GroupId[]) {
       const members = new Set(ids);
       for (const g of groupIds) for (const id of groups.members(g)) members.add(id);
+      if (mode() === "manual") {
+        const redo = [...redoStack];
+        checkpoint();
+        noAnimation();
+        moving = { ids: members, positions: new Map(positions), undo: undoStack.length, redo };
+        return;
+      }
+      noAnimation();
+      moving = { ids: members };
       const v = view();
       const shown = new Set<AgentId>();
       for (const id of v.net.agents.keys()) {
@@ -707,26 +787,31 @@ export function createNetModel(opts: NetModelOptions) {
       setAutoDrag({ ids: shown, dx: 0, dy: 0 });
     },
 
-    moveAutoSelectionBy(dx: number, dy: number) {
-      setAutoDrag((drag) => drag && { ...drag, dx: drag.dx + dx, dy: drag.dy + dy });
-    },
-
-    endAutoSelectionMove() {
-      const drag = autoDrag();
-      if (!drag) return;
-      const before = drag.dx || drag.dy ? animSnapshot() : undefined;
-      setAutoDrag(undefined);
-      if (before) animate(before, [], true, 260);
-    },
-
-    /** Move selected agents and expanded groups during a pointer gesture. */
-    moveSelectionBy(ids: AgentId[], groupIds: GroupId[], dx: number, dy: number) {
+    moveBy(dx: number, dy: number) {
+      if (!moving) return;
+      if (mode() === "auto") return setAutoDrag((drag) => drag && { ...drag, dx: drag.dx + dx, dy: drag.dy + dy });
       noAnimation();
-      const moving = new Set(ids);
-      for (const g of groupIds) for (const id of groups.members(g)) moving.add(id);
-      for (const id of moving) {
+      for (const id of moving.ids) {
         const p = positions.get(id);
         if (p) positions.set(id, { ...p, x: p.x + dx, y: p.y + dy });
+      }
+      bump();
+    },
+
+    endMove,
+
+    /** Put everything back as it was before the move, with no trace in the history. */
+    cancelMove() {
+      const m = moving;
+      if (!m) return;
+      if (mode() === "auto") return endMove();
+      moving = undefined;
+      expectEdit();
+      positions = m.positions!;
+      if (undoStack.length === m.undo) {
+        undoStack.pop();
+        redoStack.push(...m.redo!);
+        setHistorySize({ undo: undoStack.length, redo: redoStack.length });
       }
       bump();
     },
@@ -764,7 +849,7 @@ export function createNetModel(opts: NetModelOptions) {
         for (let slot = 0; slot <= arity; slot++) {
           const e = port(id, slot);
           const w = v.wireAt(e);
-          if (w !== NONE && (opts.fixedInterface || v.partner(e)?.kind !== "free")) continue;
+          if (w !== NONE && (!freePorts.scratch || v.partner(e)?.kind !== "free")) continue;
           const q = portPos(p, arity, slot);
           const d = Math.hypot(q.x - at.x, q.y - at.y);
           if ((!over && d > REACH) || (best && d >= best.d)) continue;
@@ -788,7 +873,7 @@ export function createNetModel(opts: NetModelOptions) {
         const w = net.wireAt(real);
         const other = w === NONE ? undefined : net.partner(real);
         // A port that only led to a loose end gives the loose end up.
-        if (w !== NONE && other?.kind === "free" && !opts.fixedInterface) {
+        if (w !== NONE && other?.kind === "free" && freePorts.scratch) {
           net.disconnect(w);
           net.free.delete(other.name);
         }
@@ -852,7 +937,7 @@ export function createNetModel(opts: NetModelOptions) {
 
     /** Give a port its own free port, dangling off the edge of the net. */
     makeFree(ve: End) {
-      if (opts.fixedInterface) return;
+      if (!freePorts.scratch) return;
       const e = view().toReal(ve);
       checkpoint();
       detach(e);
@@ -984,7 +1069,7 @@ export function createNetModel(opts: NetModelOptions) {
     /** Tidy manual positions using a fresh automatic drawing. */
     tidy() {
       if (mode() !== "manual") return;
-      const shown = autoLayout(view().net, { pins: opts.pins?.() }).placement;
+      const shown = autoLayout(view().net, { pins: pins() }).placement;
       const next = positionsFromAuto(shown);
       const changed = [...next].some(([id, p]) => {
         const old = positions.get(id);
@@ -994,6 +1079,7 @@ export function createNetModel(opts: NetModelOptions) {
       checkpoint();
       positions = next;
       bump();
+      holdPins();
     },
 
     /** Restore mode and positions directly, e.g. when loading a saved document. */

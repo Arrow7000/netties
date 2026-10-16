@@ -18,8 +18,9 @@ describe("net model gesture boundary", () => {
       model.clearHistory();
       const before = model.positionOf(id)!;
 
-      model.beginSelectionMove();
-      model.moveSelectionBy([id], [], 20, -10);
+      model.beginMove([id], []);
+      model.moveBy(20, -10);
+      model.endMove();
 
       expect(model.positionOf(id)).toEqual({ ...before, x: before.x + 20, y: before.y - 10 });
       expect(model.historySize()).toEqual({ undo: 1, redo: 0 });
@@ -38,14 +39,33 @@ describe("net model gesture boundary", () => {
       model.clearHistory();
       const before = model.layout().placement.get(id)!;
 
-      model.beginAutoSelectionMove([id], []);
-      model.moveAutoSelectionBy(20, -10);
+      model.beginMove([id], []);
+      model.moveBy(20, -10);
       expect(model.layout().placement.get(id)).toEqual({ ...before, x: before.x + 20, y: before.y - 10 });
       expect(model.savedPositions()).toEqual([]);
 
-      model.endAutoSelectionMove();
+      model.endMove();
       expect(model.layout().placement.get(id)).toEqual(before);
       expect(model.historySize()).toEqual({ undo: 0, redo: 0 });
+      dispose();
+    });
+  });
+
+  it("cancels a manual move with no trace in the history", () => {
+    createRoot((dispose) => {
+      const system = new System().addType({ id: "a", name: "Agent", symbol: "A", arity: 0 });
+      const model = createNetModel({ system: () => system });
+      const id = model.addAgent("a");
+      model.setMode("manual");
+      const before = model.positionOf(id)!;
+      const history = model.historySize();
+
+      model.beginMove([id], []);
+      model.moveBy(20, -10);
+      model.cancelMove();
+
+      expect(model.positionOf(id)).toEqual(before);
+      expect(model.historySize()).toEqual(history);
       dispose();
     });
   });
@@ -57,7 +77,9 @@ describe("net model gesture boundary", () => {
       const id = model.addAgent("a");
       model.setMode("manual");
       const tidyPosition = model.positionOf(id)!;
-      model.moveSelectionBy([id], [], 30, 20);
+      model.beginMove([id], []);
+      model.moveBy(30, 20);
+      model.endMove();
       const moved = model.positionOf(id)!;
       model.clearHistory();
 

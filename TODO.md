@@ -344,25 +344,37 @@ what's done (at the user's request).
 
 The last six items under "Others", in two threads, one at a time:
 
-1. **Dragging, as one explicit state machine** (first). Pointer gestures
-   become states (`Idle | Pressing | wire | move | marquee | pan`) with one
-   pure update function, and the main canvas and the rule editor become two
-   surfaces chosen once, instead of `fixedInterface`/`iface` checks spread
-   through the code. Covers:
-   - [ ] Escape cancels any drag (wire, move, marquee, pan, palette carry),
-         before the rule editor or the selection hear it.
-   - [ ] Dragging over a loose end it can join: the wire runs to the loose
-         end under the pointer and that loose end's wire lights up with it
-         (the user's pick); letting go morphs into the joined wire.
-   - [ ] The rule editor's interface ends are fixed and evenly spaced (the
-         user's pick). They slid towards their wires, so the preview drew
-         the future position (x₃ where x₂ is now) and everything shifted on
-         letting go.
-   - [ ] Letting go animates from what the drag showed. A new loose end had
-         no "before" position, so the animation pinned the wire's tip at its
-         final spot from the first frame. `morph.ts` hasn't changed since
-         10-09, so it's likely not a regression but more visible since the
-         held end follows the pointer.
+1. **Dragging, as one explicit state machine** (done 2026-10-16).
+   Pointer gestures are states (`press | wire | move | marquee | pan |
+   click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
+   (tests beside it); the canvas only turns DOM events into messages and
+   carries out the effects. The main canvas and the rule editor are two
+   surfaces chosen once (`src/state/surface.ts`), replacing the
+   `fixedInterface` flag and the canvas's `iface` prop. Moving is one model
+   API for both layout modes (`beginMove`/`moveBy`/`endMove`/`cancelMove`),
+   and only starts after 3 px, so clicking an agent in manual mode no longer
+   leaves an empty undo step.
+   - [x] Escape cancels any drag (wire, move, marquee, pan, palette carry)
+         before the rule editor or the selection hear it (`src/ui/escape.ts`).
+         A cancelled manual move goes back and leaves no undo step.
+   - [x] Dragging over a loose end it can join: the wire runs to the loose
+         end under the pointer and both wires get the accent highlight.
+   - [x] The rule editor's interface ends are fixed and evenly spaced
+         (`Pins.held` in `route.ts`), set when the rule opens and on Tidy.
+         The rows move outwards only while an agent is past them. Previews
+         route with every end held where it's drawn (and with automatic
+         layout's columns).
+   - [x] Letting go animates from what the drag showed: the wire's dragged
+         shape, a new loose end from where it was let go, a joined wire
+         along both old pieces. (`morph.ts` hadn't changed since 10-09, so
+         it wasn't a regression.)
+   - Checked in the browser with synthetic pointer events; the animation
+     itself only at its first frame (the test tab was hidden, so it ran no
+     animation frames). Not yet checked by eye:
+     the full let-go animation, and how a rule editor preview compares with
+     the wire after letting go (they can differ slightly in shape, since
+     the preview holds the end in place and the final route bends in).
+
 2. **Layout** (second):
    - [ ] Wires keep their automatic-layout columns in manual mode and while
          dragging (stored relative to their agent, moving with it). Today
@@ -394,11 +406,11 @@ The last six items under "Others", in two threads, one at a time:
   - hm other than "fully parallel" and whnf is there anything else? worth having a selector for just two strategies? and for the single step, since it only does one thing at a time, what should we choose then, still prioritising external-first? does that mean the strategy only meaningfully affects the other 2, the multi-step buttons?
 - [ ] maybe we should fade out nets that (have no empty ports but) are unconnected to any external ports? because that basically means that whatever computation results from that will be unobservable from the outside? like e.g. the leftovers of a non-chosen if branch, which would ordinarily just result in attaching an eliminator agent and nomnomming its way through whatever remained there. in that case, we may as well show that that subnet is no longer really relevant to us and thus whatever happens there will no longer affect anything else.
   - this would fit nicely with the whnf strategy, since in that strategy unconnected subnets will never be evaluated. basically i want to make it for that, to show that if a thing is isolated, we don't _need_ to evaluate it anymore, because we're going to get our computation anyway. but may not make so much sense to have this with the other strategies. unless the strats only affect prioritisation, and not exclusion altogether? ok idk, needs some thought.
-- [ ] when i disconnect a wire, the end seems to jump to its final destination immediately, while the rest of the wire still morphs gradually. this results in an awkward and unnatural looking wire animation. im fairly sure this is a regression, that the whole wire including the end used to move more naturally
-- [ ] pressing escape while dragging should cancel the drag
-- [ ] when i drag a wire over a compatible wire's end, the preview line jumps to looking as it would after the two wires are unified. but that means it's no longer showing me the preview where my pointer is. nor does it change anything about the destination wire, so now my pointer and the destination wire both look isolated. see here, im dragging from the S to the if and my pointer is over the `a` end: `~/Desktop/Screenshot 2026-10-16 at 11.16.10.png`
+- [x] when i disconnect a wire, the end seems to jump to its final destination immediately, while the rest of the wire still morphs gradually. this results in an awkward and unnatural looking wire animation. im fairly sure this is a regression, that the whole wire including the end used to move more naturally
+- [x] pressing escape while dragging should cancel the drag
+- [x] when i drag a wire over a compatible wire's end, the preview line jumps to looking as it would after the two wires are unified. but that means it's no longer showing me the preview where my pointer is. nor does it change anything about the destination wire, so now my pointer and the destination wire both look isolated. see here, im dragging from the S to the if and my pointer is over the `a` end: `~/Desktop/Screenshot 2026-10-16 at 11.16.10.png`
 - [ ] why do the wires change shape while im dragging an agent, like i'd switched into manual layout? for that matter, why do the wires look different in manual mode to auto mode in the first place? i still don't get that.
-- [ ] the rule editor appears to be a bit buggy. here im hovering over x₃ and still the wire preview appears to be connected to x₂. when i let go, the ends seem to move over horizontally, so maybe that logic is to blame. in any case i feel like the rule editor's logic for shifting things around is a bit temperamental. is there a way we can fix this at the root, perhaps by making a clearer distinction between regular canvas and rule editor and clearly switching logic based on that. think more state machine, pattern matching on state, and availing yourself of atomic functions in both states, but wiring them together differently based on state. not one path with isolated checks inside functions that change things locally. think more elm than javascript.
+- [x] the rule editor appears to be a bit buggy. here im hovering over x₃ and still the wire preview appears to be connected to x₂. when i let go, the ends seem to move over horizontally, so maybe that logic is to blame. in any case i feel like the rule editor's logic for shifting things around is a bit temperamental. is there a way we can fix this at the root, perhaps by making a clearer distinction between regular canvas and rule editor and clearly switching logic based on that. think more state machine, pattern matching on state, and availing yourself of atomic functions in both states, but wiring them together differently based on state. not one path with isolated checks inside functions that change things locally. think more elm than javascript.
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.25.22.png
 - [ ] i don't really understand the logic behind this positioning? is it possible that here too we are using the rule editor logic that ensures that loose ends always appear either above or below all nets? im not sure we want that on the main canvas. but even if we do, why are the two identical nets flipped upside down relative to each other? what's the logic there?
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.30.54.png
