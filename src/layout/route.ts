@@ -308,7 +308,9 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       const hi = Math.max(...ys, ...was, ...(drawn.lanes.get(job.id) ?? []));
       reach.set(job.id, [lo, hi]);
       const blocked: [number, number][] = [];
-      for (const b of boxes) if (b.y1 > lo + 0.5 && b.y0 < hi - 0.5) blocked.push([b.x0 - G.wireGap, b.x1 + G.wireGap]);
+      // A loose end needs room past it too, for its dot and name: its net's edge can fall among another net's agents.
+      const [blo, bhi] = job.kind === "drop" ? [lo, hi + G.freeMargin] : job.kind === "rise" ? [lo - G.freeMargin, hi] : [lo, hi];
+      for (const b of boxes) if (b.y1 > blo + 0.5 && b.y0 < bhi - 0.5) blocked.push([b.x0 - G.wireGap, b.x1 + G.wireGap]);
       for (const r of runs)
         if (r.id !== job.id && r.hi > lo + 1 && r.lo < hi - 1) blocked.push([r.x - G.wireGap, r.x + G.wireGap]);
       const x = laneNear(xs, blocked);
