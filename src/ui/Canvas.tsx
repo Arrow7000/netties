@@ -9,6 +9,7 @@ import { flattenPath, polylinePath, resample, roundedPath } from "../render/path
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { DropCheck, NetModel, WireGesture } from "../state/model";
 import { held } from "./keys";
+import { onThaw } from "./freeze";
 import { prefs } from "./prefs";
 
 type Drag =
@@ -542,6 +543,11 @@ export function Canvas(props: CanvasProps) {
     if (d?.kind === "move" && ed.mode() === "auto") ed.endAutoSelectionMove();
     ed.setHover(undefined);
   };
+
+  onCleanup(onThaw(() => {
+    onPointerCancel();
+    setSpace(false);
+  }));
 
   /** Capture prevents Chrome from emitting dblclick, but mousedown still has the click count and original target. */
   const onMouseDown = (e: MouseEvent) => {

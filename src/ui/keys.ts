@@ -1,4 +1,5 @@
 import { createRoot, createSignal } from "solid-js";
+import { onThaw } from "./freeze";
 
 /**
  * Modifier keys held right now, so the canvas can change what a click will
@@ -7,6 +8,7 @@ import { createRoot, createSignal } from "solid-js";
 export const held = createRoot(() => {
   const [alt, setAlt] = createSignal(false);
   const sync = (e: KeyboardEvent | MouseEvent) => setAlt(e.altKey);
+  onThaw(() => setAlt(false));
   if (typeof window !== "undefined") {
     window.addEventListener("keydown", (e) => {
       // Alt alone would focus the browser menu on some systems.

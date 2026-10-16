@@ -1,4 +1,4 @@
-import { For, type JSX, Show, createEffect, createSignal } from "solid-js";
+import { For, type JSX, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { Portal } from "solid-js/web";
 import type { Editor } from "../state/editor";
 import type { Camera } from "./Canvas";
@@ -9,6 +9,7 @@ import { TypeEditor } from "./TypeEditor";
 import { Chevron, Close, Component, Expand, Plus } from "./icons";
 import { dismissOnClickOutside } from "./dismiss";
 import { canLeave, subEditor } from "./subEditor";
+import { onThaw } from "./freeze";
 
 interface Carry {
   what: { kind: "type" | "component"; id: string };
@@ -30,6 +31,10 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
   };
   const setEditing = (id: string | undefined) => (id ? canLeave() && ed.openAgent(id) : ed.closeAgent());
   const [carry, setCarry] = createSignal<Carry>();
+  let cancelCarry: (() => void) | undefined;
+  const stopCarry = () => { cancelCarry?.(); };
+  onCleanup(onThaw(stopCarry));
+  onCleanup(stopCarry);
   const [gridOpen, setGridOpenSignal] = createSignal(false);
   // The big grid and a rule editor sit in the same spot: opening one closes the other.
   const setGridOpen = (open: boolean) => {
@@ -51,6 +56,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
    */
   const press = (what: Carry["what"], open: () => void) => (e: PointerEvent) => {
     if (e.button !== 0) return;
+    stopCarry();
     e.preventDefault();
     const x0 = e.clientX;
     const y0 = e.clientY;
@@ -73,11 +79,8 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       else into.m.setPlacing(undefined);
     };
     const up = (ev: PointerEvent) => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      setCarry(undefined);
       const attach = into.m.placing()?.attach;
-      into.m.setPlacing(undefined);
+      stopCarry();
       if (!dragging) {
         // A click drops one into the open rule; otherwise it opens the agent's editor.
         if (sub && what.kind === "type") return sub.m.addAgent(what.id, sub.centre());
@@ -90,8 +93,17 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       else if (what.kind === "type") ed.dispatch({ kind: "net/add-agent", type: what.id, at, attach });
       else ed.dispatch({ kind: "net/add-component", id: what.id, at });
     };
+    cancelCarry = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", stopCarry);
+      setCarry(undefined);
+      into.m.setPlacing(undefined);
+      cancelCarry = undefined;
+    };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", stopCarry);
   };
 
   const ghost = (): JSX.Element => {

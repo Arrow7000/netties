@@ -1997,6 +1997,39 @@ kbd {
   color: var(--stuck);
 }
 
+/* Developer tooling: a square, striped notice distinct from product banners. */
+.dev-freeze-notice {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 1px dashed #fbbf24;
+  border-top: 5px solid transparent;
+  border-image: repeating-linear-gradient(135deg, #fbbf24 0 8px, #1c1917 8px 16px) 5;
+  background: #1c1917;
+  color: #fef3c7;
+  font: 12px/1.6 var(--mono);
+  box-shadow: 0 4px 16px #0004;
+  pointer-events: none;
+}
+
+.dev-freeze-notice strong {
+  display: block;
+  color: #fbbf24;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dev-freeze-notice kbd {
+  font: inherit;
+  color: #fff;
+}
+
 .alt-banner {
   position: fixed;
   top: 64px;

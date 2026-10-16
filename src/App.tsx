@@ -15,6 +15,7 @@ import { TranslateView } from "./ui/TranslateView";
 import { TypesSheet } from "./ui/TypesSheet";
 import * as I from "./ui/icons";
 import { held, shortcuts } from "./ui/keys";
+import { freezeState } from "./ui/freeze";
 import { prefs } from "./ui/prefs";
 import { CLIP_TYPE, type Clip } from "./core/clip";
 import { parse } from "./core/text";
@@ -508,6 +509,12 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
         {(screen) => <RuleEditor ed={ed} left={screen.left} right={screen.right} />}
       </Show>
       <Tooltips />
+      {import.meta.env.DEV && <Show when={freezeState()}>
+        <div class="dev-freeze-notice" role="status">
+          <strong>DEV · Freeze state</strong>
+          <span>Triggered by <kbd>Shift+F</kbd>. Press <kbd>Shift+F</kbd> or <kbd>Escape</kbd> to return to normal.</span>
+        </div>
+      </Show>}
       <Show when={ed.message()}>
         <div class="toast" role="status">
           <span>{ed.message()}</span>

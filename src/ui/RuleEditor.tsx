@@ -13,6 +13,7 @@ import { Canvas, createCamera } from "./Canvas";
 import { dismissOnClickOutside } from "./dismiss";
 import { Check, Left, Pencil, Redo, Right, Tidy, Trash, Undo } from "./icons";
 import { shortcuts } from "./keys";
+import { onThaw } from "./freeze";
 import { gridTypes } from "./RuleGrid";
 import { setSubEditor } from "./subEditor";
 
@@ -334,6 +335,8 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     const r = panel.getBoundingClientRect();
     place = { left: r.left, top: r.top, w: r.width, h: r.height };
   };
+  let stopPanelDrag: (() => void) | undefined;
+  onCleanup(() => stopPanelDrag?.());
   /** Drag the header to move the panel. */
   const moveStart = (e: PointerEvent) => {
     if (e.button !== 0 || (e.target as Element).closest("button, input, label")) return;
@@ -344,10 +347,17 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      unsubscribe();
+      stopPanelDrag = undefined;
       remember();
     };
+    stopPanelDrag?.();
+    const unsubscribe = onThaw(up);
+    stopPanelDrag = up;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   };
   /** Drag the bottom-left corner to resize it. */
   const resizeStart = (e: PointerEvent) => {
@@ -363,10 +373,17 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      unsubscribe();
+      stopPanelDrag = undefined;
       remember();
     };
+    stopPanelDrag?.();
+    const unsubscribe = onThaw(up);
+    stopPanelDrag = up;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   };
 
   const selected = () => rhs.selectedAgents();
