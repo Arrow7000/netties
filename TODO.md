@@ -340,6 +340,42 @@ what's done (at the user's request).
          (connected components). Fits the strategy above: those parts are
          exactly what "only what reaches the loose ends" never fires.
 
+## The third braindump, triaged (2026-10-16)
+
+The last six items under "Others", in two threads, one at a time:
+
+1. **Dragging, as one explicit state machine** (first). Pointer gestures
+   become states (`Idle | Pressing | wire | move | marquee | pan`) with one
+   pure update function, and the main canvas and the rule editor become two
+   surfaces chosen once, instead of `fixedInterface`/`iface` checks spread
+   through the code. Covers:
+   - [ ] Escape cancels any drag (wire, move, marquee, pan, palette carry),
+         before the rule editor or the selection hear it.
+   - [ ] Dragging over a loose end it can join: the wire runs to the loose
+         end under the pointer and that loose end's wire lights up with it
+         (the user's pick); letting go morphs into the joined wire.
+   - [ ] The rule editor's interface ends are fixed and evenly spaced (the
+         user's pick). They slid towards their wires, so the preview drew
+         the future position (x₃ where x₂ is now) and everything shifted on
+         letting go.
+   - [ ] Letting go animates from what the drag showed. A new loose end had
+         no "before" position, so the animation pinned the wire's tip at its
+         final spot from the first frame. `morph.ts` hasn't changed since
+         10-09, so it's likely not a regression but more visible since the
+         held end follows the pointer.
+2. **Layout** (second):
+   - [ ] Wires keep their automatic-layout columns in manual mode and while
+         dragging (stored relative to their agent, moving with it). Today
+         both reroute every wire without columns, which is why shapes
+         change.
+   - [ ] Loose ends sit at their own net's top or bottom edge, not the
+         whole drawing's (the user's pick). Today they hang off the shared
+         edge, so the flip search turns one of two similar nets upside down
+         to shorten its loose wires. The user's framing: a loose end is
+         usually scratch ("leave it loose where it is"), not a deliberate
+         interface; a later idea is a separate external rail for the
+         deliberate kind.
+
 ## Others
 
 - [ ] can we use a compression tool for share links? they're currently huge. let's look into what we use for `../fhm`'s web playground, bc that one seems really efficient
