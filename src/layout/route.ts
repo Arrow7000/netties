@@ -46,6 +46,8 @@ export interface Routed {
   gaps: Gap[];
   /** How many wires had to go round the side. */
   arounds: number;
+  /** Wires drawn as one S-curve between facing ports; two of them crossing make Lafont's X. */
+  direct: Set<WireId>;
 }
 
 /** A vertical strip with no agents in it, usable for lanes. Outer gaps are unbounded on one side. */
@@ -539,7 +541,8 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     bounds.y0 = Math.min(bounds.y0, f.y);
     bounds.y1 = Math.max(bounds.y1, f.y);
   }
-  return { wires, free, bounds, laneCount: laneUsers.map((u) => u.length), gaps, arounds };
+  const direct = new Set(jobs.flatMap((j) => (j.kind === "direct" ? [j.id] : [])));
+  return { wires, free, bounds, laneCount: laneUsers.map((u) => u.length), gaps, arounds, direct };
 }
 
 /**
@@ -798,8 +801,8 @@ function boundsOf(boxes: Box[], wires: Map<WireId, Pt[]>): Box {
   return b;
 }
 
-/** Number of places where two different wires cross. */
-export function crossings(wires: Map<WireId, Pt[]>): number {
+/** Number of places where two different wires cross, each counted as `weight` says (1 if not given). */
+export function crossings(wires: Map<WireId, Pt[]>, weight: (a: WireId, b: WireId) => number = () => 1): number {
   const segs: [WireId, Pt, Pt][] = [];
   for (const [id, pts] of wires) for (let i = 1; i < pts.length; i++) segs.push([id, pts[i - 1]!, pts[i]!]);
   let n = 0;
@@ -807,7 +810,7 @@ export function crossings(wires: Map<WireId, Pt[]>): number {
     for (let j = i + 1; j < segs.length; j++) {
       const [ia, a0, a1] = segs[i]!;
       const [ib, b0, b1] = segs[j]!;
-      if (ia !== ib && intersects(a0, a1, b0, b1)) n++;
+      if (ia !== ib && intersects(a0, a1, b0, b1)) n += weight(ia, ib);
     }
   return n;
 }

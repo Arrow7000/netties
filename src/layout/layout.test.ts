@@ -127,6 +127,26 @@ describe("auto layout", () => {
     );
   });
 
+  it("draws copies made side by side the same way up, crossing in Lafont's X rather than reaching round", () => {
+    // Two lengths, one list: δ copies the list, and the two copies' # and ∷
+    // meet the same way. Charged in full, the X between them lost to a
+    // lopsided drawing with one crossing fewer.
+    const ex = examples.find((e) => e.name === "Two lengths, one list")!;
+    const s = ex.system();
+    const net = ex.net(s);
+    let prev: Placement | undefined;
+    for (let i = 0; i < 4; i++) {
+      const { placement, routed } = autoLayout(net, { prev });
+      prev = placement;
+      for (const type of ["#", "∷"]) {
+        const ways = new Set([...net.agents.values()].filter((a) => a.type === type).map((a) => placement.get(a.id)!.orient));
+        expect(ways.size, `step ${i}, ${type}`).toBeLessThanOrEqual(1);
+      }
+      expect(routed.arounds, `step ${i}`).toBe(0);
+      parallelStep(net, s);
+    }
+  });
+
   it("keeps separate nets together after steps that pushed them apart", () => {
     const { net, system } = parse(`
 agent S 1

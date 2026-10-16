@@ -489,11 +489,28 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
      - Slower for drawings of many nets, since each now gets the flip
        search (before, more than 24 units skipped it): 300 agents in many
        nets take ~14 ms instead of ~6.
-   - [ ] **Crossings cost the same however they look.** The flip search
-         charges 300 per crossing, so a neat X between two S-curves (as in
-         Lafont's figures) counts as much as a messy one; that's what turned
-         Two lengths, one list step 2 (above). Try charging less for two
-         `direct` wires crossing, and check every example step.
+   - [x] **Lafont's X crossings cost less** (done 2026-10-16). The flip
+         search charged 300 per crossing however it looked, so at Two
+         lengths, one list step 2 the two copies' chains, side by side and
+         crossing in Xs (3 crossings), lost to a lopsided drawing with a cap
+         reaching round and a long wire down to `a` (1 crossing). The user
+         checked the live site, agreed the symmetric one was "much nicer",
+         and asked what would get it back.
+     - Now the router reports which wires it drew as one S-curve between
+       facing ports (`Routed.direct`), and the flip search charges two of
+       those crossing a sixth of a crossing (`X_CROSSING` in place.ts).
+       `crossings()` takes a weight per pair. Step previews' frame placement
+       (replace.ts) still counts every crossing in full.
+     - Only Two lengths, one list steps 2–4 change among the examples: the
+       copies are side by side again, `a` left of `b`, and step 3 no longer
+       lands on a worse arrangement by its own cost (168 and 184, against
+       185 and 190 before). New test. Of 88 generated nets in the gallery,
+       4 change (T32, R10, R19, R39), none worse by eye; total wire length
+       +0.15%. Routing checks unchanged.
+     - Not done, not needed so far: letting the flip search turn identical
+       units in a net together (the other suggestion), or scoring symmetry
+       directly. Try those if lopsided copies turn up again.
+
      - The user's framing for later: there are two uses of a loose end.
        Usually it's scratch ("leave a loose wire loose where it is");
        sometimes it's a deliberate interface to the whole net. A later

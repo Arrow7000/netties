@@ -147,6 +147,9 @@ function treeLayout(net: Net, children: Map<AgentId, (AgentId | undefined)[]>) {
   return lay;
 }
 
+/** What two S-curves crossing in an X cost, as a share of any other crossing. */
+const X_CROSSING = 1 / 6;
+
 export function autoLayout(net: Net, opts: AutoLayoutOptions = {}): AutoLayout {
   const nets = separateNets(net);
   if (nets.length <= 1) return layoutNet(net, opts);
@@ -268,7 +271,9 @@ function layoutNet(net: Net, opts: AutoLayoutOptions): AutoLayout {
 
   const cost = (l: AutoLayout) => {
     const r = l.routed;
-    let c = crossings(r.wires) * 300 + r.arounds * 400 + [...r.wires.values()].reduce((s, p) => s + length(p), 0);
+    // Two S-curves crossing make Lafont's X, which reads well; other crossings don't.
+    const x = (a: number, b: number) => (r.direct.has(a) && r.direct.has(b) ? X_CROSSING : 1);
+    let c = crossings(r.wires, x) * 300 + r.arounds * 400 + [...r.wires.values()].reduce((s, p) => s + length(p), 0);
     if (opts.prev)
       for (const [id, p] of l.placement) {
         const q = opts.prev.get(id);
