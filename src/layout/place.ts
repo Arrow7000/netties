@@ -486,7 +486,10 @@ function arrange(net: Net, units: Unit[], pins?: Pins, prev?: Placement, rounds 
         sum[u]! += 0.25 * px;
         weight[u]! += 0.25;
       }
-      if (weight[u]) want[u] = sum[u]! / weight[u]!;
+      // Settling, past the quick rounds each unit goes halfway: all the way,
+      // two units pulling only on each other can swap places every round
+      // and never meet.
+      if (weight[u]) want[u] = it >= QUICK_SLIDE ? (x[u]! + sum[u]! / weight[u]!) / 2 : sum[u]! / weight[u]!;
     });
     for (const lv of levels) pack(lv, want);
     if (x.every((v, u) => Math.abs(v - before[u]!) < 0.05)) break;

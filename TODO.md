@@ -531,15 +531,36 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
        Two lengths, one list step 2 is straight and symmetric, the left
        net's δ centred under its two S's. The copies test now also checks
        the S–# wires are straight. ~15 ms for 300 agents (was ~13).
-     - Still open: with no previous drawing (a net loaded from text), the
-       S's there stop 5.3 short however long they slide. Units pushed apart
-       to keep their spacing in a row keep the whole net creeping sideways,
-       and units aimed at where a neighbour was trail it. Fixing that means
-       solving for the positions at once rather than sliding in rounds.
-       And laying a drawing out again from itself still moves things in 31
-       of 176 example steps (mostly the flip search choosing differently
-       with a different previous drawing), so an edit elsewhere can still
-       redraw a net.
+     - Follow-up the same day: the user still saw the bend, and that
+       deleting the left net straightened it while undoing brought it back,
+       so "it *is* the left net". It wasn't: the right net alone bends the
+       same. Undo lays the net out afresh (`restoreSnapshot` clears
+       `lastAuto`), and laid out afresh the S's stayed 5.3 off however long
+       units slid: an S and its # pulled only on each other, so each round
+       they swapped places and never met. Settling now carries on from the
+       quick rounds with each unit going halfway, so they meet; straight
+       after a step, afresh and after deleting (new test case). Restarting
+       the settle from scratch instead let the δ's below swap order (3
+       crossings instead of 1), so it continues from the quick rounds.
+     - Cost: One number, two calculations step 4 now draws boxier (wires
+       detouring round each other), since step 3 settles a little
+       differently and step 4 starts from it. The flip search doesn't
+       count detours, only their length. Charging 600 per detour fixed
+       that step but turned units in 19 other example steps, so it's left
+       for its own review (next item).
+     - Still open: laying a drawing out again from itself still moves
+       things in 30 of 176 example steps (mostly the flip search choosing
+       differently from a different previous drawing), so an edit elsewhere
+       can still redraw a net.
+   - [ ] **Charge detours in the flip search.** It counts crossings,
+         wires going round the side and length, not wires that detour round
+         agents or other wires in their way, so it can pick boxy drawings
+         (One number, two calculations step 4). A `detours` count in
+         `Routed` and 600 each fixed that step and turned units in 19 other
+         example steps (Add two list lengths from its first drawing, 3 × 2,
+         Square of a sum, Directed cascade, Copying a feedback loop); review
+         those by eye before keeping it. 300 wasn't enough for that step.
+         Runs forever has one detour every step whatever the charge.
    - [x] Fixed on the way: with each net's loose ends on its own edge
          (above), a net placed by hand among another's agents could leave a
          loose end right on top of one (a rare failure of the hand-placed

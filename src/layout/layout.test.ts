@@ -143,13 +143,15 @@ describe("auto layout", () => {
         expect(ways.size, `step ${i}, ${type}`).toBeLessThanOrEqual(1);
       }
       expect(routed.arounds, `step ${i}`).toBe(0);
-      // Each S stands straight over its #: sliding settles rather than stopping a little short.
-      for (const w of net.wires.values()) {
-        const types = w.ends.map((e) => (e.kind === "port" ? net.agent(e.agent).type : "")).sort().join("");
-        if (types !== "#S") continue;
-        const xs = routed.wires.get(w.id)!.map((p) => p.x);
-        expect(Math.max(...xs) - Math.min(...xs), `step ${i}, wire ${w.id}`).toBeLessThan(0.5);
-      }
+      // Each S stands straight over its #: sliding settles rather than
+      // stopping a little short, also laid out afresh (as after an undo).
+      for (const [how, r] of [["after the step", routed], ["afresh", autoLayout(net).routed]] as const)
+        for (const w of net.wires.values()) {
+          const types = w.ends.map((e) => (e.kind === "port" ? net.agent(e.agent).type : "")).sort().join("");
+          if (types !== "#S") continue;
+          const xs = r.wires.get(w.id)!.map((p) => p.x);
+          expect(Math.max(...xs) - Math.min(...xs), `step ${i} ${how}, wire ${w.id}`).toBeLessThan(0.5);
+        }
       parallelStep(net, s);
     }
   });
