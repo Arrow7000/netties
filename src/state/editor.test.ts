@@ -92,6 +92,30 @@ describe("editor update boundary", () => {
     });
   });
 
+  it("deletes the rules of pairs that a port change stops from meeting, undoably", () => {
+    createRoot((dispose) => {
+      const ed = createEditor(undefined);
+      ed.addType({ id: "a", name: "A", symbol: "A", arity: 0, ports: [{ pol: "give" }] });
+      ed.addType({ id: "b", name: "B", symbol: "B", arity: 0, ports: [{ pol: "take" }] });
+      ed.setTyping({ dirs: "optional" });
+      ed.saveRule({ left: "a", right: "b", agents: [], wires: [] });
+      ed.model.clearHistory();
+
+      expect(ed.unmeetable("b", [{ pol: "give" }]).map((r) => r.left + r.right)).toEqual(["ab"]);
+      expect(ed.unmeetable("b", [{ pol: "take" }])).toEqual([]);
+
+      ed.setPort("b", 0, { pol: "give" });
+      expect(ed.system.ruleFor("a", "b")).toBeUndefined();
+      expect(ed.message()).toBe("Deleted the rule for A with B, which can no longer meet.");
+      expect(ed.model.historySize()).toEqual({ undo: 1, redo: 0 });
+
+      ed.dispatch({ kind: "history/undo" });
+      expect(ed.system.type("b").ports?.[0]?.pol).toBe("take");
+      expect(ed.system.ruleFor("a", "b")).toBeDefined();
+      dispose();
+    });
+  });
+
   it("resets an unchanged example after stepping, but not after editing it", () => {
     createRoot((dispose) => {
       const ed = createEditor(undefined);

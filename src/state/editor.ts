@@ -440,6 +440,34 @@ export function createEditor(initial: Doc | undefined) {
   };
   const cutMessage = (n: number) => (n === 1 ? "Cut 1 wire that didn't fit the types." : `Cut ${n} wires that didn't fit the types.`);
 
+  /**
+   * Rules for pairs whose principal ports stopped fitting are deleted: the
+   * pair can never meet, so the rule could never fire, and the rule grid
+   * has no cell to open it from. Part of an edit already under way.
+   */
+  const dropUnmeetable = (): Rule[] => {
+    const gone: Rule[] = [];
+    for (const [k, r] of system.rules) {
+      if (!canMeet(system, r.left, r.right)) continue;
+      system.rules.delete(k);
+      gone.push(r);
+    }
+    return gone;
+  };
+  const sym = (id: string) => system.types.get(id)?.symbol ?? id;
+  const goneMessage = (gone: Rule[]) =>
+    gone.length === 1
+      ? `Deleted the rule for ${sym(gone[0]!.left)} with ${sym(gone[0]!.right)}, which can no longer meet.`
+      : `Deleted ${gone.length} rules for pairs that can no longer meet.`;
+
+  /** After ports change: cut the wires and delete the rules that stopped fitting. What went, for a toast, if anything did. */
+  const settleTypes = (): string | undefined => {
+    const cut = enforceTypes();
+    const gone = dropUnmeetable();
+    const said = [cut ? cutMessage(cut) : "", gone.length ? goneMessage(gone) : ""].filter(Boolean).join(" ");
+    return said || undefined;
+  };
+
   /** Replace an agent type's ports, keeping everything else about it. */
   const withPorts = (id: string, ports: PortSpec[]) => {
     const t = system.type(id);
@@ -552,12 +580,12 @@ export function createEditor(initial: Doc | undefined) {
      * from the net, and their rules; wires that stop fitting are cut.
      */
     updateType(id: string, t: Omit<AgentType, "id">) {
-      const n = commitSystemEdit(() => {
+      const said = commitSystemEdit(() => {
         if (system.type(id).arity !== t.arity) dropType(id);
         system.types.set(id, { ...t, id });
-        return enforceTypes();
+        return settleTypes();
       });
-      if (n) notify(cutMessage(n), true);
+      if (said) notify(said, true);
     },
 
     /** Wires that would stop fitting if an agent type's ports changed like this. */
@@ -568,22 +596,29 @@ export function createEditor(initial: Doc | undefined) {
       return [...badWires(model.net, trial).keys()];
     },
 
+    /** Rules that saving an agent type's ports like this would delete, because their pair could no longer meet. */
+    unmeetable(id: string, ports: PortSpec[]): Rule[] {
+      const trial = System.fromJSON(system.toJSON());
+      if (trial.types.has(id)) trial.types.set(id, { ...trial.type(id), ports });
+      return [...trial.rules.values()].filter((r) => canMeet(trial, r.left, r.right));
+    },
+
     /** Set one port's direction or type (or label), from the directions and types sheet. */
     setPort(id: string, slot: number, patch: Partial<PortSpec>) {
-      const n = commitSystemEdit(() => {
+      const said = commitSystemEdit(() => {
         const t = system.type(id);
         const ports = Array.from({ length: t.arity + 1 }, (_, s) => ({ ...(t.ports?.[s] ?? {}) }));
         ports[slot] = { ...ports[slot], ...patch };
         for (const k of ["pol", "type", "label"] as const) if (ports[slot]![k] === undefined) delete ports[slot]![k];
         withPorts(id, ports);
-        return enforceTypes();
+        return settleTypes();
       });
-      if (n) notify(cutMessage(n), true);
+      if (said) notify(said, true);
     },
 
     /** Change how strict the system is. Turning a dimension off forgets it on every port. */
     setTyping(next: Partial<Typing>) {
-      const n = commitSystemEdit(() => {
+      const said = commitSystemEdit(() => {
         const typing = { ...system.typing, ...next };
         for (const t of [...system.types.values()]) {
           if (!t.ports) continue;
@@ -597,9 +632,9 @@ export function createEditor(initial: Doc | undefined) {
         }
         if (typing.types === "off") typing.names = [];
         system.typing = typing;
-        return enforceTypes();
+        return settleTypes();
       });
-      if (n) notify(cutMessage(n), true);
+      if (said) notify(said, true);
     },
 
     /** Add a type ports can have. Returns why not, if the name won't do. */
@@ -665,13 +700,14 @@ export function createEditor(initial: Doc | undefined) {
       }
       const n = [...guesses.values()].flat().reduce((k, g) => k + (g.pol ? 1 : 0) + (g.type ? 1 : 0), 0);
       if (!n) return 0;
-      commitSystemEdit(() => {
+      const said = commitSystemEdit(() => {
         for (const [id, gs] of guesses) {
           const t = system.type(id);
           withPorts(id, Array.from({ length: t.arity + 1 }, (_, s) => ({ ...gs[s], ...(t.ports?.[s] ?? {}) })));
         }
-        enforceTypes();
+        return settleTypes();
       });
+      if (said) notify(said, true);
       return n;
     },
 

@@ -107,6 +107,8 @@ export interface CanvasProps {
   onStuck?: (w: WireId) => void;
   /** Display names for free ports. */
   freeLabel?: (name: string) => string;
+  /** A free end to light up as if pointed at: the same rule interface end, pointed at in the other half of the rule. */
+  twinHover?: () => string | undefined;
   /** Read-only: no selecting, dragging or wiring. */
   readonly?: boolean;
   /** Don't try to draw nets with more agents than this. */
@@ -648,6 +650,7 @@ export function Canvas(props: CanvasProps) {
     const h = ed.hover();
     if (h?.kind === "port" && sameEnd(h.end, e)) return "hover";
     if (h?.kind === "free" && e.kind === "free" && h.name === e.name) return "hover";
+    if (e.kind === "free" && props.twinHover?.() === e.name) return "hover";
     return ed.view().net.wireAt(e) === NONE ? "empty" : "none";
   };
 

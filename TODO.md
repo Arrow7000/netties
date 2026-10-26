@@ -494,6 +494,7 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
          reaching round and a long wire down to `a` (1 crossing). The user
          checked the live site, agreed the symmetric one was "much nicer",
          and asked what would get it back.
+
      - Now the router reports which wires it drew as one S-curve between
        facing ports (`Routed.direct`), and the flip search charges two of
        those crossing a sixth of a crossing (`X_CROSSING` in place.ts).
@@ -531,7 +532,7 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
        the S–# wires are straight. ~15 ms for 300 agents (was ~13).
      - Follow-up the same day: the user still saw the bend, and that
        deleting the left net straightened it while undoing brought it back,
-       so "it *is* the left net". It wasn't: the right net alone bends the
+       so "it _is_ the left net". It wasn't: the right net alone bends the
        same. Undo lays the net out afresh (`restoreSnapshot` clears
        `lastAuto`), and laid out afresh the S's stayed 5.3 off however long
        units slid: an S and its # pulled only on each other, so each round
@@ -593,6 +594,23 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
 - SVG export draws the direction arrows (wires and empty ports) as the
   canvas does. Example thumbnails leave them out.
 
+## Done 2026-10-26, from the end of "Others"
+
+- Rules for pairs that can no longer meet are deleted when a port change
+  stops them meeting (the user's pick, over keeping them dimmed or hidden).
+  They were kept: the grid hid them behind its hatched cells, but the agent
+  panel, the text view and share links still had them. Any port edit (agent
+  panel, types sheet, typing settings, guessing from the canvas) deletes
+  them in the same undo step, and the toast names them. The agent panel
+  strikes through the rules saving would delete, with a warning, before you
+  save (`unmeetable` in `src/state/editor.ts`). Watch for: in the types
+  sheet each change saves at once, so swapping both ends of a pair one at a
+  time deletes its rule on the first click (the toast says so, and Undo
+  brings it back).
+- Pointing at a rule's interface end lights up the same end in the other
+  half (`twinHover` on the canvas). The app had never done it: the A3
+  prototype did, and the build from it left it out.
+
 ## Others
 
 - [ ] can we use a compression tool for share links? they're currently huge. let's look into what we use for `../fhm`'s web playground, bc that one seems really efficient
@@ -621,3 +639,5 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
   - /Users/aron/Desktop/Screenshot 2026-10-16 at 11.30.54.png
 - [x] escape should also close the expanded rule grid, as it should all panels (unless they have unsaved state)
 - [x] when you connect two wires and then undo it, the animation is a bit awkward, because the destination wire recedes all the way from the port it's no longer connected to. instead i think it'll look better if we just split the wire in two from its halfway point. then the two wires should spring back naturally
+- [x] when you change the type or polarity of an agent's port, we don't properly update the applicable rules for that agent in the agent view. the rules grid updates, but the rules on the agent panel itself don't update. not even after closing and reopening the panel, or editing a different agent. and even after a page refresh. clearly we persist the rules somewhere without refreshing them when the types/polarity updates, even though the grid does display the correct interactability.
+- [x] at some point we used to highlight in the rule editor the same external interface port when hovering over them. e.g. if you hover over x₁ in the after view, it would also highlight that port in the before view, and vice versa. it doesn't seem to do this anymore.

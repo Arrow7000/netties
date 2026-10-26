@@ -69,6 +69,11 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
   // Agents stay where they're put; Tidy lays them out afresh.
   rhs.setMode("manual", false);
   rhs.clearHistory();
+  /** The interface end under the pointer in one half, to light up in the other: both halves name them alike. */
+  const hoveredEnd = (m: typeof lhs) => {
+    const h = m.hover();
+    return h?.kind === "free" ? h.name : undefined;
+  };
   const lcam = createCamera();
   const rcam = createCamera();
 
@@ -458,14 +463,14 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
       <div class="rp-body">
         <div class="rp-before">
           <span class="rp-cap">Before</span>
-          <Canvas m={lhs} camera={lcam} readonly freeLabel={ifaceLabel} pad={{ t: 48, r: 24, b: 48, l: 24 }} />
+          <Canvas m={lhs} camera={lcam} readonly freeLabel={ifaceLabel} twinHover={() => hoveredEnd(rhs)} pad={{ t: 48, r: 24, b: 48, l: 24 }} />
         </div>
         <div class="rp-arrow" aria-hidden="true">
           →
         </div>
         <div class="rp-after">
           <div ref={afterEl} class="rp-wrap">
-            <Canvas m={rhs} camera={rcam} freeLabel={ifaceLabel} pad={{ t: 60, r: 56, b: 60, l: 56 }} />
+            <Canvas m={rhs} camera={rcam} freeLabel={ifaceLabel} twinHover={() => hoveredEnd(lhs)} pad={{ t: 60, r: 56, b: 60, l: 56 }} />
             <span class="rp-cap">
               After<Show when={!saved().has}> · no rule yet</Show>
             </span>

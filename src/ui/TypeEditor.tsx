@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { AgentType } from "../core/net";
+import { pairKey } from "../core/system";
 import { type PortSpec, portName, portsFor, typingOn } from "../core/types";
 import { portPos, shape } from "../layout/geometry";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
@@ -48,6 +49,12 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
     return ed.conflicts(initial.id, ports());
   });
   createEffect(() => ed.model.setDoomed(new Set(conflicts())));
+  /** Rules of this agent's that saving would delete, because their pair could no longer meet. */
+  const doomedRules = createMemo(() => {
+    if (!initial || arity() !== initial.arity || !typingOn(typing())) return [];
+    return ed.unmeetable(initial.id, ports()).filter((r) => r.left === initial.id || r.right === initial.id);
+  });
+  const doomedKeys = createMemo(() => new Set(doomedRules().map((r) => pairKey(r.left, r.right))));
   onCleanup(() => ed.model.setDoomed(new Set<number>()));
 
   /** What still has to be filled in, when the system requires directions or types. */
@@ -233,6 +240,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
                   <button
                     type="button"
                     class="chip-btn"
+                    classList={{ doomed: doomedKeys().has(pairKey(r.left, r.right)) }}
                     onClick={() => {
                       props.onClose();
                       ed.openRule(r.left, r.right);
@@ -310,6 +318,18 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
           <p class="te-warn">
             Changing the number of aux ports removes its rules
             {inNet() ? `, and ${inNet() === 1 ? "the one in the net" : `the ${inNet()} in the net`}` : ""}.
+          </p>
+        </Show>
+        <Show when={doomedRules().length}>
+          <p class="te-warn">
+            {doomedRules().length === 1 ? (
+              <>
+                <i class="sym">{sym(doomedRules()[0]!.left)}</i> and <i class="sym">{sym(doomedRules()[0]!.right)}</i> could no
+                longer meet, so saving deletes their rule.
+              </>
+            ) : (
+              `${doomedRules().length} pairs could no longer meet, so saving deletes their rules.`
+            )}
           </p>
         </Show>
         <Show when={conflicts().length}>

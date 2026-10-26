@@ -1889,6 +1889,13 @@ kbd {
   border-color: var(--accent);
 }
 
+/* A rule saving would delete: its pair could no longer meet. */
+.chip-btn.doomed {
+  border-color: var(--stuck);
+  color: var(--stuck);
+  text-decoration: line-through;
+}
+
 .te-warn {
   margin: 0;
   font-size: 12px;
