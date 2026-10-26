@@ -114,6 +114,36 @@ describe("combinators", () => {
     expect(net.agents.size).toBe(0);
     expect(net.wires.size).toBe(0);
   });
+
+  it("fires with empty aux ports, leaving empty what the rule joins to them", () => {
+    const { net, a, w } = pair(sys, "γ", "γ");
+    net.disconnect(net.wireAt(port(a, 1)));
+    interact(net, sys, w);
+    expect(partnerName(net, "x2")).toBe("y1");
+    expect(partnerName(net, "y2")).toBeUndefined();
+  });
+
+  it("leaves a created agent's port empty where it meets an empty port", () => {
+    const net = new Net();
+    const g = net.addAgent(sys.type("γ"));
+    const e = net.addAgent(sys.type("ε"));
+    const w = net.connect(port(g, 0), port(e, 0));
+    net.connect(port(g, 2), free("x"));
+    interact(net, sys, w);
+    expect(partnerName(net, "x")).toBe("ε0");
+    expect(net.agents.size).toBe(2);
+    expect(net.unconnected()).toHaveLength(1);
+  });
+
+  it("drops a rule's wire between two empty ports", () => {
+    const net = new Net();
+    const a = net.addAgent(sys.type("γ"));
+    const b = net.addAgent(sys.type("γ"));
+    const w = net.connect(port(a, 0), port(b, 0));
+    interact(net, sys, w);
+    expect(net.agents.size).toBe(0);
+    expect(net.wires.size).toBe(0);
+  });
 });
 
 describe("directed combinators", () => {

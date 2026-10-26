@@ -43,11 +43,13 @@ export function interact(net: Net, sys: System, w: WireId): StepRecord {
 
   // Each interface port (an aux port of the pair) is a node with an outer
   // neighbour (across its old wire) and an inner neighbour (across the rule).
+  // An empty port is taken to have a wire that leads nowhere, rewritten like
+  // any other: whatever the rule joins to it is left empty in turn.
   const nodeKey = (s: number, slot: number) => `${s}:${slot}`;
   const isPairPort = (e: End) => e.kind === "port" && (e.agent === side[0] || e.agent === side[1]);
   const nodeOf = (e: Extract<End, { kind: "port" }>) => nodeKey(e.agent === side[0] ? 0 : 1, e.slot);
 
-  type Hop = { node: string } | { end: End };
+  type Hop = { node: string } | { end: End } | { open: true };
   const outer = new Map<string, Hop>();
   const oldWire = new Map<string, WireId>();
   for (const s of [0, 1] as const) {
@@ -55,7 +57,10 @@ export function interact(net: Net, sys: System, w: WireId): StepRecord {
     for (let slot = 1; slot < a.wires.length; slot++) {
       const k = nodeKey(s, slot);
       const p = net.partner(port(a.id, slot));
-      if (!p) throw new Error(`port ${a.id}:${slot} is unconnected`);
+      if (!p) {
+        outer.set(k, { open: true });
+        continue;
+      }
       outer.set(k, p.kind === "port" && isPairPort(p) ? { node: nodeOf(p) } : { end: p });
       oldWire.set(k, a.wires[slot]!);
     }
@@ -82,8 +87,9 @@ export function interact(net: Net, sys: System, w: WireId): StepRecord {
   }
 
   // Follow each chain of interface nodes from one real end to the other and
-  // join those ends with a single wire. Leftover nodes form closed loops,
-  // which simply vanish.
+  // join those ends with a single wire. A chain that runs into an empty port
+  // leaves its real end empty. Leftover nodes form closed loops, or chains
+  // between two empty ports, which simply vanish.
   const visited = new Set<string>();
   const walk = (start: End, first: string, via: "inner" | "outer") => {
     const from: WireId[] = [];
@@ -91,10 +97,12 @@ export function interact(net: Net, sys: System, w: WireId): StepRecord {
     let dir = via;
     for (;;) {
       visited.add(node);
-      if (dir === "outer") from.push(oldWire.get(node)!);
+      const old = oldWire.get(node);
+      if (dir === "outer" && old !== undefined) from.push(old);
       const nextDir = dir === "inner" ? "outer" : "inner";
       const hop = (nextDir === "inner" ? inner : outer).get(node)!;
-      if (nextDir === "outer") from.push(oldWire.get(node)!);
+      if (nextDir === "outer" && old !== undefined) from.push(old);
+      if ("open" in hop) return;
       if ("end" in hop) {
         const ids = [...new Set(from)];
         const reuse = ids[0];
