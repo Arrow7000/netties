@@ -82,8 +82,11 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       if (what.kind === "type") {
         const attach = at && into.m.attachTarget(what.id, at);
         const t = ed.system.types.get(what.id);
-        const tip = attach && t && ghostPlug(t, attach.slot, ev.clientX, ev.clientY);
-        into.m.setPlacing({ type: what.id, at, attach, plug: tip && into.camera.toWorld(tip.x, tip.y) });
+        const g = attach && t && ghostPlug(t, attach.slot, ev.clientX, ev.clientY);
+        const w = (x: number, y: number) => into.camera.toWorld(x, y);
+        const [tip, a, b] = g ? [w(g.tip.x, g.tip.y), w(g.box.x0, g.box.y0), w(g.box.x1, g.box.y1)] : [];
+        const plug = g && tip && a && b && { at: tip, dir: g.dir, box: { x0: a.x, y0: a.y, x1: b.x, y1: b.y } };
+        into.m.setPlacing({ type: what.id, at, attach, plug });
       }
     };
     const up = (ev: PointerEvent) => {
@@ -257,10 +260,11 @@ const GHOST_STUB = 9;
 
 /**
  * Where the stub of port `slot` ends, on screen, on the agent being carried
- * under the pointer at (x, y): the ghost is centred on the pointer, drawn at
- * whatever size it has on screen.
+ * under the pointer at (x, y), which way it points, and the box the drawing
+ * covers: the ghost is centred on the pointer, drawn at whatever size it has
+ * on screen.
  */
-function ghostPlug(t: AgentType, slot: number, x: number, y: number): { x: number; y: number } | undefined {
+function ghostPlug(t: AgentType, slot: number, x: number, y: number) {
   const svg = document.querySelector(".drag-ghost svg");
   if (!svg) return undefined;
   const r = svg.getBoundingClientRect();
@@ -268,7 +272,13 @@ function ghostPlug(t: AgentType, slot: number, x: number, y: number): { x: numbe
   const pad = GHOST_STUB + 2;
   const k = Math.min(r.width / (s.w + 2 * pad), r.height / (s.h + 2 * pad));
   const q = portPos({ x: 0, y: 0, orient: "down" }, t.arity, slot);
-  return { x: x + k * q.x, y: y + k * (q.y + (q.dir === "down" ? 1 : -1) * GHOST_STUB) };
+  const hw = (k * s.w) / 2 + k * pad;
+  const hh = (k * s.h) / 2 + k * pad;
+  return {
+    tip: { x: x + k * q.x, y: y + k * (q.y + (q.dir === "down" ? 1 : -1) * GHOST_STUB) },
+    dir: q.dir,
+    box: { x0: x - hw, y0: y - hh, x1: x + hw, y1: y + hh },
+  };
 }
 
 const LEVEL_WORD = { off: "off", optional: "optional", required: "required" } as const;

@@ -6,7 +6,7 @@ import { type AgentId, type End, Net, NONE, type NetJSON, type WireId, endKey, f
 import { type StepRecord, redexes } from "../core/reduce";
 import type { System } from "../core/system";
 import { type Clash, type Effective, clash, clashText, endSpec, specOf } from "../core/types";
-import { G, type Placed, type Placement, type Pt, boxOf, portPos } from "../layout/geometry";
+import { G, type Placed, type Placement, type Pt, type Terminal, boxOf, portPos } from "../layout/geometry";
 import { autoLayout, columnOffsets, columnsAt } from "../layout/place";
 import { routeHoldingEnds } from "../layout/replace";
 import { type Pins, type Routed, route } from "../layout/route";
@@ -88,6 +88,17 @@ export interface Attach {
   slot: number;
 }
 
+/**
+ * The port of a new agent being carried in that would plug in, as drawn on
+ * it under the pointer: the tip of its stub, which way the stub points, and
+ * the box the carried agent covers.
+ */
+export interface Plug {
+  at: Pt;
+  dir: "up" | "down";
+  box: { x0: number; y0: number; x1: number; y1: number };
+}
+
 /** How near an end a new agent has to be let go, when it isn't over the end's agent, to plug into it. */
 const REACH = 22;
 
@@ -116,13 +127,12 @@ export function createNetModel(opts: NetModelOptions) {
   const [hover, setHover] = createSignal<Hover>();
   /** Wires an edit being prepared would cut, marked on the canvas until it's saved or dropped. */
   const [doomed, setDoomed] = createSignal<ReadonlySet<WireId>>(new Set());
-  /** A new agent being carried in from the palette: where it is, and what it would plug into. */
   /**
    * A new agent being carried in from the palette: where it is over the
    * canvas, if it is, what it would plug into, and where the port that
    * would plug in is drawn on it.
    */
-  const [placing, setPlacing] = createSignal<{ type: string; at?: Pt; attach?: Attach; plug?: Pt }>();
+  const [placing, setPlacing] = createSignal<{ type: string; at?: Pt; attach?: Attach; plug?: Plug }>();
   /** Where agents just dropped from the palette were let go, to animate them from there. */
   const spawnAt = new Map<AgentId, Pt>();
   const undoStack: string[] = [];
@@ -862,15 +872,15 @@ export function createNetModel(opts: NetModelOptions) {
      * one: the loose end is. `fits` is false for ends it could plug into but
      * doesn't fit, which are drawn as refusing.
      */
-    attachEnds(type: string): (Attach & { at: Pt; fits: boolean })[] {
+    attachEnds(type: string): (Attach & { at: Terminal; fits: boolean })[] {
       const sys = opts.system();
       const t = sys.types.get(type);
       if (!t) return [];
       const v = view().net;
       const l = layout();
       const slotFor = (there: Effective) => Array.from({ length: t.arity + 1 }, (_, i) => i).find((i) => !clash(specOf(sys, type, i), there));
-      const out: (Attach & { at: Pt; fits: boolean })[] = [];
-      const add = (end: End, at: Pt | undefined, there: Effective) => {
+      const out: (Attach & { at: Terminal; fits: boolean })[] = [];
+      const add = (end: End, at: Terminal | undefined, there: Effective) => {
         if (!at) return;
         const slot = slotFor(there);
         out.push({ end, slot: slot ?? 0, at, fits: slot !== undefined });

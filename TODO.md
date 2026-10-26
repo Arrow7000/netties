@@ -626,7 +626,11 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
   size but fainter, everywhere (the user: more obvious than before, but
   no growing and shrinking between the two). The preview wire runs to the
   carried agent's port that would plug in, which needn't be its principal
-  (`ghostPlug` in `src/ui/Palette.tsx`). Still not: a
+  (`ghostPlug` in `src/ui/Palette.tsx`). It leaves that port's stub the way
+  the stub points, and when the end is behind the stub it goes round the
+  carried agent's nearer side, not through it (`placingPath` in
+  `Canvas.tsx`; the user found a wire through the agent hard to tell from
+  one out of its far side). Still not: a
   component dropped this way, or a new agent onto a rule's empty interface
   end.
 - Pointing at a rule's interface end lights up the same end in the other

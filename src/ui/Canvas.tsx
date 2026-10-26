@@ -3,11 +3,11 @@ import type { Frame } from "../anim/morph";
 import type { GroupId } from "../core/groups";
 import { type AgentId, type End, NONE, type WireId, endKey, free, port, sameEnd } from "../core/net";
 import { type System, pairKey } from "../core/system";
-import { type Box, G, type Placed, type Pt, boxOf, insidePolygon, portPos, segmentHitsBox, shape } from "../layout/geometry";
+import { type Box, G, type Placed, type Pt, type Terminal, boxOf, insidePolygon, portPos, segmentHitsBox, shape } from "../layout/geometry";
 import type { StepPlan, StepPreview } from "../layout/replace";
 import { flattenPath, midway, polylinePath, resample, roundedPath } from "../render/path";
 import { agentOutline, arrowPoints, labelPos } from "../render/svg";
-import type { NetModel, WireGesture } from "../state/model";
+import type { NetModel, Plug, WireGesture } from "../state/model";
 import { onEscapeCancels } from "./escape";
 import { type Effect, type Gesture, type Hit, type Msg, update } from "./gesture";
 import { held } from "./keys";
@@ -626,7 +626,7 @@ export function Canvas(props: CanvasProps) {
     const e = pl?.attach?.end;
     if (!pl?.at || !e) return undefined;
     const from = placingEnds()?.get(endKey(e))?.at;
-    return from && { from, to: pl.plug ?? pl.at };
+    return from && placingPath(from, pl.plug ?? { at: pl.at, dir: "down" });
   };
   /** Everywhere the agent being carried in could plug in, lit up from the moment it's picked up. */
   const placingType = createMemo(() => ed.placing()?.type);
@@ -915,10 +915,7 @@ export function Canvas(props: CanvasProps) {
           <Show when={placingLink()}>
             {(l) => (
               <g class="drag-wire">
-                <path
-                  class="line"
-                  d={`M${l().from.x} ${l().from.y} C${l().from.x} ${(l().from.y + l().to.y) / 2} ${l().to.x} ${(l().from.y + l().to.y) / 2} ${l().to.x} ${l().to.y}`}
-                />
+                <path class="line" d={l()} />
               </g>
             )}
           </Show>
@@ -957,6 +954,32 @@ function dragStart(ed: NetModel, g: WireGesture): Pt | undefined {
   if (e.kind === "free") return l.routed.free.get(e.name);
   const p = l.placement.get(e.agent);
   return p ? portPos(p, ed.view().net.agent(e.agent).wires.length - 1, e.slot) : undefined;
+}
+
+/**
+ * The wire from the end a new agent would plug into to the port on the
+ * carried agent that would plug in. It leaves that port's stub the way the
+ * stub points, so when the end is behind the stub, on the far side of the
+ * carried agent, it goes round the agent's nearer side instead of through it.
+ */
+function placingPath(from: Terminal, plug: Omit<Plug, "box"> & { box?: Plug["box"] }): string {
+  const p = plug.at;
+  const box = plug.box;
+  const out = plug.dir === "up" ? -1 : 1;
+  if (!box || (from.y - p.y) * out >= 0) {
+    const mid = (from.y + p.y) / 2;
+    return `M${from.x} ${from.y} C${from.x} ${mid} ${p.x} ${mid} ${p.x} ${p.y}`;
+  }
+  const lead = Math.max((box.y1 - box.y0) * 0.4, 4);
+  const cx = (box.x0 + box.x1) / 2;
+  const side = from.x < cx ? box.x0 : box.x1;
+  const cy = (box.y0 + box.y1) / 2;
+  const back = Math.max(Math.abs(from.y - cy) / 2, lead);
+  const fo = from.dir === "up" ? -1 : 1;
+  return (
+    `M${p.x} ${p.y} C${p.x} ${p.y + out * lead} ${side} ${p.y + out * lead} ${side} ${cy}` +
+    ` C${side} ${cy - out * back} ${from.x} ${from.y + fo * back} ${from.x} ${from.y}`
+  );
 }
 
 /** The mark on a port or free end, showing what it is and what a drop there would do. */
