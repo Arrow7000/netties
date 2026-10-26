@@ -88,7 +88,7 @@ export interface Attach {
   slot: number;
 }
 
-/** How near a port a new agent has to be let go, when it isn't over the port's agent, to plug into it. */
+/** How near an end a new agent has to be let go, when it isn't over the end's agent, to plug into it. */
 const REACH = 22;
 
 const HISTORY_LIMIT = 200;
@@ -117,7 +117,8 @@ export function createNetModel(opts: NetModelOptions) {
   /** Wires an edit being prepared would cut, marked on the canvas until it's saved or dropped. */
   const [doomed, setDoomed] = createSignal<ReadonlySet<WireId>>(new Set());
   /** A new agent being carried in from the palette: where it is, and what it would plug into. */
-  const [placing, setPlacing] = createSignal<{ type: string; at: Pt; attach?: Attach }>();
+  /** A new agent being carried in from the palette: where it is over the canvas, if it is, and what it would plug into. */
+  const [placing, setPlacing] = createSignal<{ type: string; at?: Pt; attach?: Attach }>();
   /** Where agents just dropped from the palette were let go, to animate them from there. */
   const spawnAt = new Map<AgentId, Pt>();
   const undoStack: string[] = [];
@@ -850,33 +851,65 @@ export function createNetModel(opts: NetModelOptions) {
     setPlacing,
 
     /**
-     * What a new agent of `type` let go at `at` would plug into: the
-     * nearest port, of the agent it's over or within reach, that's empty or
-     * only leads to a loose end and fits one of the new agent's ports
-     * (its principal port if it can).
+     * Everywhere a new agent of `type` could plug in, and with which of its
+     * ports (its principal port if it can): every empty port it fits, and on
+     * the main canvas every loose end, which it fits if it fits the port at
+     * the far end of the loose end's wire. A port wired to a loose end isn't
+     * one: the loose end is. `fits` is false for ends it could plug into but
+     * doesn't fit, which are drawn as refusing.
      */
-    attachTarget(type: string, at: Pt): Attach | undefined {
+    attachEnds(type: string): (Attach & { at: Pt; fits: boolean })[] {
       const sys = opts.system();
       const t = sys.types.get(type);
-      if (!t) return undefined;
+      if (!t) return [];
       const v = view().net;
-      let best: (Attach & { d: number }) | undefined;
-      for (const [id, p] of layout().placement) {
+      const l = layout();
+      const slotFor = (there: Effective) => Array.from({ length: t.arity + 1 }, (_, i) => i).find((i) => !clash(specOf(sys, type, i), there));
+      const out: (Attach & { at: Pt; fits: boolean })[] = [];
+      const add = (end: End, at: Pt | undefined, there: Effective) => {
+        if (!at) return;
+        const slot = slotFor(there);
+        out.push({ end, slot: slot ?? 0, at, fits: slot !== undefined });
+      };
+      for (const [id, p] of l.placement) {
         if (!v.agents.has(id)) continue;
         const arity = v.agent(id).wires.length - 1;
-        const b = boxOf(p, arity);
-        const over = at.x >= b.x0 && at.x <= b.x1 && at.y >= b.y0 && at.y <= b.y1;
         for (let slot = 0; slot <= arity; slot++) {
           const e = port(id, slot);
-          const w = v.wireAt(e);
-          if (w !== NONE && (!freePorts.scratch || v.partner(e)?.kind !== "free")) continue;
-          const q = portPos(p, arity, slot);
-          const d = Math.hypot(q.x - at.x, q.y - at.y);
-          if ((!over && d > REACH) || (best && d >= best.d)) continue;
-          const there = specAt(e);
-          const mine = Array.from({ length: t.arity + 1 }, (_, i) => i).find((i) => !clash(specOf(sys, type, i), there));
-          if (mine !== undefined) best = { end: e, slot: mine, d };
+          if (v.wireAt(e) === NONE) add(e, portPos(p, arity, slot), specAt(e));
         }
+      }
+      if (freePorts.scratch) {
+        for (const name of v.free.keys()) {
+          const e = free(name);
+          const other = v.wireAt(e) === NONE ? undefined : v.partner(e);
+          add(e, l.routed.free.get(name), other ? specAt(other) : {});
+        }
+      }
+      return out;
+    },
+
+    /**
+     * What a new agent of `type` let go at `at` would plug into: the
+     * nearest end it fits (`attachEnds`), within reach, or any empty port of
+     * the agent it's over.
+     */
+    attachTarget(type: string, at: Pt): Attach | undefined {
+      const v = view().net;
+      const l = layout();
+      const over = (e: End) => {
+        if (e.kind !== "port") return false;
+        const p = l.placement.get(e.agent);
+        if (!p) return false;
+        const b = boxOf(p, v.agent(e.agent).wires.length - 1);
+        return at.x >= b.x0 && at.x <= b.x1 && at.y >= b.y0 && at.y <= b.y1;
+      };
+      let best: (Attach & { d: number }) | undefined;
+      for (const c of this.attachEnds(type)) {
+        if (!c.fits) continue;
+        const d = Math.hypot(c.at.x - at.x, c.at.y - at.y);
+        if ((d > REACH && !over(c.end)) || (best && d >= best.d)) continue;
+        best = { end: c.end, slot: c.slot, d };
       }
       return best && { end: best.end, slot: best.slot };
     },
@@ -891,21 +924,23 @@ export function createNetModel(opts: NetModelOptions) {
       if (attach) {
         const real = v.toReal(attach.end);
         const w = net.wireAt(real);
-        const other = w === NONE ? undefined : net.partner(real);
-        // A port that only led to a loose end gives the loose end up.
-        if (w !== NONE && other?.kind === "free" && freePorts.scratch) {
-          net.disconnect(w);
-          net.free.delete(other.name);
-        }
-        if (net.wireAt(real) === NONE) net.connect(port(id, attach.slot), real);
-        // Set the new agent a short wire beyond the port it plugs into, turned to face it,
-        // rather than on top of it where it was let go.
-        const p = attach.end.kind === "port" ? l.placement.get(attach.end.agent) : undefined;
-        if (p && attach.end.kind === "port") {
-          const target = portPos(p, v.net.agent(attach.end.agent).wires.length - 1, attach.end.slot);
+        if (real.kind === "free") {
+          // Plugged onto a loose end: the new agent takes its place at the end of its wire.
+          const other = w === NONE ? undefined : net.partner(real);
+          if (w !== NONE) net.disconnect(w);
+          net.free.delete(real.name);
+          if (other) net.connect(port(id, attach.slot), other);
+        } else if (w === NONE) net.connect(port(id, attach.slot), real);
+        // Set the new agent where it plugs in, turned to face its wire, rather than where it was let go:
+        // a short wire beyond a port, or with its port where the loose end was.
+        const e = attach.end;
+        const p = e.kind === "port" ? l.placement.get(e.agent) : undefined;
+        const target =
+          e.kind === "port" ? p && portPos(p, v.net.agent(e.agent).wires.length - 1, e.slot) : l.routed.free.get(e.name);
+        if (target) {
           const facing = target.dir === "up" ? "down" : "up";
           const orient = attach.slot === 0 ? facing : target.dir;
-          const gap = attach.slot === 0 && attach.end.slot === 0 ? G.pairGap : G.layerH - G.agentH;
+          const gap = attach.end.kind === "free" ? 0 : attach.slot === 0 && attach.end.slot === 0 ? G.pairGap : G.layerH - G.agentH;
           const plug = portPos({ x: 0, y: 0, orient }, t.arity, attach.slot);
           const y = target.y + (target.dir === "up" ? -gap : gap);
           place = { x: target.x - plug.x, y: y - plug.y, orient };

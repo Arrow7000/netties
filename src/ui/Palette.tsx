@@ -75,9 +75,8 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       dragging = true;
       const at = spot(ev);
       setCarry({ what, x: ev.clientX, y: ev.clientY, over: !!at });
-      // Over an agent, or near a port: show what the new agent would plug into.
-      if (what.kind === "type" && at) into.m.setPlacing({ type: what.id, at, attach: into.m.attachTarget(what.id, at) });
-      else into.m.setPlacing(undefined);
+      // Everything the new agent could plug into lights up from the start; near one, it shows which it would.
+      if (what.kind === "type") into.m.setPlacing({ type: what.id, at, attach: at && into.m.attachTarget(what.id, at) });
     };
     const up = (ev: PointerEvent) => {
       const attach = into.m.placing()?.attach;

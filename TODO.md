@@ -615,6 +615,17 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
   still to fill in are marked, and Save waits for them. The edits are pure
   functions on a `System` in `src/core/types.ts`, shared by the editor and
   the draft. The palette's type chips still apply at once.
+- A new agent carried in from the palette plugs into empty ports and loose
+  ends, not ports whose wire runs to a loose end (the user found it
+  confusing that some busy ports lit up and others didn't). A loose end fits
+  if the port at its wire's far end does, and the new agent takes its place,
+  its port where the end was drawn. Everything it could plug into lights up
+  from the first move of the drag, even over the palette, and ends it
+  doesn't fit are greyed, as when dragging a wire (`attachEnds` in
+  `src/state/model.ts`). Candidate rings are bolder everywhere (thicker,
+  nearly opaque, faintly filled), at the user's request. Still not: a
+  component dropped this way, or a new agent onto a rule's empty interface
+  end.
 - Pointing at a rule's interface end lights up the same end in the other
   half (`twinHover` on the canvas). The app had never done it: the A3
   prototype did, and the build from it left it out.

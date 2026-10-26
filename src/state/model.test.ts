@@ -1,5 +1,6 @@
 import { createRoot } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Net, free, port } from "../core/net";
 import { System } from "../core/system";
 import { createNetModel } from "./model";
 
@@ -110,6 +111,34 @@ describe("net model gesture boundary", () => {
 
       model.undo();
       expect(ids.map((id) => model.positionOf(id)!.orient)).toEqual(before);
+      dispose();
+    });
+  });
+
+  it("plugs a new agent onto a loose end, not into the port the loose end's wire comes from", () => {
+    createRoot((dispose) => {
+      const system = new System()
+        .addType({ id: "s", name: "S", symbol: "S", arity: 1, ports: [{ pol: "give" }, { pol: "take" }] })
+        .addType({ id: "z", name: "Z", symbol: "Z", arity: 0, ports: [{ pol: "give" }] });
+      system.typing = { dirs: "optional", types: "off", names: [] };
+      const net = new Net();
+      const s = net.addAgent(system.type("s"));
+      net.connect(port(s, 1), free("x"));
+      const model = createNetModel({ system: () => system });
+      model.setNet(net);
+
+      // Z gives, so it fits the loose end (whose wire comes from S's aux port, which takes) but not S's principal (which gives).
+      const ends = model.attachEnds("z");
+      expect(ends.map((c) => [c.end.kind === "port" ? `port ${c.end.slot}` : c.end.name, c.fits])).toEqual([
+        ["port 0", false],
+        ["x", true],
+      ]);
+      const at = model.layout().routed.free.get("x")!;
+      expect(model.attachTarget("z", { x: at.x + 3, y: at.y })).toEqual({ end: free("x"), slot: 0 });
+
+      const z = model.addAgent("z", at, { end: free("x"), slot: 0 });
+      expect(model.net.free.size).toBe(0);
+      expect(model.net.partner(port(z, 0))).toEqual(port(s, 1));
       dispose();
     });
   });

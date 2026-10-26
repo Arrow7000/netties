@@ -825,10 +825,10 @@ kbd {
 }
 
 .port-candidate {
-  fill: none;
+  fill: color-mix(in srgb, var(--accent) 14%, transparent);
   stroke: var(--accent);
-  stroke-width: 1;
-  opacity: 0.55;
+  stroke-width: 1.6;
+  opacity: 0.9;
   pointer-events: none;
 }
 

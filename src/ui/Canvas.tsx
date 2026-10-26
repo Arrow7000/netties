@@ -1,7 +1,7 @@
 import { For, Index, type JSX, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import type { Frame } from "../anim/morph";
 import type { GroupId } from "../core/groups";
-import { type AgentId, type End, NONE, type WireId, free, port, sameEnd } from "../core/net";
+import { type AgentId, type End, NONE, type WireId, endKey, free, port, sameEnd } from "../core/net";
 import { type System, pairKey } from "../core/system";
 import { type Box, G, type Placed, type Pt, boxOf, insidePolygon, portPos, segmentHitsBox, shape } from "../layout/geometry";
 import type { StepPlan, StepPreview } from "../layout/replace";
@@ -620,20 +620,34 @@ export function Canvas(props: CanvasProps) {
     return { at: m.at, dx: m.dx * sgn, dy: m.dy * sgn, class: d.g.kind === "new" ? "drag" : "" };
   };
 
-  /** A new agent carried in from the palette, and the port it would plug into. */
+  /** A new agent carried in from the palette, and the end it would plug into. */
   const placingLink = () => {
     const pl = ed.placing();
     const e = pl?.attach?.end;
-    if (!pl || e?.kind !== "port") return undefined;
-    const p = ed.layout().placement.get(e.agent);
-    if (!p) return undefined;
-    return { from: portPos(p, ed.view().net.agent(e.agent).wires.length - 1, e.slot), to: pl.at };
+    if (!pl?.at || !e) return undefined;
+    const from = placingEnds()?.get(endKey(e))?.at;
+    return from && { from, to: pl.at };
   };
+  /** Everywhere the agent being carried in could plug in, lit up from the moment it's picked up. */
+  const placingType = createMemo(() => ed.placing()?.type);
+  const placingEnds = createMemo(() => {
+    const type = placingType();
+    if (type === undefined) return undefined;
+    ed.rev();
+    ed.layout();
+    return new Map(ed.attachEnds(type).map((c) => [endKey(c.end), c]));
+  });
 
   /** How a port or free end should look right now. */
   const endState = (e: End): EndState => {
     const target = ed.placing()?.attach?.end;
     if (target && sameEnd(e, target)) return "target";
+    const ends = placingEnds();
+    if (ends) {
+      const c = ends.get(endKey(e));
+      if (c) return c.fits ? "candidate" : "blocked";
+      return ed.view().net.wireAt(e) === NONE ? "empty" : "none";
+    }
     const d = wireDrag();
     if (d) {
       if (sameEnd(e, d.g.kind === "new" ? d.g.from : d.g.anchor)) return "origin";
