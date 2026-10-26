@@ -119,6 +119,16 @@ Choices made along the way that you haven't confirmed yet:
    the other screens); (3) editing (palette drawer, wire snapping,
    multi-select without Shift, clipboard buttons, rule editor on a narrow
    screen). Stages 2 and 3 need a design round.
+   Stage 1 is built on the `mobile` branch (2026-10-26), not yet tried on
+   a real phone. Left over from it: on a phone the palette is hidden, so
+   agents can't be added and the types sheet, rule grid and agent editor
+   can't be opened; the fit ignores the card along the bottom, so it can
+   cover the net's lowest part; the "Tap again to fire" pill can run off
+   the right edge; the rule editor draws both halves small upright; the
+   translation says left/right where the panes are stacked; Copy link
+   doesn't use the phone's share sheet; a tapped button can keep its hover
+   colour; double-tap into components only hits exactly; page pinch-zoom
+   is blocked outside the canvas (an accessibility trade-off).
 4. **The LLM create UI**, low priority (you, 2026-10-13: "not my main
    priority. in fact it's quite a low one"). The backend is live at POST
    /api/create (`netlify/edge-functions/create.ts`, logic in
