@@ -106,8 +106,19 @@ Choices made along the way that you haven't confirmed yet:
    parts of the net with no loose ends is cheap (connected components) and
    fits: those parts are exactly what "only what reaches the loose ends"
    never fires.
-3. **Mobile**, low priority: start view-only (pick examples, pinch-zoom,
-   tap a pair to preview then fire, Step/Run). Editing eventually.
+3. **Mobile** (raised 2026-10-26): the same app made responsive for
+   phones, with touch handled properly. Phone first (where most people
+   find the app), tablets later. Editing on a phone is a real goal.
+   Decided: on touch, a tap keeps the hover, so an active pair shows its
+   preview on the first tap and fires on the second. Wires are drawn by
+   dragging from port to port, as on desktop; tapping one port and then
+   another is only a fallback. Planned stages: (1) fits the screen and
+   works with fingers (compact bars, pinch and pan, minimum on-screen tap
+   targets, fit padding for the bars actually shown); (2) reading by touch
+   (bottom sheet for what's tapped, long-press for Alt-click, sheets for
+   the other screens); (3) editing (palette drawer, wire snapping,
+   multi-select without Shift, clipboard buttons, rule editor on a narrow
+   screen). Stages 2 and 3 need a design round.
 4. **The LLM create UI**, low priority (you, 2026-10-13: "not my main
    priority. in fact it's quite a low one"). The backend is live at POST
    /api/create (`netlify/edge-functions/create.ts`, logic in
