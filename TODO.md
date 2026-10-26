@@ -622,8 +622,11 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
   its port where the end was drawn. Everything it could plug into lights up
   from the first move of the drag, even over the palette, and ends it
   doesn't fit are greyed, as when dragging a wire (`attachEnds` in
-  `src/state/model.ts`). Candidate rings are bolder everywhere (thicker,
-  nearly opaque, faintly filled), at the user's request. Still not: a
+  `src/state/model.ts`). Candidate rings are the target's ring, the same
+  size but fainter, everywhere (the user: more obvious than before, but
+  no growing and shrinking between the two). The preview wire runs to the
+  carried agent's port that would plug in, which needn't be its principal
+  (`ghostPlug` in `src/ui/Palette.tsx`). Still not: a
   component dropped this way, or a new agent onto a rule's empty interface
   end.
 - Pointing at a rule's interface end lights up the same end in the other

@@ -824,11 +824,12 @@ kbd {
   pointer-events: none;
 }
 
+/* Somewhere a drop could go: the target's ring, the same size, only fainter. */
 .port-candidate {
-  fill: color-mix(in srgb, var(--accent) 14%, transparent);
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
   stroke: var(--accent);
-  stroke-width: 1.6;
-  opacity: 0.9;
+  stroke-width: 2;
+  opacity: 0.4;
   pointer-events: none;
 }
 
@@ -1238,6 +1239,11 @@ kbd {
   pointer-events: none;
   transform: translate(-50%, -50%) scale(1.4);
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18));
+}
+
+/* Block, so the drawing is centred on the pointer with no line gap under it (ghostPlug counts on that). */
+.drag-ghost .glyph {
+  display: block;
 }
 
 .drag-ghost.off {

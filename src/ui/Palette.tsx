@@ -1,5 +1,7 @@
 import { For, type JSX, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { Portal } from "solid-js/web";
+import type { AgentType } from "../core/net";
+import { portPos, shape } from "../layout/geometry";
 import type { Editor } from "../state/editor";
 import type { Camera } from "./Canvas";
 import { ComponentGlyph, Glyph, dirsOf } from "./Glyph";
@@ -75,8 +77,14 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       dragging = true;
       const at = spot(ev);
       setCarry({ what, x: ev.clientX, y: ev.clientY, over: !!at });
-      // Everything the new agent could plug into lights up from the start; near one, it shows which it would.
-      if (what.kind === "type") into.m.setPlacing({ type: what.id, at, attach: at && into.m.attachTarget(what.id, at) });
+      // Everything the new agent could plug into lights up from the start; near one, it shows which it would,
+      // with a wire to the port of the carried agent that would plug in.
+      if (what.kind === "type") {
+        const attach = at && into.m.attachTarget(what.id, at);
+        const t = ed.system.types.get(what.id);
+        const tip = attach && t && ghostPlug(t, attach.slot, ev.clientX, ev.clientY);
+        into.m.setPlacing({ type: what.id, at, attach, plug: tip && into.camera.toWorld(tip.x, tip.y) });
+      }
     };
     const up = (ev: PointerEvent) => {
       const attach = into.m.placing()?.attach;
@@ -113,7 +121,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
     if (!c) return null;
     if (c.what.kind === "type") {
       const t = ed.system.types.get(c.what.id);
-      return t ? <Glyph type={t} stub={9} dirs={dirsOf(ed.system, t)} /> : null;
+      return t ? <Glyph type={t} stub={GHOST_STUB} dirs={dirsOf(ed.system, t)} /> : null;
     }
     const d = ed.defs().get(c.what.id);
     return d ? <ComponentGlyph def={d} /> : null;
@@ -242,6 +250,25 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       </Show>
     </>
   );
+}
+
+/** How long the wire stubs are on the agent carried in from the palette. */
+const GHOST_STUB = 9;
+
+/**
+ * Where the stub of port `slot` ends, on screen, on the agent being carried
+ * under the pointer at (x, y): the ghost is centred on the pointer, drawn at
+ * whatever size it has on screen.
+ */
+function ghostPlug(t: AgentType, slot: number, x: number, y: number): { x: number; y: number } | undefined {
+  const svg = document.querySelector(".drag-ghost svg");
+  if (!svg) return undefined;
+  const r = svg.getBoundingClientRect();
+  const s = shape(t.arity);
+  const pad = GHOST_STUB + 2;
+  const k = Math.min(r.width / (s.w + 2 * pad), r.height / (s.h + 2 * pad));
+  const q = portPos({ x: 0, y: 0, orient: "down" }, t.arity, slot);
+  return { x: x + k * q.x, y: y + k * (q.y + (q.dir === "down" ? 1 : -1) * GHOST_STUB) };
 }
 
 const LEVEL_WORD = { off: "off", optional: "optional", required: "required" } as const;

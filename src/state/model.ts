@@ -117,8 +117,12 @@ export function createNetModel(opts: NetModelOptions) {
   /** Wires an edit being prepared would cut, marked on the canvas until it's saved or dropped. */
   const [doomed, setDoomed] = createSignal<ReadonlySet<WireId>>(new Set());
   /** A new agent being carried in from the palette: where it is, and what it would plug into. */
-  /** A new agent being carried in from the palette: where it is over the canvas, if it is, and what it would plug into. */
-  const [placing, setPlacing] = createSignal<{ type: string; at?: Pt; attach?: Attach }>();
+  /**
+   * A new agent being carried in from the palette: where it is over the
+   * canvas, if it is, what it would plug into, and where the port that
+   * would plug in is drawn on it.
+   */
+  const [placing, setPlacing] = createSignal<{ type: string; at?: Pt; attach?: Attach; plug?: Pt }>();
   /** Where agents just dropped from the palette were let go, to animate them from there. */
   const spawnAt = new Map<AgentId, Pt>();
   const undoStack: string[] = [];

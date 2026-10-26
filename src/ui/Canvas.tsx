@@ -626,7 +626,7 @@ export function Canvas(props: CanvasProps) {
     const e = pl?.attach?.end;
     if (!pl?.at || !e) return undefined;
     const from = placingEnds()?.get(endKey(e))?.at;
-    return from && { from, to: pl.at };
+    return from && { from, to: pl.plug ?? pl.at };
   };
   /** Everywhere the agent being carried in could plug in, lit up from the moment it's picked up. */
   const placingType = createMemo(() => ed.placing()?.type);
@@ -986,7 +986,7 @@ function IfaceEnd(props: { ed: NetModel; name: string; at: { x: number; y: numbe
     <g class="free-end iface-end">
       <circle class="iface-ring" classList={{ need: empty() }} cx={props.at.x} cy={props.at.y} r={6.6} />
       <Show when={props.state === "hover"}>{c("iface-hover", 9.6)}</Show>
-      <Show when={props.state === "candidate"}>{c("port-candidate", 9)}</Show>
+      <Show when={props.state === "candidate"}>{c("port-candidate", 9.6)}</Show>
       <Show when={props.state === "blocked"}>{c("port-blocked", 8)}</Show>
       <Show when={props.state === "target"}>{c("port-target", 9.6)}</Show>
       <Show when={props.state === "refuse"}>{c("port-refuse", 9.6)}</Show>
@@ -1008,7 +1008,7 @@ function EndMark(props: { at: Pt; state: EndState }) {
       <Show when={props.state === "empty"}>{c("port-empty", 2.6)}</Show>
       <Show when={props.state === "hover"}>{c("port-hover", 5.2)}</Show>
       <Show when={props.state === "origin"}>{c("port-origin", 4.2)}</Show>
-      <Show when={props.state === "candidate"}>{c("port-candidate", 5)}</Show>
+      <Show when={props.state === "candidate"}>{c("port-candidate", 6.5)}</Show>
       <Show when={props.state === "blocked"}>{c("port-blocked", 4.6)}</Show>
       <Show when={props.state === "target"}>{c("port-target", 6.5)}</Show>
       <Show when={props.state === "refuse"}>
