@@ -1,4 +1,4 @@
-import { For, Index, type JSX, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
+import { For, Index, type JSX, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount } from "solid-js";
 import type { Frame } from "../anim/morph";
 import type { GroupId } from "../core/groups";
 import { type AgentId, type End, NONE, type WireId, endKey, free, port, sameEnd } from "../core/net";
@@ -6,7 +6,7 @@ import { type System, pairKey } from "../core/system";
 import { type Box, G, type Placed, type Pt, type Terminal, boxOf, insidePolygon, portPos, segmentHitsBox, shape } from "../layout/geometry";
 import type { StepPlan, StepPreview } from "../layout/replace";
 import { flattenPath, midway, polylinePath, resample, roundedPath } from "../render/path";
-import { agentOutline, arrowPoints, labelPos } from "../render/svg";
+import { STROKE, agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { NetModel, Plug, WireGesture } from "../state/model";
 import { onEscapeCancels } from "./escape";
 import { type Effect, type Gesture, type Hit, type Msg, update } from "./gesture";
@@ -702,6 +702,8 @@ export function Canvas(props: CanvasProps) {
     undefined,
     { equals: (a, b) => a === b || (!!a && !!b && a.length === b.length && a.every((w, i) => w === b[i])) },
   );
+  /** Cuts the agents of the step being previewed out of the highlights that run on under them. */
+  const seeThroughMask = `see-through-${createUniqueId()}`;
   const firing = createMemo(() => {
     const ws = targets();
     if (!ws?.length || !props.preview) return undefined;
@@ -803,12 +805,43 @@ export function Canvas(props: CanvasProps) {
                   hidden={carried() === id}
                   highlighted={highlighted().has(id)}
                   fading={!!firing()?.wires.has(id)}
-                  seeThrough={firing()?.agents}
+                  seeThrough={firing() && { agents: firing()!.agents, mask: seeThroughMask }}
                   joining={joining() === id}
                   pre={preselectedWires().has(id)}
                 />
               )}
             </For>
+            <Show when={firing()}>{(f) => <SeeThroughMask ed={ed} id={seeThroughMask} agents={f().agents} system={sys} />}</Show>
+            {/* Under the agents, like any wire, so it comes out from under the end it starts from. */}
+            <Show when={wireDrag()}>
+              {(d) => {
+                const start = () => dragStart(ed, d().g) ?? d().cur;
+                /** The ends the wire would join, which its highlight runs on under. */
+                const ends = () => [gestureAnchor(d().g), ...(d().target && d().check?.kind === "ok" ? [d().target!] : [])];
+                return (
+                  <g class="drag-wire" classList={{ carried: d().g.kind === "carry", joining: joining() !== undefined }}>
+                    <Show
+                      when={wirePath()}
+                      fallback={
+                        <path
+                          class="line"
+                          d={`M${start().x} ${start().y} C${start().x} ${(start().y + d().cur.y) / 2} ${d().cur.x} ${(start().y + d().cur.y) / 2} ${d().cur.x} ${d().cur.y}`}
+                        />
+                      }
+                    >
+                      {(p) => (
+                        <>
+                          <path class="halo" d={roundedPath(p(), G.radius)} />
+                          <path class="mark" d={roundedPath(tuckUnder(ed, p(), ends()), G.radius)} />
+                          <path class="line" d={roundedPath(p(), G.radius)} />
+                          <Show when={dragArrow(p())}>{(a) => <Arrowhead {...a()} />}</Show>
+                        </>
+                      )}
+                    </Show>
+                  </g>
+                );
+              }}
+            </Show>
             <For each={agentIds()}>
               {(id) => (
                 <Agent
@@ -869,48 +902,27 @@ export function Canvas(props: CanvasProps) {
             <HoverPill ed={ed} hidden={!!drag() && drag()!.kind !== "click-wire"} canFire={!!props.onFire} />
           </g>
           <Show when={wireDrag()}>
-            {(d) => {
-              const start = () => dragStart(ed, d().g) ?? d().cur;
-              return (
-                <g class="drag-wire" classList={{ carried: d().g.kind === "carry", joining: joining() !== undefined }}>
-                  <Show
-                    when={wirePath()}
-                    fallback={
-                      <path
-                        class="line"
-                        d={`M${start().x} ${start().y} C${start().x} ${(start().y + d().cur.y) / 2} ${d().cur.x} ${(start().y + d().cur.y) / 2} ${d().cur.x} ${d().cur.y}`}
-                      />
-                    }
-                  >
-                    {(p) => (
-                      <>
-                        <path class="halo" d={roundedPath(p(), G.radius)} />
-                        <path class="mark" d={roundedPath(p(), G.radius)} />
-                        <path class="line" d={roundedPath(p(), G.radius)} />
-                        <Show when={dragArrow(p())}>{(a) => <Arrowhead {...a()} />}</Show>
-                        <Show when={ed.specAt(gestureAnchor(d().g)).type}>
-                          {(t) => <WireLabel pts={p()} text={t()} />}
-                        </Show>
-                      </>
-                    )}
-                  </Show>
-                  <Show when={tipEnd()}>
-                    {(t) => (
-                      <g class="free-end">
-                        <circle class="end-dot" cx={t().at.x} cy={t().at.y} r={2.4} />
-                        <Show when={t().label}>
-                          {(name) => (
-                            <text class="free-label" x={t().at.x} y={t().at.y + 13} text-anchor="middle">
-                              {props.freeLabel?.(name()) ?? name()}
-                            </text>
-                          )}
-                        </Show>
-                      </g>
-                    )}
-                  </Show>
-                </g>
-              );
-            }}
+            {(d) => (
+              <g class="drag-wire">
+                <Show when={wirePath() && ed.specAt(gestureAnchor(d().g)).type}>
+                  {(t) => <WireLabel pts={wirePath()!} text={t()} />}
+                </Show>
+                <Show when={tipEnd()}>
+                  {(t) => (
+                    <g class="free-end">
+                      <circle class="end-dot" cx={t().at.x} cy={t().at.y} r={2.4} />
+                      <Show when={t().label}>
+                        {(name) => (
+                          <text class="free-label" x={t().at.x} y={t().at.y + 13} text-anchor="middle">
+                            {props.freeLabel?.(name()) ?? name()}
+                          </text>
+                        )}
+                      </Show>
+                    </g>
+                  )}
+                </Show>
+              </g>
+            )}
           </Show>
           <Show when={placingLink()}>
             {(l) => (
@@ -1195,6 +1207,30 @@ function HoverPill(props: { ed: NetModel; hidden: boolean; canFire: boolean }) {
 /** How far a wire's highlight runs on under an agent: far enough to cover its width beside the narrowest tip. */
 const MARK_TUCK = 9;
 
+/**
+ * A wire's points run on under the agents at its ends, for its highlight:
+ * drawn with flat ends, an agent's outline then cuts it off cleanly rather
+ * than leaving a flat end beside a tip.
+ */
+function tuckUnder(ed: NetModel, pts: Pt[], ends: readonly End[]): Pt[] {
+  if (pts.length < 2) return pts;
+  const out = [...pts];
+  for (const e of ends) {
+    if (e.kind !== "port") continue;
+    const pl = ed.layout().placement.get(e.agent);
+    if (!pl) continue;
+    const at = portPos(pl, ed.view().net.agent(e.agent).wires.length - 1, e.slot);
+    const near = (q: Pt) => Math.hypot(q.x - at.x, q.y - at.y) < 0.5;
+    const i = near(out[0]!) ? 0 : near(out[out.length - 1]!) ? out.length - 1 : -1;
+    if (i < 0) continue;
+    // Wires leave ports vertically, so the agent lies the other way.
+    const ext = { x: at.x, y: at.y + (at.dir === "down" ? -MARK_TUCK : MARK_TUCK) };
+    if (i === 0) out.unshift(ext);
+    else out.push(ext);
+  }
+  return out;
+}
+
 /** Where a view end is drawn. */
 function endPos(ed: NetModel, e: End): Pt | undefined {
   const l = ed.layout();
@@ -1250,37 +1286,22 @@ function Wire(props: {
   pre?: boolean;
   /** Taken away, or rerouted, by the step being previewed. */
   fading?: boolean;
-  /** Agents drawn see-through, which the highlight mustn't run on under. */
-  seeThrough?: ReadonlySet<AgentId>;
+  /**
+   * Agents drawn see-through, and a mask cutting them out: the highlight
+   * runs on under them all the same, but masked, so it still looks to go under.
+   */
+  seeThrough?: { agents: ReadonlySet<AgentId>; mask: string };
   /** A loose end's wire that the wire being dragged would join. */
   joining?: boolean;
 }) {
   const ed = props.ed;
   const pts = () => ed.layout().routed.wires.get(props.id) ?? [];
   const d = () => roundedPath(pts(), G.radius);
-  /**
-   * The highlight runs on under the agents it meets, with flat ends, so an
-   * agent's outline cuts it off cleanly rather than showing a rounded end
-   * beside a tip.
-   */
-  const markD = () => {
-    const p = pts();
-    if (p.length < 2 || !ed.view().net.wires.has(props.id)) return d();
-    const out = [...p];
-    for (const e of ed.view().net.wire(props.id).ends) {
-      if (e.kind !== "port" || props.seeThrough?.has(e.agent)) continue;
-      const pl = ed.layout().placement.get(e.agent);
-      if (!pl) continue;
-      const at = portPos(pl, ed.view().net.agent(e.agent).wires.length - 1, e.slot);
-      const near = (q: Pt) => Math.hypot(q.x - at.x, q.y - at.y) < 0.5;
-      const i = near(out[0]!) ? 0 : near(out[out.length - 1]!) ? out.length - 1 : -1;
-      if (i < 0) continue;
-      // Wires leave ports vertically, so the agent lies the other way.
-      const ext = { x: at.x, y: at.y + (at.dir === "down" ? -MARK_TUCK : MARK_TUCK) };
-      if (i === 0) out.unshift(ext);
-      else out.push(ext);
-    }
-    return roundedPath(out, G.radius);
+  const ends = () => (ed.view().net.wires.has(props.id) ? ed.view().net.wire(props.id).ends : []);
+  const markD = () => roundedPath(tuckUnder(ed, pts(), ends()), G.radius);
+  const masked = () => {
+    const st = props.seeThrough;
+    return st && ends().some((e) => e.kind === "port" && st.agents.has(e.agent)) ? `url(#${st.mask})` : undefined;
   };
   /** The arrowhead halfway along, pointing from the end that gives to the end that takes. */
   const arrow = () => {
@@ -1328,11 +1349,54 @@ function Wire(props: {
       data-wire={props.id}
     >
       <path class="halo" d={d()} />
-      <path class="mark" d={markD()} />
+      <path class="mark" d={markD()} mask={masked()} />
       <path class="line" d={d()} />
       <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
       <path class="hit" d={d()} />
     </g>
+  );
+}
+
+/**
+ * A mask that hides whatever is drawn under some agents, outline and all, as
+ * their own paper would if they weren't see-through.
+ */
+function SeeThroughMask(props: { ed: NetModel; id: string; agents: ReadonlySet<AgentId>; system: () => System }) {
+  const ed = props.ed;
+  const far = 1e6;
+  return (
+    <mask id={props.id} maskUnits="userSpaceOnUse" x={-far} y={-far} width={2 * far} height={2 * far}>
+      <rect x={-far} y={-far} width={2 * far} height={2 * far} fill="white" />
+      <For each={[...props.agents]}>
+        {(id) => {
+          const p = () => ed.layout().placement.get(id);
+          const a = () => ed.view().net.agents.get(id);
+          const outline = () => {
+            const pos = p();
+            const ag = a();
+            return pos && ag ? agentOutline(pos, ag.wires.length - 1, !!props.system().types.get(ag.type)?.box) : undefined;
+          };
+          return (
+            <Show when={outline()}>
+              {(o) => {
+                const s = o();
+                return s.kind === "circle" ? (
+                  <circle cx={p()!.x} cy={p()!.y} r={s.r} fill="black" stroke="black" stroke-width={STROKE} />
+                ) : (
+                  <polygon
+                    points={s.points.map((q) => `${q.x},${q.y}`).join(" ")}
+                    fill="black"
+                    stroke="black"
+                    stroke-width={STROKE}
+                    stroke-linejoin="round"
+                  />
+                );
+              }}
+            </Show>
+          );
+        }}
+      </For>
+    </mask>
   );
 }
 
