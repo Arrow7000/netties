@@ -6,7 +6,19 @@ import { type AgentId, type AgentType, Net, type WireId } from "../core/net";
 import { print } from "../core/text";
 import { type Stats, type StepRecord, emptyStats, interact, isActive, parallelStep } from "../core/reduce";
 import { type Rule, System, type SystemJSON, pairKey } from "../core/system";
-import { type PortSpec, type Typing, badWires, canMeet, flip, specOf } from "../core/types";
+import {
+  type PortSpec,
+  type Typing,
+  addTypeNameOn,
+  badWires,
+  canMeet,
+  deleteTypeNameOn,
+  renameTypeNameOn,
+  setPortOn,
+  setTypingOn,
+  typeNameProblem,
+  typeUses,
+} from "../core/types";
 import type { Placement, Pt } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
 import { type Drawn, type StepPlan, type StepPreview, placeCreated, planSteps, previewSteps } from "../layout/replace";
@@ -468,12 +480,6 @@ export function createEditor(initial: Doc | undefined) {
     return said || undefined;
   };
 
-  /** Replace an agent type's ports, keeping everything else about it. */
-  const withPorts = (id: string, ports: PortSpec[]) => {
-    const t = system.type(id);
-    system.types.set(id, { ...t, ports });
-  };
-
   /** Remove agents of a type from the net, and every rule that mentions it. */
   const dropType = (id: string) => {
     model.removeAgentsWhere((t) => t === id);
@@ -603,14 +609,31 @@ export function createEditor(initial: Doc | undefined) {
       return [...trial.rules.values()].filter((r) => canMeet(trial, r.left, r.right));
     },
 
-    /** Set one port's direction or type (or label), from the directions and types sheet. */
+    /** A copy of the system to edit without touching this one, as the directions and types sheet does until it's saved. */
+    draftSystem: (): System => System.fromJSON(system.toJSON()),
+
+    /** What saving a draft's directions and types would cut and delete. */
+    draftEffects(draft: System): { wires: WireId[]; rules: Rule[] } {
+      return {
+        wires: [...badWires(model.net, draft).keys()],
+        rules: [...draft.rules.values()].filter((r) => canMeet(draft, r.left, r.right)),
+      };
+    },
+
+    /** Save a draft's directions and types (the settings, the type names and every agent's ports) as one edit. */
+    applyTyping(draft: System) {
+      const said = commitSystemEdit(() => {
+        system.typing = { ...draft.typing, names: [...draft.typing.names] };
+        for (const t of draft.types.values()) if (system.types.has(t.id)) system.types.set(t.id, { ...system.type(t.id), ports: t.ports });
+        return settleTypes();
+      });
+      if (said) notify(said, true);
+    },
+
+    /** Set one port's direction or type (or label). */
     setPort(id: string, slot: number, patch: Partial<PortSpec>) {
       const said = commitSystemEdit(() => {
-        const t = system.type(id);
-        const ports = Array.from({ length: t.arity + 1 }, (_, s) => ({ ...(t.ports?.[s] ?? {}) }));
-        ports[slot] = { ...ports[slot], ...patch };
-        for (const k of ["pol", "type", "label"] as const) if (ports[slot]![k] === undefined) delete ports[slot]![k];
-        withPorts(id, ports);
+        setPortOn(system, id, slot, patch);
         return settleTypes();
       });
       if (said) notify(said, true);
@@ -619,19 +642,7 @@ export function createEditor(initial: Doc | undefined) {
     /** Change how strict the system is. Turning a dimension off forgets it on every port. */
     setTyping(next: Partial<Typing>) {
       const said = commitSystemEdit(() => {
-        const typing = { ...system.typing, ...next };
-        for (const t of [...system.types.values()]) {
-          if (!t.ports) continue;
-          const ports = t.ports.map((p) => {
-            const q = { ...p };
-            if (typing.dirs === "off") delete q.pol;
-            if (typing.types === "off") delete q.type;
-            return q;
-          });
-          system.types.set(t.id, { ...t, ports });
-        }
-        if (typing.types === "off") typing.names = [];
-        system.typing = typing;
+        setTypingOn(system, next);
         return settleTypes();
       });
       if (said) notify(said, true);
@@ -639,76 +650,26 @@ export function createEditor(initial: Doc | undefined) {
 
     /** Add a type ports can have. Returns why not, if the name won't do. */
     addTypeName(name: string): string | undefined {
-      const n = name.trim();
-      if (!n) return "Give it a name.";
-      if (system.typing.names.includes(n)) return `There's already a type called ${n}.`;
-      if (/[\s,;()~"+]/.test(n) || n.startsWith("-")) return "Use letters, digits, - and _ only.";
-      commitSystemEdit(() => {
-        system.typing = { ...system.typing, names: [...system.typing.names, n] };
-      });
+      const why = typeNameProblem(system, name.trim());
+      if (why) return why;
+      commitSystemEdit(() => addTypeNameOn(system, name));
       return undefined;
     },
 
     /** How many ports have a type. */
-    typeUses(name: string): number {
-      let n = 0;
-      for (const t of system.types.values()) for (const p of t.ports ?? []) if (p.type === name) n++;
-      return n;
-    },
+    typeUses: (name: string): number => typeUses(system, name),
 
     renameTypeName(from: string, to: string): string | undefined {
       const n = to.trim();
       if (!n || n === from) return;
-      if (system.typing.names.includes(n)) return `There's already a type called ${n}.`;
-      if (/[\s,;()~"+]/.test(n) || n.startsWith("-")) return "Use letters, digits, - and _ only.";
-      commitSystemEdit(() => {
-        system.typing = { ...system.typing, names: system.typing.names.map((x) => (x === from ? n : x)) };
-        for (const t of [...system.types.values()]) {
-          if (t.ports?.some((p) => p.type === from)) withPorts(t.id, t.ports.map((p) => (p.type === from ? { ...p, type: n } : p)));
-        }
-      });
+      const why = typeNameProblem(system, n);
+      if (why) return why;
+      commitSystemEdit(() => renameTypeNameOn(system, from, n));
     },
 
     /** Forget a type: its ports fit anything again, so no wire breaks. */
     deleteTypeName(name: string) {
-      commitSystemEdit(() => {
-        system.typing = { ...system.typing, names: system.typing.names.filter((x) => x !== name) };
-        for (const t of [...system.types.values()]) {
-          if (!t.ports?.some((p) => p.type === name)) continue;
-          withPorts(t.id, t.ports.map((p) => { if (p.type !== name) return p; const { type: _, ...rest } = p; return rest; }));
-        }
-      });
-    },
-
-    /** Fill in missing directions and types from what the ports are wired to on the canvas. Returns how many it filled. */
-    guessPorts(what: "dir" | "type" | "both" = "both"): number {
-      const net = model.net;
-      // For each agent type, a guess per slot from the first wired port that says something.
-      const guesses = new Map<string, PortSpec[]>();
-      for (const a of net.agents.values()) {
-        const t = system.types.get(a.type);
-        if (!t) continue;
-        const gs = guesses.get(a.type) ?? Array.from({ length: t.arity + 1 }, () => ({}) as PortSpec);
-        guesses.set(a.type, gs);
-        a.wires.forEach((_, slot) => {
-          const p = net.partner({ kind: "port", agent: a.id, slot });
-          if (p?.kind !== "port") return;
-          const there = flip(specOf(system, net.agent(p.agent).type, p.slot));
-          if (what !== "type" && there.pol && !t.ports?.[slot]?.pol) gs[slot]!.pol ??= there.pol;
-          if (what !== "dir" && there.type && !t.ports?.[slot]?.type) gs[slot]!.type ??= there.type;
-        });
-      }
-      const n = [...guesses.values()].flat().reduce((k, g) => k + (g.pol ? 1 : 0) + (g.type ? 1 : 0), 0);
-      if (!n) return 0;
-      const said = commitSystemEdit(() => {
-        for (const [id, gs] of guesses) {
-          const t = system.type(id);
-          withPorts(id, Array.from({ length: t.arity + 1 }, (_, s) => ({ ...gs[s], ...(t.ports?.[s] ?? {}) })));
-        }
-        return settleTypes();
-      });
-      if (said) notify(said, true);
-      return n;
+      commitSystemEdit(() => deleteTypeNameOn(system, name));
     },
 
     removeType(id: string) {

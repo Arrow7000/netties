@@ -603,10 +603,18 @@ click-wire`) with one pure `update(state, msg)` in `src/ui/gesture.ts`
   panel, types sheet, typing settings, guessing from the canvas) deletes
   them in the same undo step, and the toast names them. The agent panel
   strikes through the rules saving would delete, with a warning, before you
-  save (`unmeetable` in `src/state/editor.ts`). Watch for: in the types
-  sheet each change saves at once, so swapping both ends of a pair one at a
-  time deletes its rule on the first click (the toast says so, and Undo
-  brings it back).
+  save (`unmeetable` in `src/state/editor.ts`). A rule whose pair can still
+  meet but whose result would join ports that don't fit keeps its "!" in
+  the grid: the user agreed it should stay, to be fixed rather than deleted.
+- The directions and types sheet edits a draft, with Cancel and Save (the
+  user's call): nothing changes until Save, which applies it all as one
+  undo step. As in the agent panel, the wires saving would cut are marked
+  red, and the rules it would delete are listed. A click outside or Escape
+  with changes makes Cancel and Save glow. Switching to Required no longer
+  waits on a separate "pending" state: the draft is Required, the ports
+  still to fill in are marked, and Save waits for them. The edits are pure
+  functions on a `System` in `src/core/types.ts`, shared by the editor and
+  the draft. The palette's type chips still apply at once.
 - Pointing at a rule's interface end lights up the same end in the other
   half (`twinHover` on the canvas). The app had never done it: the A3
   prototype did, and the build from it left it out.

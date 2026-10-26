@@ -1,5 +1,17 @@
-import { For, type JSX, Show, createMemo, createSignal } from "solid-js";
-import { type Level, missing, portName } from "../core/types";
+import { For, type JSX, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import type { Rule } from "../core/system";
+import {
+  type Level,
+  addTypeNameOn,
+  deleteTypeNameOn,
+  guessPortsOn,
+  missing,
+  portName,
+  renameTypeNameOn,
+  setPortOn,
+  setTypingOn,
+  typeUses,
+} from "../core/types";
 import type { Editor } from "../state/editor";
 import { Glyph, dirsOf } from "./Glyph";
 import { DirectionControl, TypeChips, TypeControl } from "./PortControls";
@@ -32,72 +44,63 @@ const MEANS: Record<Dim, Record<Level, string>> = {
 /**
  * Every agent's ports in one table, for the whole system. The Directions and
  * Types settings head the columns they govern; the types themselves sit under
- * the Types heading. Changes apply at once and can be undone.
+ * the Types heading. Changes go to a draft until Save, which applies them as
+ * one edit; wires that would stop fitting are marked red on the canvas first.
  */
 export function TypesSheet(props: { ed: Editor }) {
   const ed = props.ed;
-  const sys = () => (ed.rev(), ed.system);
+  const draft = ed.draftSystem();
+  const [drev, setDrev] = createSignal(0);
+  /** Change the draft. */
+  const edit = <T,>(f: () => T): T => {
+    const out = f();
+    setDrev((n) => n + 1);
+    return out;
+  };
+  const sys = () => (drev(), draft);
   const typing = () => sys().typing;
-  const agents = () => [...sys().types.values()].filter((t) => !t.box);
-  /** A setting being switched to Required, waiting for the ports that don't have one yet. */
-  const [pending, setPending] = createSignal<Dim>();
+  /** Agents by id, so a row stays put while its ports change. */
+  const agentIds = [...draft.types.values()].filter((t) => !t.box).map((t) => t.id);
   const [preview, setPreview] = createSignal<{ dim: Dim; level: Level }>();
 
-  const level = (d: Dim): Level => (pending() === d ? "required" : typing()[d]);
-  const gaps = createMemo(() => {
-    const d = pending();
-    if (!d) return [];
-    return missing(sys(), { ...typing(), [d]: "required" }).filter((g) => g.what === (d === "dirs" ? "dir" : "type"));
-  });
-  const isGap = (type: string, slot: number, d: Dim) =>
-    pending() === d && gaps().some((g) => g.type === type && g.slot === slot);
-
-  // Once the last gap is filled, the switch to Required goes through.
-  const settle = () => {
-    const d = pending();
-    if (d && gaps().length === 0) {
-      setPending(undefined);
-      ed.setTyping({ [d]: "required" });
-    }
-  };
+  const level = (d: Dim): Level => typing()[d];
+  /** Ports still to fill in, for a setting switched to Required. */
+  const gaps = createMemo(() => missing(sys()));
+  const gapsIn = (d: Dim) => gaps().filter((g) => g.what === (d === "dirs" ? "dir" : "type"));
+  const isGap = (type: string, slot: number, d: Dim) => gapsIn(d).some((g) => g.type === type && g.slot === slot);
 
   const choose = (d: Dim, l: Level) => {
     setPreview(undefined);
-    if (l === typing()[d] && !pending()) return;
-    if (l === "required") {
-      const left = missing(sys(), { ...typing(), [d]: "required" }).filter((g) => g.what === (d === "dirs" ? "dir" : "type"));
-      if (left.length) {
-        // Required needs every port filled in first; until then the setting stays where it was.
-        if (typing()[d] === "off") ed.setTyping({ [d]: "optional" });
-        setPending(d);
-        return;
-      }
-    }
-    if (pending() === d) setPending(undefined);
-    const had = agents().some((t) => t.ports?.some((p) => (d === "dirs" ? p.pol : p.type)));
-    ed.setTyping({ [d]: l });
-    if (l === "off" && had) ed.notify(d === "dirs" ? "Turned directions off." : "Turned types off.", true);
+    if (l !== typing()[d]) edit(() => setTypingOn(draft, { [d]: l }));
+  };
+
+  /** What saving would cut and delete. */
+  const effects = createMemo(() => (drev(), ed.rev(), ed.draftEffects(draft)));
+  createEffect(() => ed.model.setDoomed(new Set(effects().wires)));
+  onCleanup(() => ed.model.setDoomed(new Set<number>()));
+
+  const snapshot = () => (drev(), JSON.stringify([draft.typing, [...draft.types.values()].map((t) => t.ports)]));
+  const pristine = snapshot();
+  const dirty = () => snapshot() !== pristine;
+  const blockedWhy = () => {
+    const n = gaps().length;
+    if (!n) return undefined;
+    return `${n === 1 ? "1 port still needs" : `${n} ports still need`} ${gapsIn("dirs").length ? (gapsIn("types").length ? "a direction or a type" : "a direction") : "a type"}, or set it back to Optional.`;
   };
 
   const note = (d: Dim): JSX.Element => {
     const p = preview();
     if (p?.dim === d) return <span class="preview">{d === "dirs" ? <DirWords text={MEANS[d][p.level]} /> : MEANS[d][p.level]}</span>;
-    if (pending() === d) {
-      const n = gaps().length;
+    const n = level(d) === "required" ? gapsIn(d).length : 0;
+    if (n) {
       return (
         <span class="pending">
           {n === 1 ? "1 port to go." : `${n} ports to go.`}{" "}
-          <button
-            class="link-btn"
-            onClick={() => {
-              ed.guessPorts(d === "dirs" ? "dir" : "type");
-              settle();
-            }}
-          >
+          <button class="link-btn" onClick={() => edit(() => guessPortsOn(draft, ed.net, d === "dirs" ? "dir" : "type"))}>
             Guess from the canvas
           </button>{" "}
           or{" "}
-          <button class="link-btn" onClick={() => setPending(undefined)}>
+          <button class="link-btn" onClick={() => edit(() => setTypingOn(draft, { [d]: "optional" }))}>
             Stay optional
           </button>
         </span>
@@ -123,10 +126,30 @@ export function TypesSheet(props: { ed: Editor }) {
     </div>
   );
 
-  // Changes apply at once, so a click outside closes the sheet, and so does Escape.
-  // A click outside leaves it open while a switch to Required is waiting on ports.
+  // A click outside or Escape closes the sheet unless something has been changed; then Cancel and Save glow.
   let sheet!: HTMLDivElement;
-  dismissOnClickOutside(() => sheet, ed.closeTypes, () => !!pending(), undefined, undefined, ed.closeTypes);
+  let cancelBtn!: HTMLButtonElement;
+  let saveBtn!: HTMLButtonElement;
+  const flash = () => {
+    for (const b of [cancelBtn, saveBtn]) {
+      b.classList.remove("flash-warm");
+      void b.offsetWidth;
+      b.classList.add("flash-warm");
+    }
+  };
+  dismissOnClickOutside(() => sheet, ed.closeTypes, dirty, flash);
+  const save = () => {
+    if (blockedWhy()) return;
+    if (dirty()) ed.applyTyping(draft);
+    ed.closeTypes();
+  };
+  const sym = (id: string) => draft.types.get(id)?.symbol ?? id;
+  const pairs = (rs: Rule[]) => rs.map((r, i) => (
+    <>
+      {i > 0 && (i === rs.length - 1 ? " and " : ", ")}
+      <i class="sym">{sym(r.left)}</i> with <i class="sym">{sym(r.right)}</i>
+    </>
+  ));
 
   const off = (d: Dim) => level(d) === "off";
   const shade = (d: Dim) => {
@@ -163,30 +186,33 @@ export function TypesSheet(props: { ed: Editor }) {
             <Show when={!off("types")}>
               <TypeChips
                 names={typing().names}
-                uses={(n) => ed.typeUses(n)}
+                uses={(n) => typeUses(sys(), n)}
                 onHover={(n) => ed.model.setHover(n ? { kind: "porttype", name: n } : undefined)}
-                onAdd={(n) => ed.addTypeName(n)}
-                onRename={(a, b) => ed.renameTypeName(a, b)}
-                onDelete={(n) => ed.deleteTypeName(n)}
+                onAdd={(n) => edit(() => addTypeNameOn(draft, n))}
+                onRename={(a, b) => edit(() => renameTypeNameOn(draft, a, b))}
+                onDelete={(n) => edit(() => deleteTypeNameOn(draft, n))}
               />
             </Show>
           </div>
         </div>
-        <For each={agents()}>
-          {(t) => (
+        <For each={agentIds}>
+          {(id) => {
+            const t = () => sys().type(id);
+            return (
             <>
               <div class="ts-row ts-agent">
                 <div class="ts-cell port-col">
                   <span class="ts-glyph">
-                    <Glyph type={t} stub={6} dirs={(ed.rev(), dirsOf(ed.system, t))} />
+                    <Glyph type={t()} stub={6} dirs={dirsOf(sys(), t())} />
                   </span>
-                  <i class="sym">{t.symbol}</i> {t.name}
+                  <i class="sym">{t().symbol}</i> {t().name}
                   <button
                     class="btn icon tiny"
-                    title={`Edit ${t.name}`}
+                    title={`Edit ${t().name}`}
                     onClick={() => {
+                      if (dirty()) return flash();
                       ed.closeTypes();
-                      ed.openAgent(t.id);
+                      ed.openAgent(id);
                     }}
                   >
                     <Pencil />
@@ -195,9 +221,9 @@ export function TypesSheet(props: { ed: Editor }) {
                 <div class="ts-cell dir-col" classList={{ off: off("dirs"), shade: shade("dirs") }} />
                 <div class="ts-cell type-col" classList={{ off: off("types"), shade: shade("types") }} />
               </div>
-              <For each={Array.from({ length: t.arity + 1 }, (_, i) => i)}>
+              <For each={Array.from({ length: t().arity + 1 }, (_, i) => i)}>
                 {(slot) => {
-                  const p = () => t.ports?.[slot] ?? {};
+                  const p = () => t().ports?.[slot] ?? {};
                   return (
                     <div class="ts-row">
                       <div class="ts-cell port-col">
@@ -206,33 +232,27 @@ export function TypesSheet(props: { ed: Editor }) {
                       </div>
                       <div
                         class="ts-cell dir-col"
-                        classList={{ off: off("dirs"), shade: shade("dirs"), gap: isGap(t.id, slot, "dirs") }}
+                        classList={{ off: off("dirs"), shade: shade("dirs"), gap: isGap(id, slot, "dirs") }}
                       >
                         <Show when={!off("dirs")}>
                           <DirectionControl
                             value={p().pol}
                             level={level("dirs")}
-                            onChange={(v) => {
-                              ed.setPort(t.id, slot, { pol: v });
-                              settle();
-                            }}
+                            onChange={(v) => edit(() => setPortOn(draft, id, slot, { pol: v }))}
                           />
                         </Show>
                       </div>
                       <div
                         class="ts-cell type-col"
-                        classList={{ off: off("types"), shade: shade("types"), gap: isGap(t.id, slot, "types") }}
+                        classList={{ off: off("types"), shade: shade("types"), gap: isGap(id, slot, "types") }}
                       >
                         <Show when={!off("types")}>
                           <TypeControl
                             value={p().type}
                             names={typing().names}
                             level={level("types")}
-                            onChange={(v) => {
-                              ed.setPort(t.id, slot, { type: v });
-                              settle();
-                            }}
-                            onNew={(n) => ed.addTypeName(n)}
+                            onChange={(v) => edit(() => setPortOn(draft, id, slot, { type: v }))}
+                            onNew={(n) => edit(() => addTypeNameOn(draft, n))}
                           />
                         </Show>
                       </div>
@@ -241,8 +261,35 @@ export function TypesSheet(props: { ed: Editor }) {
                 }}
               </For>
             </>
-          )}
+            );
+          }}
         </For>
+      </div>
+      <div class="ts-bottom">
+        <Show when={effects().rules.length}>
+          <p class="te-warn">
+            {pairs(effects().rules)} could no longer meet, so saving deletes {effects().rules.length === 1 ? "their rule" : "their rules"}.
+          </p>
+        </Show>
+        <Show when={effects().wires.length}>
+          <p class="te-warn">
+            {effects().wires.length === 1 ? "1 wire on the canvas (marked red) wouldn't fit" : `${effects().wires.length} wires on the canvas (marked red) wouldn't fit`} these ports any more. Saving cuts {effects().wires.length === 1 ? "it" : "them"} into loose ends.
+          </p>
+        </Show>
+        <Show when={blockedWhy()}>
+          <p class="te-warn">{blockedWhy()}</p>
+        </Show>
+        <div class="te-foot">
+          <span class="push" />
+          <button ref={cancelBtn} type="button" class="btn" onClick={ed.closeTypes}>
+            Cancel
+          </button>
+          <button ref={saveBtn} type="button" class="btn primary" disabled={!!blockedWhy()} onClick={save}>
+            {effects().wires.length
+              ? `Save and cut ${effects().wires.length === 1 ? "1 wire" : `${effects().wires.length} wires`}`
+              : "Save"}
+          </button>
+        </div>
       </div>
     </div>
   );

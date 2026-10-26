@@ -2,6 +2,7 @@ import { createRoot } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type AgentType, port } from "../core/net";
 import { examples } from "../core/examples";
+import { setPortOn, setTypingOn } from "../core/types";
 import { createEditor } from "./editor";
 
 const unary: AgentType = { id: "u", name: "Unary", symbol: "U", arity: 1 };
@@ -112,6 +113,37 @@ describe("editor update boundary", () => {
       ed.dispatch({ kind: "history/undo" });
       expect(ed.system.type("b").ports?.[0]?.pol).toBe("take");
       expect(ed.system.ruleFor("a", "b")).toBeDefined();
+      dispose();
+    });
+  });
+
+  it("changes nothing while a draft of the directions and types is edited, then saves it as one step", () => {
+    createRoot((dispose) => {
+      const ed = createEditor(undefined);
+      ed.addType({ id: "a", name: "A", symbol: "A", arity: 0, ports: [{ pol: "give" }] });
+      ed.addType({ id: "b", name: "B", symbol: "B", arity: 0, ports: [{ pol: "take" }] });
+      ed.setTyping({ dirs: "optional" });
+      ed.saveRule({ left: "a", right: "b", agents: [], wires: [] });
+      const a = ed.model.addAgent("a");
+      const b = ed.model.addAgent("b");
+      ed.model.connect(port(a, 0), port(b, 0));
+      ed.model.clearHistory();
+
+      const draft = ed.draftSystem();
+      setPortOn(draft, "b", 0, { pol: "give" });
+      setTypingOn(draft, { types: "optional" });
+      expect(ed.system.type("b").ports?.[0]?.pol).toBe("take");
+      expect(ed.system.typing.types).toBe("off");
+      const fx = ed.draftEffects(draft);
+      expect(fx.wires).toHaveLength(1);
+      expect(fx.rules.map((r) => r.left + r.right)).toEqual(["ab"]);
+
+      ed.applyTyping(draft);
+      expect(ed.system.type("b").ports?.[0]?.pol).toBe("give");
+      expect(ed.system.typing.types).toBe("optional");
+      expect(ed.system.ruleFor("a", "b")).toBeUndefined();
+      expect(ed.net.free.size).toBe(2);
+      expect(ed.model.historySize()).toEqual({ undo: 1, redo: 0 });
       dispose();
     });
   });

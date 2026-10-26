@@ -155,3 +155,110 @@ export function portsFor(t: AgentType, arity = t.arity): PortSpec[] {
 
 /** Port labels fall back to their position. */
 export const portName = (slot: number) => (slot === 0 ? "principal port" : `aux port ${slot}`);
+
+/*
+ * Editing a system's directions and types. Each changes the system it's
+ * given in place, so the same edit works on the live system and on a draft
+ * (the directions and types sheet edits a copy until it's saved).
+ */
+
+/** Replace an agent type's ports, keeping everything else about it. */
+export function setPorts(sys: System, id: string, ports: PortSpec[]) {
+  const t = sys.type(id);
+  sys.types.set(id, { ...t, ports });
+}
+
+/** Set one port's direction or type (or label); undefined clears it. */
+export function setPortOn(sys: System, id: string, slot: number, patch: Partial<PortSpec>) {
+  const ports = portsFor(sys.type(id));
+  ports[slot] = { ...ports[slot], ...patch };
+  for (const k of ["pol", "type", "label"] as const) if (ports[slot]![k] === undefined) delete ports[slot]![k];
+  setPorts(sys, id, ports);
+}
+
+/** Change how strict the system is. Turning a dimension off forgets it on every port. */
+export function setTypingOn(sys: System, next: Partial<Typing>) {
+  const typing = { ...sys.typing, ...next };
+  for (const t of [...sys.types.values()]) {
+    if (!t.ports) continue;
+    const ports = t.ports.map((p) => {
+      const q = { ...p };
+      if (typing.dirs === "off") delete q.pol;
+      if (typing.types === "off") delete q.type;
+      return q;
+    });
+    sys.types.set(t.id, { ...t, ports });
+  }
+  if (typing.types === "off") typing.names = [];
+  sys.typing = typing;
+}
+
+/** Why a name won't do for a new type, if it won't. */
+export function typeNameProblem(sys: System, name: string): string | undefined {
+  if (!name) return "Give it a name.";
+  if (sys.typing.names.includes(name)) return `There's already a type called ${name}.`;
+  if (/[\s,;()~"+]/.test(name) || name.startsWith("-")) return "Use letters, digits, - and _ only.";
+  return undefined;
+}
+
+/** Add a type ports can have. Returns why not, if the name won't do. */
+export function addTypeNameOn(sys: System, name: string): string | undefined {
+  const n = name.trim();
+  const why = typeNameProblem(sys, n);
+  if (why) return why;
+  sys.typing = { ...sys.typing, names: [...sys.typing.names, n] };
+  return undefined;
+}
+
+/** Rename a type, on every port that has it. Returns why not, if the name won't do. */
+export function renameTypeNameOn(sys: System, from: string, to: string): string | undefined {
+  const n = to.trim();
+  if (!n || n === from) return;
+  const why = typeNameProblem(sys, n);
+  if (why) return why;
+  sys.typing = { ...sys.typing, names: sys.typing.names.map((x) => (x === from ? n : x)) };
+  for (const t of [...sys.types.values()]) {
+    if (t.ports?.some((p) => p.type === from)) setPorts(sys, t.id, t.ports.map((p) => (p.type === from ? { ...p, type: n } : p)));
+  }
+}
+
+/** Forget a type: its ports fit anything again, so no wire breaks. */
+export function deleteTypeNameOn(sys: System, name: string) {
+  sys.typing = { ...sys.typing, names: sys.typing.names.filter((x) => x !== name) };
+  for (const t of [...sys.types.values()]) {
+    if (!t.ports?.some((p) => p.type === name)) continue;
+    setPorts(sys, t.id, t.ports.map((p) => { if (p.type !== name) return p; const { type: _, ...rest } = p; return rest; }));
+  }
+}
+
+/** How many ports have a type. */
+export function typeUses(sys: System, name: string): number {
+  let n = 0;
+  for (const t of sys.types.values()) for (const p of t.ports ?? []) if (p.type === name) n++;
+  return n;
+}
+
+/** Fill in missing directions and types from what the ports are wired to in a net. Returns how many it filled. */
+export function guessPortsOn(sys: System, net: Net, what: "dir" | "type" | "both" = "both"): number {
+  // For each agent type, a guess per slot from the first wired port that says something.
+  const guesses = new Map<string, PortSpec[]>();
+  for (const a of net.agents.values()) {
+    const t = sys.types.get(a.type);
+    if (!t) continue;
+    const gs = guesses.get(a.type) ?? Array.from({ length: t.arity + 1 }, () => ({}) as PortSpec);
+    guesses.set(a.type, gs);
+    a.wires.forEach((_, slot) => {
+      const p = net.partner({ kind: "port", agent: a.id, slot });
+      if (p?.kind !== "port") return;
+      const there = flip(specOf(sys, net.agent(p.agent).type, p.slot));
+      if (what !== "type" && there.pol && !t.ports?.[slot]?.pol) gs[slot]!.pol ??= there.pol;
+      if (what !== "dir" && there.type && !t.ports?.[slot]?.type) gs[slot]!.type ??= there.type;
+    });
+  }
+  const n = [...guesses.values()].flat().reduce((k, g) => k + (g.pol ? 1 : 0) + (g.type ? 1 : 0), 0);
+  for (const [id, gs] of guesses) {
+    const t = sys.type(id);
+    setPorts(sys, id, Array.from({ length: t.arity + 1 }, (_, s) => ({ ...gs[s], ...(t.ports?.[s] ?? {}) })));
+  }
+  return n;
+}
