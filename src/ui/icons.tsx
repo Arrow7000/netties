@@ -63,3 +63,18 @@ export const Left = icon(() => <path d="M10 4L6 8l4 4" {...line} />);
 export const Right = icon(() => <path d="M6 4l4 4-4 4" {...line} />);
 /** Tidy: three rows lined up. */
 export const Tidy = icon(() => <path d="M3 4h10M5 8h6M4 12h8" {...line} />);
+/** Reset: an arrow going back round. */
+export const Reset = icon(() =>
+  <>
+    <path d="M2.5 8a5.5 5.5 0 105.5-5.5 6 6 0 00-4.1 1.7L2.5 5.6" {...line} stroke-width={1.4} />
+    <path d="M2.5 2.5v3.1h3.1" {...line} stroke-width={1.4} />
+  </>,
+);
+/** Settings for the view: two sliders. */
+export const Sliders = icon(() =>
+  <>
+    <path d="M2.5 5h6M12 5h1.5M2.5 11h1.5M8 11h5.5" {...line} stroke-width={1.4} />
+    <circle cx="10.2" cy="5" r="1.7" {...line} stroke-width={1.4} />
+    <circle cx="5.8" cy="11" r="1.7" {...line} stroke-width={1.4} />
+  </>,
+);

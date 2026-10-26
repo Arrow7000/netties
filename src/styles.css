@@ -85,6 +85,30 @@
   box-sizing: border-box;
 }
 
+/*
+ * The page itself never zooms, scrolls or bounces: the canvas has its own
+ * zoom. Panning stays allowed, for menus and sheets that scroll.
+ */
+html {
+  touch-action: pan-x pan-y;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* No double-tap zoom on controls, so quick taps are quick. */
+button,
+input,
+select,
+label,
+.island,
+.menu,
+.pop,
+.toast {
+  touch-action: manipulation;
+}
+
 html,
 body,
 #root {
@@ -561,6 +585,9 @@ kbd {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  /* No callout menu or grey flash when a finger holds or taps the canvas. */
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
   cursor: default;
 }
 
@@ -1100,7 +1127,7 @@ kbd {
   top: 64px;
   right: 12px;
   width: 236px;
-  max-height: calc(100vh - 140px);
+  max-height: calc(100dvh - 140px);
   flex-direction: column;
   align-items: stretch;
   padding: 0;
@@ -1552,7 +1579,7 @@ kbd {
   right: 262px;
   padding: 16px 18px;
   max-width: calc(100vw - 300px);
-  max-height: calc(100vh - 150px);
+  max-height: calc(100dvh - 150px);
   overflow: auto;
 }
 
@@ -1565,7 +1592,7 @@ kbd {
   top: 64px;
   right: 262px;
   width: 620px;
-  max-height: calc(100vh - 150px);
+  max-height: calc(100dvh - 150px);
   overflow: auto;
   display: grid;
   grid-template-columns: 210px 1fr;
@@ -2321,23 +2348,6 @@ kbd {
   color: var(--stuck);
 }
 
-@media (max-width: 760px) {
-  .palette,
-  .counters {
-    display: none;
-  }
-
-  .speed input {
-    width: 70px;
-  }
-
-  .rule-body,
-  .translate-body {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 2fr) 28px minmax(0, 5fr);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
@@ -2596,7 +2606,7 @@ button.type-chip:hover {
   top: 64px;
   right: 262px;
   width: min(720px, calc(100vw - 290px));
-  max-height: calc(100vh - 150px);
+  max-height: calc(100dvh - 150px);
   overflow: auto;
   padding: 0 0 8px;
 }
@@ -3327,4 +3337,388 @@ button.select.open {
 
 .btn.flash-warm {
   animation: flash-warm 0.6s ease-out 1;
+}
+
+/* Narrow and phone layouts: last, so they override the rules above. */
+
+@media (max-width: 760px) {
+  .rule-body,
+  .translate-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 2fr) 28px minmax(0, 5fr);
+  }
+
+  .rule-body.single {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  /* Before above after: the arrow between them points down. */
+  .rule-arrow,
+  .rp-arrow {
+    font-size: 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .rule-arrow::after {
+    content: "↧";
+    font-size: 20px;
+  }
+
+  .rp-arrow::after {
+    content: "↓";
+    font-size: 16px;
+  }
+
+  /* Both halves share one zoom, so the pair gets enough height not to shrink the result. */
+  .rp-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 2fr) 26px minmax(0, 3fr);
+  }
+
+  .rp-before {
+    border-right: 0;
+  }
+
+  .rp-arrow {
+    background: linear-gradient(180deg, var(--chrome-2), var(--paper));
+  }
+
+  .type-editor {
+    grid-template-columns: 1fr;
+    align-content: start;
+  }
+
+  /* The table keeps its columns and scrolls sideways inside the sheet. */
+  .ts-table {
+    grid-template-columns: 160px 256px 190px;
+    width: max-content;
+  }
+}
+
+/*
+ * A tablet's notch and home bar. Only on touch screens: on a desktop the
+ * insets are nothing, but a calc() with them still moves the bars a
+ * fraction of a pixel.
+ */
+@media (pointer: coarse) {
+  .top-left {
+    top: calc(12px + env(safe-area-inset-top));
+    left: calc(12px + env(safe-area-inset-left));
+  }
+
+  .top-right {
+    top: calc(12px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right));
+  }
+
+  .bottom-bar {
+    left: calc(12px + env(safe-area-inset-left));
+    right: calc(12px + env(safe-area-inset-right));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+
+  .panel-stack {
+    left: calc(12px + env(safe-area-inset-left));
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
+/*
+ * Phones, upright or sideways (src/ui/compact.ts has the same query). The
+ * palette goes; the bars keep only what fits across 360px, the rest is in
+ * menus; every control is at least 40px for a finger; the other screens
+ * fill the screen. Islands sit 8px in, clear of the notch and home bar.
+ */
+@media (max-width: 760px), (max-height: 500px) {
+  .palette {
+    display: none;
+  }
+
+  .top-left {
+    top: calc(8px + env(safe-area-inset-top));
+    left: calc(8px + env(safe-area-inset-left));
+  }
+
+  .top-right {
+    top: calc(8px + env(safe-area-inset-top));
+    right: calc(8px + env(safe-area-inset-right));
+  }
+
+  .bottom-bar {
+    left: calc(8px + env(safe-area-inset-left));
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .transport {
+    padding: 4px;
+  }
+
+  .island .btn {
+    height: 40px;
+    min-width: 40px;
+  }
+
+  .island .btn.icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .top-left .btn {
+    padding: 0 8px 0 10px;
+    gap: 3px;
+  }
+
+  .brand {
+    padding: 0 8px;
+  }
+
+  .brand-name {
+    display: none;
+  }
+
+  .mi {
+    min-height: 40px;
+  }
+
+  /* The top bar's menus drop down across the screen, or as far as reads well sideways. */
+  .top-left .menu {
+    position: fixed;
+    top: calc(64px + env(safe-area-inset-top));
+    left: calc(8px + env(safe-area-inset-left));
+    width: min(420px, calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+    min-width: 0;
+  }
+
+  /* Above the bottom bar while a menu is open. */
+  .top-left:has(.menu) {
+    z-index: 12;
+  }
+
+  .examples-scroll {
+    max-height: calc(100dvh - 88px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .menu-head {
+    max-width: none;
+  }
+
+  /* The view menu: speed and layout in rows, then the display preferences. */
+  .view-controls .menu {
+    bottom: calc(100% + 8px);
+    right: -5px;
+    width: min(320px, calc(100vw - 16px));
+    max-height: calc(100dvh - 80px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+
+  .menu-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 4px 4px 10px;
+  }
+
+  .menu-label {
+    flex: none;
+    width: 58px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .menu-row .speed {
+    flex: 1;
+    padding: 0;
+  }
+
+  .menu-row .speed input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    height: 40px;
+  }
+
+  .menu-row .seg button {
+    height: 36px;
+    padding: 0 14px;
+  }
+
+  .menu-row .btn {
+    height: 40px;
+    margin-left: auto;
+  }
+
+  .menu.popover {
+    max-width: calc(100vw - 16px);
+  }
+
+  /* What's tapped or selected: a card along the bottom, above the bar. */
+  .panel-stack {
+    left: calc(8px + env(safe-area-inset-left));
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: calc(66px + env(safe-area-inset-bottom));
+    align-items: stretch;
+  }
+
+  .panel {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: 40dvh;
+    overflow-y: auto;
+  }
+
+  /* A tap both points at something and selects it: show it once. */
+  .panel-stack:has(.selection-panel) .hover-panel {
+    display: none;
+  }
+
+  .panel-row {
+    flex-wrap: wrap;
+  }
+
+  .panel-row .btn.small {
+    height: 36px;
+    min-width: 36px;
+  }
+
+  .panel-row .btn.small.icon {
+    width: 36px;
+  }
+
+  .panel-row .input {
+    height: 36px;
+    flex: 1;
+  }
+
+  /* The keyboard hints mean nothing on a phone; reasons for a disabled action still show. */
+  .panel-why:not(.on),
+  .toast .kbd,
+  .rp-bar .kbd {
+    display: none;
+  }
+
+  /* Under the top bar, clear of the card along the bottom; over a full-screen editor, at the very top, clear of its Save. */
+  .toast {
+    top: calc(66px + env(safe-area-inset-top));
+    bottom: auto;
+    width: max-content;
+    max-width: calc(100vw - 16px);
+  }
+
+  .app:has(.rule-editor, .rule-panel, .type-editor, .types-sheet, .grid-pop) .toast {
+    top: calc(8px + env(safe-area-inset-top));
+    bottom: auto;
+  }
+
+  .toast button {
+    height: 32px;
+  }
+
+  .alt-banner {
+    top: calc(66px + env(safe-area-inset-top));
+  }
+
+  .empty-card {
+    max-width: calc(100vw - 48px);
+  }
+
+  /* Full-screen editors and sheets, clear of the notch and home bar. */
+  .rule-head {
+    padding: calc(8px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 8px calc(12px + env(safe-area-inset-left));
+  }
+
+  .rule-palette {
+    padding-left: calc(12px + env(safe-area-inset-left));
+    padding-right: calc(12px + env(safe-area-inset-right));
+  }
+
+  .rule-help {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .rule-head .btn,
+  .rule-palette .btn,
+  .rule-panel .btn {
+    height: 40px;
+    min-width: 40px;
+  }
+
+  .rule-head .btn.icon,
+  .rule-panel .btn.icon {
+    width: 40px;
+  }
+
+  /* The rule editor's panel fills the screen; it can't be moved or resized. */
+  .rule-panel {
+    top: 0 !important;
+    left: 0 !important;
+    right: 0;
+    bottom: 0;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0;
+    min-height: 0;
+    z-index: 50;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .rp-head {
+    flex-wrap: wrap;
+    cursor: default;
+  }
+
+  .rp-desc input {
+    max-width: 100%;
+  }
+
+  .rp-bar {
+    flex-wrap: wrap;
+  }
+
+  .rp-grip,
+  .rp-hint {
+    display: none;
+  }
+
+  .rp-confirm {
+    width: min(270px, calc(100vw - 32px));
+  }
+
+  .type-editor,
+  .types-sheet,
+  .grid-pop {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    z-index: 50;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .grid-pop {
+    padding: calc(12px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+  }
+}
+
+/* Sideways, the card keeps to the left, wide enough for its actions to fit on one line. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .panel-stack {
+    right: auto;
+    width: min(580px, calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  }
 }

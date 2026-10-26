@@ -1,7 +1,8 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { createEditor } from "./state/editor";
 import { type Doc, fromShareHash, loadLocal } from "./state/persist";
-import { Canvas, createCamera } from "./ui/Canvas";
+import { Canvas, type Pad, createCamera } from "./ui/Canvas";
+import { compact, fingers } from "./ui/compact";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { ExamplesMenu } from "./ui/ExamplesMenu";
 import { Menu, MenuItem } from "./ui/Menu";
@@ -28,6 +29,9 @@ const SPEED_MIN = -3;
 const SPEED_MAX = 2;
 const SLOW = 0.2;
 
+/** Room the desktop chrome takes round the canvas: the bars, and the palette on the right. */
+const DESKTOP_PAD: Pad = { t: 72, r: 270, b: 90, l: 48 };
+
 export function App(props: { initial?: Doc; fromLink?: boolean }) {
   const ed = createEditor(props.initial);
   ed.init();
@@ -42,10 +46,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
     else document.documentElement.dataset.theme = t;
     if (t) safeSet(THEME_KEY, t);
   });
-  const toggleTheme = () => {
-    const dark = theme() ? theme() === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-    setTheme(dark ? "light" : "dark");
-  };
+  const dark = () => (theme() ? theme() === "dark" : matchMedia("(prefers-color-scheme: dark)").matches);
+  const toggleTheme = () => setTheme(dark() ? "light" : "dark");
 
   // Save after every change.
   createEffect(on([ed.rev, m.mode], () => ed.save()));
@@ -197,6 +199,36 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
 
   createEffect(on(m.fitTick, () => queueMicrotask(camera.fit), { defer: true }));
 
+  // On a phone the canvas is fitted between the bars actually shown, measured,
+  // so the room they take follows rotation and the safe areas.
+  let topBar!: HTMLDivElement;
+  let bottomBar!: HTMLDivElement;
+  const [viewport, setViewport] = createSignal(0);
+  onMount(() => {
+    const resized = () => setViewport((n) => n + 1);
+    window.addEventListener("resize", resized);
+    // Turning the phone refits the net, once the canvas has its new size.
+    const turn = matchMedia("(orientation: portrait)");
+    const turned = () => compact() && requestAnimationFrame(() => requestAnimationFrame(() => camera.fit()));
+    turn.addEventListener("change", turned);
+    // Safari zooms the whole page on a pinch, whatever touch-action says.
+    const noPinch = (e: Event) => e.preventDefault();
+    document.addEventListener("gesturestart", noPinch);
+    onCleanup(() => {
+      window.removeEventListener("resize", resized);
+      turn.removeEventListener("change", turned);
+      document.removeEventListener("gesturestart", noPinch);
+    });
+  });
+  const pad = (): Pad => {
+    if (!compact()) return DESKTOP_PAD;
+    viewport();
+    const top = topBar.getBoundingClientRect();
+    const bars = [...bottomBar.querySelectorAll(".island")].map((el) => el.getBoundingClientRect().top);
+    const bottom = bars.length ? Math.min(...bars) : innerHeight;
+    return { t: top.bottom + 12, r: top.left + 8, b: innerHeight - bottom + 12, l: top.left + 8 };
+  };
+
   /** Clicking a pair with no rule opens the rule editor for it. */
   const openStuck = (w: number) => {
     if (!canLeave()) return;
@@ -256,6 +288,51 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
     return `${s >= 1 ? Math.round(s * 10) / 10 : Math.round(s * 100) / 100}×`;
   };
 
+  // Pieces of the bottom bar that move into the view menu on a phone.
+  const speed = () => (
+    <div class="speed">
+      <button class="btn icon" aria-pressed={slow()} classList={{ on: slow() }} onClick={toggleSlow} title="Slow motion">
+        <I.Slow />
+      </button>
+      <input
+        type="range"
+        min={SPEED_MIN}
+        max={SPEED_MAX}
+        step={0.25}
+        value={Math.log2(ed.speed())}
+        onInput={(e) => ed.setSpeed(2 ** e.currentTarget.valueAsNumber)}
+        aria-label="Animation speed"
+      />
+      <output>{speedText()}</output>
+    </div>
+  );
+  const layout = () => (
+    <>
+      <div class="seg" role="group" aria-label="Layout">
+        <button aria-pressed={m.mode() === "auto"} onClick={() => ed.dispatch({ kind: "layout/set", mode: "auto" })} title="Lay the net out automatically">
+          Auto
+        </button>
+        <button aria-pressed={m.mode() === "manual"} onClick={() => ed.dispatch({ kind: "layout/set", mode: "manual" })} title="Place agents yourself; wires still route themselves">
+          Manual
+        </button>
+      </div>
+      <button class="btn" onClick={() => ed.dispatch({ kind: "layout/tidy" })} disabled={m.mode() !== "manual"} title="Tidy up manually placed agents">
+        Tidy
+      </button>
+    </>
+  );
+  const wireTypes = (close: () => void) => (
+    <MenuItem
+      lead={prefs.wireTypes() ? <I.Check /> : <span class="mi-blank" />}
+      title="Type labels on every wire"
+      note={(ed.rev(), typingOn(ed.system.typing)) ? "Otherwise a wire shows its type when you point at it" : "This system has no types"}
+      onClick={() => {
+        prefs.setWireTypes(!prefs.wireTypes());
+        close();
+      }}
+    />
+  );
+
   return (
     <div class="app">
       <Canvas
@@ -264,29 +341,42 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
         onFire={(wire) => ed.dispatch({ kind: "run/fire", wire })}
         preview={ed.preview}
         previewing={ed.previewing}
-        fitPreviews={ed.running}
+        // On a phone, a tapped pair's preview is brought into view too, since there's no room to spare beside it.
+        fitPreviews={() => ed.running() || (compact() && fingers())}
         onStuck={openStuck}
-        pad={{ t: 72, r: 270, b: 90, l: 48 }}
+        pad={pad()}
         empty={
           <div class="empty-card">
             <b>The net is empty</b>
-            Drag an agent in from the panel on the right, or load an example.
+            {compact() ? "Load one from Examples." : "Drag an agent in from the panel on the right, or load an example."}
           </div>
         }
       />
 
-      <div class="island top-left">
+      <div class="island top-left" ref={topBar}>
         <div class="brand">
           <svg viewBox="-12 -14 24 28" aria-hidden="true">
             <polygon points="-9,-13 9,-13 0,-2" class="brand-filled" />
             <polygon points="-9,13 9,13 0,2" class="brand-hollow" />
           </svg>
-          netties
+          <span class="brand-name">netties</span>
         </div>
         <span class="sep" />
         <Menu label="File" title="Text, translation, sharing and export">
           {(close) => (
             <>
+              {/* On a phone the link is shared from here, to keep the top bar short. */}
+              <Show when={compact()}>
+                <MenuItem
+                  title={stale() ? "Update link" : "Copy link"}
+                  note={stale() ? "The net has changed since the link in the address bar was made" : "Put a link to this net in the address bar and copy it"}
+                  onClick={() => {
+                    share().then(() => copied() && ed.setMessage("Copied a link to this net."));
+                    close();
+                  }}
+                />
+                <hr />
+              </Show>
               <MenuItem
                 title="Text view"
                 note="See and edit the agents, rules and net as text"
@@ -325,6 +415,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
           )}
         </Menu>
         <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
+        <Show when={!compact()}>
         <span class="sep" />
         <button
           class="btn share"
@@ -341,6 +432,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
           </Show>
           {copied() ? "Copied" : stale() ? "Update link" : "Copy link"}
         </button>
+        </Show>
       </div>
 
       <div class="island top-right">
@@ -363,10 +455,13 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
         >
           <I.Redo />
         </button>
-        <span class="sep" />
-        <button class="btn icon" onClick={toggleTheme} title="Switch between light and dark">
-          <I.Theme />
-        </button>
+        {/* On a phone the theme is in the view menu. */}
+        <Show when={!compact()}>
+          <span class="sep" />
+          <button class="btn icon" onClick={toggleTheme} title="Switch between light and dark">
+            <I.Theme />
+          </button>
+        </Show>
       </div>
 
       <Palette ed={ed} camera={camera} />
@@ -375,31 +470,38 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
         <HoverPanel ed={ed} />
         <SelectionPanel ed={ed} />
       </div>
-      <div class="bottom-bar">
-        <Counters ed={ed} />
+      <div class="bottom-bar" ref={bottomBar}>
+        <Show when={!compact()}>
+          <Counters ed={ed} />
+        </Show>
 
+        {/* On a phone the run controls are icons, all but Run, and the speed is in the view menu. */}
         <div class="island transport" aria-label="Run">
           <button
             class="btn outline"
+            classList={{ icon: compact() }}
             onClick={() => ed.dispatch({ kind: "run/step-one" })}
             onPointerEnter={() => !ed.running() && ed.setPreviewMode("next")}
             onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
             disabled={!active() || ed.running()}
             title="Fire one active pair (S)"
+            aria-label={compact() ? "Step" : undefined}
           >
             <I.Step />
-            Step
+            {compact() ? undefined : "Step"}
           </button>
           <button
             class="btn outline"
+            classList={{ icon: compact() }}
             onClick={() => ed.dispatch({ kind: "run/step-all" })}
             onPointerEnter={() => !ed.running() && ed.setPreviewMode("all")}
             onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
             disabled={!active() || ed.running()}
             title="Fire every active pair at once (A)"
+            aria-label={compact() ? "Step all" : undefined}
           >
             <I.StepAll />
-            Step all
+            {compact() ? undefined : "Step all"}
           </button>
           <button
             class="btn run"
@@ -414,75 +516,88 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
             {ed.running() ? "Stop" : "Run"}
           </button>
           <Show when={ed.canResetExample()}>
-            <button class="btn outline" onClick={ed.resetExample} title="Restore the loaded example to its starting net. You can undo this.">
-              Reset example
-            </button>
+            <Show
+              when={!compact()}
+              fallback={
+                <button class="btn outline icon" onClick={ed.resetExample} title="Reset example: restore its starting net. You can undo this." aria-label="Reset example">
+                  <I.Reset />
+                </button>
+              }
+            >
+              <button class="btn outline" onClick={ed.resetExample} title="Restore the loaded example to its starting net. You can undo this.">
+                Reset example
+              </button>
+            </Show>
           </Show>
-          <span class="sep" />
-          <div class="speed">
-            <button class="btn icon" aria-pressed={slow()} classList={{ on: slow() }} onClick={toggleSlow} title="Slow motion">
-              <I.Slow />
-            </button>
-            <input
-              type="range"
-              min={SPEED_MIN}
-              max={SPEED_MAX}
-              step={0.25}
-              value={Math.log2(ed.speed())}
-              onInput={(e) => ed.setSpeed(2 ** e.currentTarget.valueAsNumber)}
-              aria-label="Animation speed"
-            />
-            <output>{speedText()}</output>
-          </div>
+          <Show when={!compact()}>
+            <span class="sep" />
+            {speed()}
+          </Show>
         </div>
 
         <div class="island view-controls">
-          <div class="seg" role="group" aria-label="Layout">
-            <button aria-pressed={m.mode() === "auto"} onClick={() => ed.dispatch({ kind: "layout/set", mode: "auto" })} title="Lay the net out automatically">
-              Auto
-            </button>
-            <button aria-pressed={m.mode() === "manual"} onClick={() => ed.dispatch({ kind: "layout/set", mode: "manual" })} title="Place agents yourself; wires still route themselves">
-              Manual
-            </button>
-          </div>
-          <button class="btn" onClick={() => ed.dispatch({ kind: "layout/tidy" })} disabled={m.mode() !== "manual"} title="Tidy up manually placed agents">
-            Tidy
-          </button>
-          <span class="sep" />
-          <button class="btn icon" onClick={() => camera.zoomBy(1 / 1.25)} title="Zoom out">
-            <I.Minus />
-          </button>
-          <button class="btn zoom" onClick={() => camera.zoomTo(1)} title="Zoom to 100%">
-            {Math.round(camera.view().k * 100)}%
-          </button>
-          <button class="btn icon" onClick={() => camera.zoomBy(1.25)} title="Zoom in">
-            <I.Plus />
-          </button>
-          <button class="btn" onClick={camera.fit} title="Fit the net in view (F)">
-            <I.Fit />
-            Fit
-          </button>
-          <span class="sep" />
-          <Menu label={<I.Eye />} title="View options" class="icon up">
-            {(close) => (
+          <Show
+            when={!compact()}
+            fallback={
               <>
-                <div class="menu-head">Just for you, in this browser</div>
-                <MenuItem
-                  lead={prefs.wireTypes() ? <I.Check /> : <span class="mi-blank" />}
-                  title="Type labels on every wire"
-                  note={
-                    (ed.rev(), typingOn(ed.system.typing))
-                      ? "Otherwise a wire shows its type when you point at it"
-                      : "This system has no types"
-                  }
-                  onClick={() => {
-                    prefs.setWireTypes(!prefs.wireTypes());
-                    close();
-                  }}
-                />
+                <button class="btn" onClick={camera.fit} title="Fit the net in view">
+                  <I.Fit />
+                  Fit
+                </button>
+                <span class="sep" />
+                <Menu label={<I.Sliders />} title="Speed, layout and view" class="icon" menuClass="view-menu" bare>
+                  {(close) => (
+                    <>
+                      <div class="menu-row">
+                        <span class="menu-label">Speed</span>
+                        {speed()}
+                      </div>
+                      <div class="menu-row">
+                        <span class="menu-label">Layout</span>
+                        {layout()}
+                      </div>
+                      <hr />
+                      <div class="menu-head">Just for you, in this browser</div>
+                      {wireTypes(close)}
+                      <MenuItem
+                        lead={dark() ? <I.Check /> : <span class="mi-blank" />}
+                        title="Dark theme"
+                        onClick={() => {
+                          toggleTheme();
+                          close();
+                        }}
+                      />
+                    </>
+                  )}
+                </Menu>
               </>
-            )}
-          </Menu>
+            }
+          >
+            {layout()}
+            <span class="sep" />
+            <button class="btn icon" onClick={() => camera.zoomBy(1 / 1.25)} title="Zoom out">
+              <I.Minus />
+            </button>
+            <button class="btn zoom" onClick={() => camera.zoomTo(1)} title="Zoom to 100%">
+              {Math.round(camera.view().k * 100)}%
+            </button>
+            <button class="btn icon" onClick={() => camera.zoomBy(1.25)} title="Zoom in">
+              <I.Plus />
+            </button>
+            <button class="btn" onClick={camera.fit} title="Fit the net in view (F)">
+              <I.Fit />
+              Fit
+            </button>
+            <span class="sep" />
+            <Menu label={<I.Eye />} title="View options" class="icon up">
+              {(close) => (
+                <>
+                  <div class="menu-head">Just for you, in this browser</div>
+                  {wireTypes(close)}
+                </>
+              )}
+            </Menu>
+          </Show>
         </div>
       </div>
 

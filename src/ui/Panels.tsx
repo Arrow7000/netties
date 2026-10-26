@@ -6,6 +6,7 @@ import { type Effective, canMeet, clash, clashText, endSpec, specOf } from "../c
 import type { Editor } from "../state/editor";
 import { Menu, MenuItem } from "./Menu";
 import { held } from "./keys";
+import { fingers } from "./compact";
 import { Glyph } from "./Glyph";
 import { PairIcons, PolarityIcon } from "./PolarityIcon";
 import { Trash } from "./icons";
@@ -91,7 +92,7 @@ export function HoverPanel(props: { ed: Editor }) {
             aside: "component",
             lines: [
               { text: `A component instance with ${t.arity + 1} ports. It comes apart as soon as anything inside it interacts.` },
-              { text: "Double-click to open it." },
+              { text: fingers() ? "Double-tap to open it." : "Double-click to open it." },
             ],
           };
         }
@@ -102,7 +103,7 @@ export function HoverPanel(props: { ed: Editor }) {
             </>
           ),
           aside: t.arity === 1 ? "1 aux port" : `${t.arity} aux ports`,
-          lines: [{ text: manual ? "Click to select. Drag to move." : "Click to select. Drag to move; auto layout will return it to place." }],
+          lines: [{ text: `${fingers() ? "Tap" : "Click"} to select. Drag to move${manual ? "." : "; auto layout will return it to place."}` }],
         };
       }
       case "port": {
@@ -155,7 +156,7 @@ export function HoverPanel(props: { ed: Editor }) {
             return {
               title,
               aside: "active pair",
-              lines: [{ text: found?.rule.description ?? what }, { text: "Click to fire. Alt-click selects the wire." }],
+              lines: [{ text: found?.rule.description ?? what }, { text: fingers() ? "Tap again to fire." : "Click to fire. Alt-click selects the wire." }],
             };
           }
           const broken = v.sys.ruleFor(n.typeOf(pair[0])!.id, n.typeOf(pair[1])!.id);
@@ -163,7 +164,7 @@ export function HoverPanel(props: { ed: Editor }) {
             return {
               title,
               aside: "rule breaks the types",
-              lines: [{ text: "Its rule joins ports that don't fit, so it can't fire. Click to fix it.", tone: "bad" }],
+              lines: [{ text: `Its rule joins ports that don't fit, so it can't fire. ${fingers() ? "Tap again" : "Click"} to fix it.`, tone: "bad" }],
             };
           }
           return {
@@ -171,7 +172,7 @@ export function HoverPanel(props: { ed: Editor }) {
             aside: "no rule",
             lines: [
               { text: "Their principal ports touch, but there's no rule for this pair.", tone: "bad" },
-              { text: "Click to write one." },
+              { text: fingers() ? "Tap again to write one." : "Click to write one." },
             ],
           };
         }
@@ -192,7 +193,7 @@ export function HoverPanel(props: { ed: Editor }) {
         return {
           title: <>{ed.defs().get(g?.def ?? "")?.name ?? "Component"}</>,
           aside: "open component",
-          lines: [{ text: "Double-click the outline to close it." }],
+          lines: [{ text: `${fingers() ? "Double-tap" : "Double-click"} the outline to close it.` }],
         };
       }
       case "drag": {
@@ -306,7 +307,7 @@ export function HoverPanel(props: { ed: Editor }) {
               </>
             ),
             aside: "rule breaks the types",
-            lines: [{ text: "It joins ports that don't fit, so it can't fire.", tone: "bad" }, { text: "Click to fix it." }],
+            lines: [{ text: "It joins ports that don't fit, so it can't fire.", tone: "bad" }, { text: `${fingers() ? "Tap" : "Click"} to fix it.` }],
           };
         }
         const here = [...m.activeWires(), ...m.stuckWires()].filter((w) => {
@@ -325,9 +326,9 @@ export function HoverPanel(props: { ed: Editor }) {
           lines: has
             ? [
                 { text: `${ed.system.ruleFor(h.a, h.b)!.rule.description ?? "Says what the pair turns into when they meet."}${count}` },
-                { text: "Click to see or change it." },
+                { text: `${fingers() ? "Tap" : "Click"} to see or change it.` },
               ]
-            : [{ text: `Nothing happens when they meet.${count}`, tone: here ? "bad" : undefined }, { text: "Click to write a rule." }],
+            : [{ text: `Nothing happens when they meet.${count}`, tone: here ? "bad" : undefined }, { text: `${fingers() ? "Tap" : "Click"} to write a rule.` }],
         };
       }
     }
@@ -521,7 +522,7 @@ export function SelectionPanel(props: { ed: Editor }) {
     return { info: { title, aside: count, lines: [] } as Info, actions: itemActions(agents, groups) };
   });
 
-  const hint = () => (m.selection()?.kind === "wire" ? "Esc clears the selection." : "Shift-click adds to the selection. Esc clears it.");
+  const hint = () => (fingers() ? "Tap the empty canvas to clear the selection." : m.selection()?.kind === "wire" ? "Esc clears the selection." : "Shift-click adds to the selection. Esc clears it.");
 
   return (
     <Show when={content()}>

@@ -8,6 +8,8 @@ export function Menu(props: {
   title?: string;
   class?: string;
   menuClass?: string;
+  /** Leave out the chevron, for a button that is only an icon. */
+  bare?: boolean;
   /** The menu's contents; call `close` after acting on a pick. */
   children: (close: () => void) => JSX.Element;
 }) {
@@ -33,7 +35,9 @@ export function Menu(props: {
         onClick={() => setOpen(!open())}
       >
         {props.label}
-        <Chevron />
+        <Show when={!props.bare}>
+          <Chevron />
+        </Show>
       </button>
       <Show when={open()}>
         <div class={`menu ${props.menuClass ?? ""}`} role="menu">
