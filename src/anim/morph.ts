@@ -209,7 +209,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
   const halves = new Map<WireId, Pt[]>();
   for (const [id, r] of before.routed.wires) {
     const old = before.net.wires.get(id);
-    if (!old || old.ends.some((e) => e.kind !== "port")) continue;
+    if (!old || old.ends.some((e) => e.kind !== "port" || !after.net.agents.has(e.agent))) continue;
     const parts = old.ends.map((e) => {
       const w = after.net.wireAt(e);
       const other = w === NONE ? undefined : after.net.partner(e);

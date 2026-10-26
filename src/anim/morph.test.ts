@@ -84,4 +84,21 @@ describe("edit animation", () => {
     // Nothing of the joined wire is left behind to fade.
     expect(frame.wires.some((w) => w.id.startsWith("gone-"))).toBe(false);
   });
+
+  it("fades a wire whose agents are gone after the change, as when undoing a step", () => {
+    const sys = new System().addType({ id: "S", name: "S", symbol: "S", arity: 1 });
+    const net = new Net();
+    const a = net.addAgent(sys.type("S"));
+    const b = net.addAgent(sys.type("S"));
+    const placement = new Map([
+      [a, { x: 0, y: 0, orient: "down" as const }],
+      [b, { x: 80, y: 0, orient: "down" as const }],
+    ]);
+    const w = net.connect(port(a, 1), port(b, 1));
+    const before = { net: net.clone(), sys, placement, routed: route(net, placement) };
+    const after = { net: new Net(), sys, placement: new Map(), routed: route(new Net(), new Map()) };
+
+    const frame = buildMorph(before, after, []).at(0);
+    expect(frame.wires.map((x) => x.id)).toEqual([`gone-${w}`]);
+  });
 });
