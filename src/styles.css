@@ -2146,6 +2146,101 @@ kbd {
   color: color-mix(in srgb, var(--chrome) 60%, transparent);
 }
 
+/* Feedback: the form, and the card that asks for it once */
+
+.feedback-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.feedback {
+  width: min(440px, 100%);
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pop);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feedback h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.feedback p {
+  margin: -6px 0 0;
+}
+
+.feedback textarea.input {
+  height: auto;
+  padding: 8px 10px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.feedback-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.feedback-error {
+  color: var(--stuck);
+}
+
+.feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.feedback-nudge {
+  position: fixed;
+  top: 64px;
+  left: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px;
+  max-width: calc(100vw - 24px);
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  border-radius: var(--r-island);
+  box-shadow: var(--shadow);
+}
+
+.feedback-nudge-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: var(--r-ctl);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.feedback-nudge-ask:hover {
+  background: var(--chrome-2);
+}
+
+.feedback-nudge-ask span {
+  color: var(--accent);
+}
+
 /* Full-screen editors: rules, components, the translation, text */
 
 .rule-editor {

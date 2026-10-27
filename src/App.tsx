@@ -5,6 +5,7 @@ import { Canvas, type Pad, createCamera } from "./ui/Canvas";
 import { compact, fingers } from "./ui/compact";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { ExamplesMenu } from "./ui/ExamplesMenu";
+import { FEEDBACK, FeedbackDialog, FeedbackNudge } from "./ui/Feedback";
 import { Menu, MenuItem } from "./ui/Menu";
 import { Palette } from "./ui/Palette";
 import { Counters, HoverPanel, SelectionPanel } from "./ui/Panels";
@@ -267,6 +268,13 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
     } else ed.setMessage("Copying to the clipboard failed. The link is in the address bar: copy it from there.");
   };
 
+  const [feedback, setFeedback] = createSignal(false);
+  /** A link to the net as it is, for feedback, leaving the address bar alone. */
+  const netLink = async () => {
+    const { toShareHash } = await import("./state/persist");
+    return location.origin + location.pathname + (await toShareHash(ed.toDoc()));
+  };
+
   const exportSVG = async () => {
     const { toSVG } = await import("./render/svg");
     const css = getComputedStyle(document.documentElement);
@@ -441,6 +449,17 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
                   close();
                 }}
               />
+              <Show when={FEEDBACK}>
+                <hr />
+                <MenuItem
+                  title="Send feedback"
+                  note="Tell me what's confusing, broken or missing"
+                  onClick={() => {
+                    setFeedback(true);
+                    close();
+                  }}
+                />
+              </Show>
               <hr />
               <MenuItem
                 title="Clear net"
@@ -608,6 +627,19 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
       </Show>
       <Show when={ed.screen().kind === "rule" ? ed.screen() as Extract<ReturnType<typeof ed.screen>, { kind: "rule" }> : undefined} keyed>
         {(screen) => <RuleEditor ed={ed} left={screen.left} right={screen.right} phone={phone} />}
+      </Show>
+      <Show when={feedback()}>
+        <FeedbackDialog
+          netLink={netLink}
+          onClose={() => setFeedback(false)}
+          onSent={() => {
+            setFeedback(false);
+            ed.setMessage("Thanks! Your feedback is on its way.");
+          }}
+        />
+      </Show>
+      <Show when={FEEDBACK}>
+        <FeedbackNudge quiet={() => feedback() || ed.screen().kind !== "net" || ed.running()} onOpen={() => setFeedback(true)} />
       </Show>
       <Tooltips />
       {import.meta.env.DEV && <Show when={freezeState()}>

@@ -27,6 +27,14 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- For Netlify Forms to find: the feedback form itself is drawn by src/ui/Feedback.tsx. -->
+    <form name="feedback" data-netlify="true" netlify-honeypot="bot-field" hidden>
+      <input name="bot-field" />
+      <textarea name="message"></textarea>
+      <input name="email" type="email" />
+      <input name="net" />
+      <input name="device" />
+    </form>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
