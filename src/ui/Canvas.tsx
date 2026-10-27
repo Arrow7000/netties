@@ -124,8 +124,8 @@ export interface CanvasPhone {
   setArmed: (g: WireGesture | undefined) => void;
   /** A finger held on empty canvas and lifted: where, on screen (client pixels), and in the net. */
   onHoldMenu: (client: Pt, at: Pt) => void;
-  /** A finger's tap anywhere on the canvas. */
-  onTap: () => void;
+  /** A finger's tap anywhere on the canvas: on nothing (`empty`), or on something. */
+  onTap: (empty: boolean) => void;
 }
 
 const NO_PAD: Pad = { t: 40, r: 40, b: 40, l: 40 };
@@ -526,7 +526,7 @@ export function Canvas(props: CanvasProps) {
         return props.phone?.setArmed(undefined);
       case "tapped":
         lastTap = fx.empty ? { screen: fx.screen, time: fx.time } : undefined;
-        return props.phone?.onTap();
+        return props.phone?.onTap(fx.empty);
       case "zoom":
         return zoomGlide(fx.by, fx.about);
     }

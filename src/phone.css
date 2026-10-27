@@ -160,7 +160,7 @@
 .sheet-transport {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
 }
 
 /* Armed by a hold: Step and Step all show what they'd fire, in amber, until tapped again or let go. */
@@ -510,8 +510,44 @@
   scrollbar-width: none;
 }
 
+/*
+ * A row that scrolls on fades out at the end it scrolls on to, over most of
+ * a tile, and at the start too once scrolled; not where there's no more.
+ */
+@property --fade-l {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-r {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 .sheet-tiles:not(.wrap) {
-  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  --fade: 64px;
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    rgb(0 0 0 / 0.3) calc(var(--fade-l) * 0.4),
+    #000 var(--fade-l),
+    #000 calc(100% - var(--fade-r)),
+    rgb(0 0 0 / 0.3) calc(100% - var(--fade-r) * 0.4),
+    transparent
+  );
+  transition:
+    --fade-l 0.2s,
+    --fade-r 0.2s;
+}
+
+.sheet-tiles.more-l {
+  --fade-l: var(--fade);
+}
+
+.sheet-tiles.more-r {
+  --fade-r: var(--fade);
 }
 
 .sheet-tiles::-webkit-scrollbar {
@@ -530,7 +566,7 @@
 
 /* At its peek, the agents and the line under them fill the sheet's first row exactly. */
 .sheet-agents {
-  height: 112px;
+  height: 124px;
   display: flex;
   flex-direction: column;
 }
@@ -540,10 +576,12 @@
 }
 
 .sheet-agents .sheet-tiles {
-  padding: 8px 10px 4px;
+  padding: 8px 10px 0;
 }
 
+/* The line under the tiles takes the rest, its Edit clear of the tiles and of the line below. */
 .sheet-agents .sheet-hint {
+  flex: 1;
   padding: 0 12px;
 }
 
@@ -582,6 +620,10 @@
 
 .sheet-section .sheet-hint {
   margin-top: 4px;
+}
+
+.sheet-section .sheet-hint.picked {
+  margin-top: 8px;
 }
 
 .sheet-section {

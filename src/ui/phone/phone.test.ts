@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { type Detent, type DetentMsg, type SheetAt, updateDetent } from "./detent";
 import { type TileEffect, type TileMsg, type TilePress, updateTile } from "./tile";
 import { type Transport, type TransportEffect, type TransportMsg, updateTransport } from "./transport";
 
@@ -105,5 +106,54 @@ describe("the run buttons", () => {
   it("only arm a button that may be held", () => {
     expect(updateTransport({}, press("run", 1, false))[1]).toEqual([]);
     expect(updateTransport({}, press("run", 1, true))[1]).toEqual([{ kind: "await-hold", pointer: 1 }]);
+  });
+});
+
+function sheet(msgs: DetentMsg[], from: SheetAt | Detent = "peek") {
+  let s: SheetAt = typeof from === "string" ? { detent: from } : from;
+  for (const m of msgs) s = updateDetent(s, m);
+  return s;
+}
+const empty: DetentMsg = { kind: "tap-canvas", empty: true, focus: false };
+const onThing: DetentMsg = { kind: "tap-canvas", empty: false, focus: true };
+
+describe("the sheet's height", () => {
+  it("goes all the way down on a tap on empty canvas, from anywhere", () => {
+    for (const d of ["peek", "open", "closed"] as const) expect(sheet([empty], d).detent).toBe("closed");
+  });
+
+  it("goes down on a tap on the grabber while up, and comes back to its peek on another", () => {
+    expect(sheet([{ kind: "tap-grabber" }], "open").detent).toBe("closed");
+    expect(sheet([{ kind: "tap-grabber" }], "peek").detent).toBe("closed");
+    expect(sheet([{ kind: "tap-grabber" }, { kind: "tap-grabber" }], "open").detent).toBe("peek");
+  });
+
+  it("settles where a drag lets it go", () => {
+    for (const d of ["closed", "peek", "open"] as const) expect(sheet([{ kind: "settle", to: d }]).detent).toBe(d);
+  });
+
+  it("shows what's tapped at its peek, lowering it from all the way up or raising it from closed", () => {
+    expect(sheet([onThing], "open").detent).toBe("peek");
+    expect(sheet([onThing], "closed").detent).toBe("peek");
+    // A tap on something that leaves nothing to show leaves it be.
+    expect(sheet([{ kind: "tap-canvas", empty: false, focus: false }], "closed").detent).toBe("closed");
+  });
+
+  it("goes back down when what raised it is let go, but not once it's been moved since", () => {
+    const raised = sheet([{ kind: "focus", on: true }], "closed");
+    expect(raised).toEqual({ detent: "peek", raisedFrom: "closed" });
+    expect(sheet([{ kind: "focus", on: false }], raised).detent).toBe("closed");
+    expect(sheet([onThing, { kind: "focus", on: false }], "closed").detent).toBe("closed");
+    expect(sheet([{ kind: "settle", to: "open" }, { kind: "focus", on: false }], raised).detent).toBe("open");
+    expect(sheet([{ kind: "pick" }, { kind: "focus", on: false }], raised).detent).toBe("peek");
+    // Something already selected doesn't raise it again.
+    expect(sheet([{ kind: "focus", on: true }], "open")).toEqual({ detent: "open" });
+  });
+
+  it("gets out of a lifted tile's way, and comes back to where it was", () => {
+    const lifted = sheet([{ kind: "lift", on: true }], "open");
+    expect(lifted.detent).toBe("closed");
+    expect(sheet([{ kind: "lift", on: false }], lifted).detent).toBe("open");
+    expect(sheet([{ kind: "more" }], "peek").detent).toBe("open");
   });
 });

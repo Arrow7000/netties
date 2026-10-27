@@ -68,6 +68,29 @@ export function Tile(props: { kit: Phone; what: TileWhat; axis: "x" | "y"; onLif
   );
 }
 
+/**
+ * A row of tiles that scrolls sideways fades out at an end where there's
+ * more that way (styled by `more-l` and `more-r`), and not where there isn't.
+ */
+export function edgeFades(el: HTMLElement) {
+  const update = () => {
+    el.classList.toggle("more-l", el.scrollLeft > 1);
+    el.classList.toggle("more-r", el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  };
+  el.addEventListener("scroll", update, { passive: true });
+  // Its size changes, or its tiles do.
+  const ro = new ResizeObserver(update);
+  ro.observe(el);
+  const mo = new MutationObserver(update);
+  mo.observe(el, { childList: true });
+  requestAnimationFrame(update);
+  onCleanup(() => {
+    el.removeEventListener("scroll", update);
+    ro.disconnect();
+    mo.disconnect();
+  });
+}
+
 /** Every agent type and component as tiles, in order. */
 export function tileList(kit: Phone): { types: TileWhat[]; components: TileWhat[] } {
   const ed = kit.ed;

@@ -44,8 +44,8 @@ export function createPhone(ed: Editor, camera: Camera) {
   const [tile, setTile] = createSignal<TileWhat>();
   const [carry, setCarry] = createSignal<Carry>();
   const [making, setMaking] = createSignal(false);
-  /** Counts the canvas's taps, for the sheet to follow. */
-  const [taps, setTaps] = createSignal(0);
+  /** The canvas's last tap, for the sheet to follow: counted, and whether it was on nothing. */
+  const [taps, setTaps] = createSignal({ n: 0, empty: false });
   /** Room the sheet takes at the bottom and the right, beyond the top bar. */
   const [room, setRoom] = createSignal<Pick<Pad, "b" | "r">>({ b: 72, r: 8 });
 
@@ -82,9 +82,9 @@ export function createPhone(ed: Editor, camera: Camera) {
     armed,
     setArmed,
     onHoldMenu: (client, at) => setHeldAt({ client, at }),
-    onTap: () => {
+    onTap: (empty) => {
       setTile(undefined);
-      setTaps((n) => n + 1);
+      setTaps((t) => ({ n: t.n + 1, empty }));
     },
   };
 

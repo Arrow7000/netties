@@ -6,18 +6,20 @@ import { openRuleGrid } from "../Palette";
 import { hoverInfo } from "../Panels";
 import { GRID_FITS, GridLegend, GridSummary, RuleGrid } from "../RuleGrid";
 import { canLeave } from "../subEditor";
+import { type Detent, type DetentMsg, type SheetAt, updateDetent } from "./detent";
 import { createFocus } from "./focus";
 import type { Phone } from "./kit";
-import { FocusInfo, Ghost, HoldMenu, MakeDialog, RunButtons, Tile, TileHint, TypesLine, createSheets, tileList } from "./parts";
+import { FocusInfo, Ghost, HoldMenu, MakeDialog, RunButtons, Tile, TileHint, TypesLine, createSheets, edgeFades, tileList } from "./parts";
 
-type Detent = "closed" | "peek" | "open";
 type Face = "agents" | "rules" | "focus";
 
 /** The sheet's parts, in pixels: its grabber, the row of faces, the first row of a face, and the run bar. */
 const GRAB = 18;
 const FACES = 42;
-const PEEK = 112;
+const PEEK = 124;
 const BAR = 52;
+/** The line along the top of the sheet's body, inside its height. */
+const EDGE = 1;
 
 /**
  * The phone layout's one sheet along the bottom (sideways, down the right).
@@ -32,7 +34,10 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
   const f = createFocus(kit);
   const sheets = createSheets(f.say);
 
-  const [detent, setDetent] = createSignal<Detent>("peek");
+  // How far up it is, by its machine (./detent.ts).
+  const [height, setHeight] = createSignal<SheetAt>({ detent: "peek" });
+  const detent = () => height().detent;
+  const send = (msg: DetentMsg) => setHeight((s) => updateDetent(s, msg));
   const [chosenFace, setChosenFace] = createSignal<Exclude<Face, "focus">>("agents");
   const [face, setFace] = createSignal<Face>("agents");
   /** The body's height while a finger drags the sheet. */
@@ -54,12 +59,16 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
     focusRo.observe(el);
   };
 
-  /** How tall the whole face is: pulled up, the sheet is no taller than that. */
+  /**
+   * How tall the whole face is: pulled up, the sheet is no taller than that.
+   * Rounded up, since a face can be a fraction of a pixel tall, and the
+   * body is then that and its top line, or it would scroll by a pixel.
+   */
   const [contentH, setContentH] = createSignal(400);
   let contentRo: ResizeObserver | undefined;
   onCleanup(() => contentRo?.disconnect());
   const measureContent = (el: HTMLElement) => {
-    contentRo = new ResizeObserver(() => setContentH(el.offsetHeight));
+    contentRo = new ResizeObserver(() => setContentH(Math.ceil(el.getBoundingClientRect().height)));
     contentRo.observe(el);
   };
 
@@ -69,11 +78,13 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
       const full = Math.max(PEEK, vh() - 16 - GRAB - FACES - BAR - 12);
       return { closed: 0, peek: full, open: full };
     }
-    const peek = face() === "focus" ? Math.min(Math.max(focusH(), 60), 230) : PEEK;
+    const peek = face() === "focus" ? Math.min(Math.max(focusH() + EDGE, 60), 230) : PEEK;
     const most = Math.round(vh() * 0.66) - GRAB - FACES - BAR;
-    return { closed: 0, peek, open: Math.max(peek, Math.min(most, contentH())) };
+    return { closed: 0, peek, open: Math.max(peek, Math.min(most, contentH() + EDGE)) };
   });
   const bodyHeight = () => dragged() ?? heights()[detent()];
+  /** Pulled up, the body scrolls, but only if the face is taller than it is, so there's no scrollbar for nothing. */
+  const scrolls = () => open() && dragged() === undefined && contentH() + EDGE > bodyHeight() + 0.5;
 
   // The net is fitted clear of the sheet at its peek, wherever it is now: opening it is
   // like a keyboard coming up, and closing it leaves room to spare.
@@ -84,7 +95,6 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
 
   // What's selected takes the sheet over, and lifts it to its peek if it was down;
   // when it goes, the sheet goes back to the face (and height) it had.
-  let raisedFrom: Detent | undefined;
   createEffect(
     on(
       () => f.focus()?.kind,
@@ -92,14 +102,10 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
         if (k && !was) {
           if (kit.fromTile() && face() !== "focus") return;
           setFace("focus");
-          if (detent() === "closed") {
-            raisedFrom = "closed";
-            setDetent("peek");
-          }
+          send({ kind: "focus", on: true });
         } else if (!k && was) {
           setFace(chosenFace());
-          if (raisedFrom) setDetent(raisedFrom);
-          raisedFrom = undefined;
+          send({ kind: "focus", on: false });
         }
       },
     ),
@@ -111,32 +117,22 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
     return h?.kind === "pair" ? was : h;
   });
   createEffect(on(() => [m.selection(), tapped(), kit.armed(), kit.armedRun()], () => f.focus() && !kit.fromTile() && setFace("focus"), { defer: true }));
-  // A tap on the canvas lowers the sheet from all the way up to its peek, so what was tapped still shows.
-  createEffect(on(kit.taps, () => detent() === "open" && !sideways() && setDetent("peek"), { defer: true }));
+  // A tap on empty canvas puts the sheet away; a tap on something shows it at the peek.
+  createEffect(on(kit.taps, (t) => send({ kind: "tap-canvas", empty: t.empty, focus: !!f.focus() }), { defer: true }));
 
   const pick = (x: Face) => {
     if (x !== "focus") setChosenFace(x);
     setFace(x);
-    raisedFrom = undefined;
-    if (detent() === "closed") setDetent("peek");
+    send({ kind: "pick" });
   };
 
   // A tile lifted out: the sheet gets out of the way, and comes back after.
-  let before: Detent | undefined;
-  const onLift = (on: boolean) => {
-    if (on) {
-      before = detent();
-      setDetent("closed");
-    } else if (before) {
-      setDetent(before);
-      before = undefined;
-    }
-  };
+  const onLift = (on: boolean) => send({ kind: "lift", on });
 
   /**
    * A finger on the grabber's row or the faces row, anywhere but a button:
    * the sheet follows it, and settles on the nearest detent, or the one it
-   * was flicked to. A tap there goes between the peek and all of it.
+   * was flicked to. A tap there puts it away, or brings it back to its peek.
    */
   const grab = (e: PointerEvent) => {
     if ((e.target as Element).closest("button")) return;
@@ -165,11 +161,7 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
       el.removeEventListener("pointercancel", up);
       const h = dragged();
       setDragged(undefined);
-      if (!moved || h === undefined) {
-        setDetent(detent() === "open" ? "peek" : "open");
-        raisedFrom = undefined;
-        return;
-      }
+      if (!moved || h === undefined) return send({ kind: "tap-grabber" });
       const hs = heights();
       const order: Detent[] = sideways() ? ["closed", "open"] : ["closed", "peek", "open"];
       const at = (d: Detent) => hs[d];
@@ -180,8 +172,7 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
         else if (v > 0) target = [...order].reverse().find((d) => at(d) < h - 4) ?? "closed";
         else target = order.find((d) => at(d) > h + 4) ?? order[order.length - 1]!;
       } else target = order.reduce((a, b) => (Math.abs(at(b) - h) < Math.abs(at(a) - h) ? b : a));
-      setDetent(target);
-      raisedFrom = undefined;
+      send({ kind: "settle", to: target });
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
@@ -196,7 +187,7 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
   const shownActions = () => {
     const all = f.actions();
     if (open() || all.length <= 5) return all;
-    return [...all.slice(0, 4), { id: "more", label: "More", icon: I.More, run: () => setDetent("open") }];
+    return [...all.slice(0, 4), { id: "more", label: "More", icon: I.More, run: () => send({ kind: "more" }) }];
   };
 
   return (
@@ -206,7 +197,7 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
         classList={{ dragging: dragged() !== undefined, closed: detent() === "closed" && dragged() === undefined, side: sideways() }}
       >
         <div class="sheet-handle" onPointerDown={grab}>
-          <div class="sheet-grab" role="button" aria-label={detent() === "open" ? "Lower the sheet" : "Pull up for more"}>
+          <div class="sheet-grab" role="button" aria-label={detent() === "closed" ? "Bring up the sheet" : "Put the sheet away"}>
             <span />
           </div>
           <div class="sheet-faces">
@@ -232,12 +223,12 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
           </div>
         </div>
 
-        <div class="sheet-body" style={{ height: `${Math.max(0, bodyHeight())}px` }} classList={{ scroll: open() }}>
+        <div class="sheet-body" style={{ height: `${Math.max(0, bodyHeight())}px` }} classList={{ scroll: scrolls() }}>
           <div ref={measureContent}>
             <Show when={face() === "agents"}>
               {/* At its peek, the sheet shows this much: the agents, and what to do with them. */}
               <div class="sheet-agents">
-                <div class="sheet-tiles" classList={{ wrap: sideways() }}>
+                <div class="sheet-tiles" ref={edgeFades} classList={{ wrap: sideways() }}>
                   <For each={tiles().types}>{(w) => <Tile kit={kit} what={w} axis={axis()} onLift={onLift} />}</For>
                   <Show when={sideways()}>
                     <button class="tile sheet-tile new" onClick={() => ed.openAgent("new")}>
@@ -261,7 +252,7 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
                   </button>
                 </div>
                 <Show when={tiles().components.length} fallback={<p class="palette-hint">Select some agents and make them a component to reuse them.</p>}>
-                  <div class="sheet-tiles" classList={{ wrap: sideways() }}>
+                  <div class="sheet-tiles" ref={edgeFades} classList={{ wrap: sideways() }}>
                     <For each={tiles().components}>{(w) => <Tile kit={kit} what={w} axis={axis()} onLift={onLift} />}</For>
                   </div>
                   <TileHint kit={kit} of="component" />
