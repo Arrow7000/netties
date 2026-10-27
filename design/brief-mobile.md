@@ -146,3 +146,126 @@ Where does a paste land: in the middle of the view, or where you tap next?
   gets a "Round 4" section: each direction in a paragraph of plain
   language, its gains and costs, and a "Try in each" list.
 - The user tries them on their own phone over the local network.
+
+## The verdict (2026-10-27)
+
+The user tried the three prototypes on their phone and picked A, with this
+feedback, kept as written:
+
+> am i right in thinking that the only difference between A/B/C is how we
+> display and expand the panel on the main canvas? the rest seemed the same
+> as far as i could tell?
+>
+> ok so: A is very much the winner. the non-committal drag handle is far
+> clearer than the others with their "+" or "Edit" buttons. A is also more
+> loyal to the desktop version, which i like.
+>
+> that said, i have a few small issues still.
+>
+> A-specific feedback:
+> - im not sure it makes sense to unify the selection inspector panel with
+>   the slide-out panel. truth is i could be convinced of it.. but then i
+>   think the toggle selector label of that section needs to be consistent,
+>   and always say "selection" or smth. not selection if an agent is selected
+>   but wire/pair/whatever for other things. we could have a separate label
+>   of what kind of thing is selected inside that section rather than the
+>   toggle selector button itself being different
+> - clicking on a cell in the grid view shouldn't select a rule and then go
+>   to the selected view. that doesn't make sense. at the very least if we
+>   did that we should then have a button to allow the user to actually edit
+>   that rule. rn the user has to go back to rules and click full grid before
+>   they can select a rule to edit. that's not obvious.
+>   either: 1. we keep it so that clicking a cell selects that cell, and we
+>   display the highlighting of the applicable rule category in the legend as
+>   we do now. but then the content of the selection panel needs to go
+>   underneath the grid/legend, and you can click an edit rule button from
+>   there. or, 2. we do away with a cell selected mode altogether. but then
+>   either clicking on a cell goes directly to edit mode, or there is only a
+>   "full grid" button from where clicking cells to edit them is done. my
+>   preference is 1.
+> - the "tap a tile to add one [etc]" text needs to be right underneath the
+>   agents/components section. rn it's under the directions/types button,
+>   which is confusing what it applies to.
+> - tapping on the canvas should shrink the panel slideout. either all the
+>   way in or at least  to the half-state.
+> - i think the entire width around the panel dragger pill should be
+>   clickable/draggable. not just the pill itself
+> - long-pressing an agent should push the slideout panel down so that it
+>   becomes clear that you're now in dragging mode. it should not just be
+>   considered as a regular click
+> - long-pressing on the agent name can sometimes select the text. it should
+>   work the same way as a long click on the icon
+> - when the canvas is zoomed out quite far, sometimes a press on a wire
+>   registers as a click on a port. do ports have higher priority? i feel
+>   like they probably should have lower priority than wires?
+> - after you've clicked on an active wire and it shows the active pair, if
+>   you then click select wire instead, nothing seems to have changed. we
+>   still show the rule preview, the only thing that changed is that select
+>   wire has been replaced by a delete wire button? i feel like maybe we
+>   should no longer show the firing preview then? not sure.
+> - selecting an agent brings up lots of options. not all of these apply to
+>   selected wires, but we should incorporate for wires the ones that do.
+> - long-pressing one of the step/step all/run buttons should put the button
+>   in selected mode, which then brings up the action information and preview
+>   mode if applicable. pressing it (with a normal, quick tap) again should
+>   actually execute the action. requiring the user to hold their finger
+>   there as they read the description and figure out how to cancel the
+>   action is cumbersome.
+> - long-pressing the run button on its text selects the text
+>
+> rule editor:
+> - the default view is zoomed out more than necessary for some reason
+> - after making a wiring change it zooms back out again. even if this
+>   wasn't very far out i don't think this should happen? probably just
+>   leave it zoomed as is?
+> - there's no selection panel here, or at least it's a much narrower one,
+>   so you can't take all the actions as you can in the main canvas. e.g.
+>   it's not clear how to delete a wire.
+> - here the functionality for connecting wires by tapping one end and then
+>   the one you want to connect it to doesn't work. all that does is select
+>   one port after the other.
+>
+> ok whew that was a lot of feedback. lol. but excellent job dude!!!! this
+> looks and feels so nice already, and you managed to get basically all the
+> functionality in there?! incredible
+
+### What gets built (decisions taken without asking, open to change)
+
+A is built properly on `mobile`, replacing stage 1's bottom card and bar;
+B, C and the `?proto` switch go.
+
+- **The third face is always called Selection.** Inside it, a small label
+  says what it holds (Agent, 2 agents, Wire, Active pair, Port, Loose end,
+  Wiring, Step). It still appears only while something is tapped or
+  selected.
+- **Rule grid, option 1.** Tapping a cell selects it and lights its kind in
+  the legend, as now, but the face stays on Rules: what the cell is shows
+  under the grid and legend, with Edit rule (or Write rule) there.
+- **The tiles' hint** sits right under the agent tiles.
+- **A tap on the canvas lowers the sheet** from all the way up to its peek
+  (not closed, so what was tapped still shows).
+- **The whole row around the grabber** takes the drag and the tap, not just
+  the pill.
+- **Holding a tile lifts it:** the sheet drops out of the way at once, and
+  the tile can be dragged anywhere onto the canvas; letting go without
+  leaving the sheet puts it back. Holding no longer opens the agent editor
+  (that was the "regular click"), so a selected agent gets **Edit agent**
+  among its actions; New still makes a new type. Tile names, button labels
+  and the rest of the phone chrome can't be text-selected.
+- **Wires beat ports** under a finger: a press goes to a port only within
+  its drawn size plus a little; past that, a wire under the finger wins.
+- **Selecting a pair's wire ends its preview:** the pair is then just a
+  selected wire, with Fire and Open rule among its actions.
+- **A selected wire gets what applies of an agent's actions:** Delete,
+  Select connected, Select all, its two agents, and Fire and Open rule for
+  an active pair.
+- **Step, Step all and Run: a hold arms the button** instead of firing on
+  release. It stays pressed, the sheet says what it would do (and Step and
+  Step all show their preview on the canvas); a quick tap on it then fires,
+  and a tap anywhere else disarms it. A quick tap on an unarmed button fires
+  straight away, as before.
+- **Rule editor** (its phone redesign is still part 2; these are fixes):
+  it opens zoomed to fit the rule, not further out; a change no longer
+  refits it; selecting in it shows the same actions as on the net (so a
+  wire can be deleted); and the tap-a-port-then-a-port wiring works there
+  too.
