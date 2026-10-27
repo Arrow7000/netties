@@ -35,3 +35,13 @@ For those interested in how it works under the hood:
 - `src/render` — SVG paths and standalone SVG export.
 - `src/state` — The net model and the editor store.
 - `src/ui` — SolidJS UI components.
+
+## Licence
+
+Copyright 2026 Aron Adler. Netties is available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE).
+
+You may use, modify, and share Netties for noncommercial purposes, along with
+the educational and other organisational uses permitted by the licence.
+For commercial use outside those permissions, contact
+[Aron Adler](mailto:aron@adler.dev) to arrange a separate commercial licence.
