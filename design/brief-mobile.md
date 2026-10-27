@@ -298,3 +298,99 @@ B, C and the `?proto` switch go.
 rule.) The selection comes out of the footer into its own row above it,
 with the full set of actions as on the net (see the rule editor point
 above); the footer keeps only Delete rule, Cancel and Save, on one line.
+
+## Second round on the phone (2026-10-27)
+
+After trying the build (main canvas and rule editor fixes) on the phone:
+
+> - i think clicking on the canvas, clicking on the pill, or whatever other
+>   action makes the slideout panel retreat, should make it retreat all the
+>   way down. it's annoying when it mostly stays in the way. tho i do like
+>   that we can manually lower the panel to these snap scroll positions.
+>   that's nice. i just want those actions that are clearly "dismiss the
+>   panel" to dismiss it fully
+> - there's almost no spacing between the 3 firing action buttons. they look
+>   cramped.
+> - copy/update link, since it changes the url, should do a push history
+>   state. my browser back button should go to the previous url, although
+>   not 100% sure yet on the correct behavious if you're navigating back to
+>   a url with a different system. if you're navigating back to an empty
+>   url, then just keep whatever system is loaded. then it's just a url
+>   change, not a content change. but not sure how to handle contentful url
+>   changes hmm. thoughts?
+> - [screenshot: the Agents face, the length tile selected] few issues
+>   visible here:
+>   - the shading over the right side of the horizontal agents list is too
+>     faint. or rather.. too short-range?
+>   - the agent edit button doesn't have enough vertical spacing around it
+>   - there's a scrollbar visible, which behaves inconsistently. it appears
+>     when you slide out the panel - both from fully closed and partially
+>     open - but can be dismissed even by just slightly dragging the handle
+>     upwards. basically that scrollbar doesn't actually have any extra
+>     height to display. but then it's odd that it shows until you call its
+>     bluff so to speak.
+>
+> rule editor:
+> - less pronounced than before but still positions things zoomed out quite
+>   far for some reason? especially the 'after' canvas
+>   ah is that because of:
+>   > The cost is a band of empty space at the bottom when nothing is
+>   > selected
+>   ? if so i don't like that. let the net take all space available to it.
+>   if the selection row covers part of it, so be it. the user can move
+>   around. or let's make the 'fit' button be aware of whether the selection
+>   row is there or not (by which i mean just how much space we have to
+>   display the net, not that it actually needs to know whether the
+>   selection row is there. just that it the selection row shrinks the
+>   After canvas, the fit button should be aware of the changed size of the
+>   canvas. you get it.)
+> - why here does the selection 'more' button bring up a separate selection
+>   sheet over the existing view instead of just showing the extra row(s) of
+>   buttons like the main canvas agent selection view does?
+>   - and here when i click off that sheet it closes the entire rule editor
+>     and takes you back to the main canvas - which it obviously shouldn't
+>     do. it should only close the sheet itself but keep you in the rule
+>     editor.
+>   actually looks like even some of the buttons don't work bc they just
+>   dismiss the entire rule editor, taking me back to the main canvas.
+>   something's broken here.
+> - sometimes 'delete' is the first button in the list, sometimes it's in
+>   the middle. can we organise our selection options to make this more
+>   predictable and consistent?
+> - more generally we should keep selection views and options as consistent
+>   as possible between main canvas and rule editor. except for the things
+>   that don't apply ofc.
+
+### What gets built
+
+- **Dismissing dismisses.** A tap on empty canvas, or on the grabber while
+  the sheet is up, closes it all the way. A tap on the grabber while it's
+  closed brings it back to its peek. Dragging still settles on any of the
+  three heights. Tapping something on the canvas still shows it at the
+  peek (lowering the sheet to the peek if it was all the way up).
+- **Room between Step, Step all and Run.**
+- **Links and the back button.** Copy link and Update link push a new
+  history entry (unless the address is already that link). Going back or
+  forward to an address with no net in it changes nothing on the canvas.
+  Going to one with a net in it loads that net as a step you can undo, with
+  the same "Loaded … Undo" toast as an example, and does nothing if that
+  net is already what's showing. Whatever was there before is one undo
+  away, so a back press never loses work.
+- **The tile row's fade** is stronger and reaches further, and shows on
+  the left too once the row is scrolled.
+- **The tile line** (name and Edit) gets room above and below.
+- **No scrollbar unless there's something to scroll.**
+- **Rule editor zoom:** no reserved band. It opens fitted to the whole
+  After canvas; the selection row covers what it covers, and selecting
+  never moves the camera. Fit fits to the part of the canvas left showing
+  (so with the selection row up, above it).
+- **More in the rule editor** shows the rest of the actions in the row, as
+  on the net, not in a sheet of its own. Taps on the rule editor's own
+  phone chrome (its selection row and anything it opens) never count as a
+  tap outside the editor, so nothing there closes it.
+- **One order for actions**, the same on the net and in a rule. Delete
+  always sits in the same place: the last button of the first row, just
+  before More (or last, when there are fewer). The main action of what's
+  selected (Fire, Write rule, Edit component, Stop wiring) comes first.
+- **One selection view** for the net and the rule editor: the same
+  component, labels, order and More, minus what doesn't apply in a rule.
