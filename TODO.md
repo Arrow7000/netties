@@ -129,6 +129,19 @@ Choices made along the way that you haven't confirmed yet:
   means it always terminates); a possible teaching feature: mark rules
   shrink/same/grow. Read Lafont 1990, light/elementary linear logic,
   Asperti & Guerrini on optimal reduction first.
+- **The text format and Inpla** (your question, 2026-10-27). The text view's
+  format is Inpla's core (`A(x, y) >< B(z) => x ~ …;` rules, `s ~ t` nets,
+  upper-case agents), itself from Fernández & Mackie's interaction calculus,
+  plus our own extras: `agent` declarations, `directions`/`types` and port
+  specs like `+number`, quoted descriptions, `_` for an empty port, `--`
+  comments, lower-case or Unicode agent names. Never checked against Inpla
+  itself; we don't read Inpla's integers, built-ins, `if`, `where` or
+  commands. To think about: whether to make it fully Inpla-compatible (or
+  just an export that drops our extras and uses ASCII names); whether to
+  publish an official spec/grammar and a migration guide to and from Inpla;
+  whether the text panel should say what language it is. Ties in with
+  shorter share links, which would extend the format with positions,
+  components and groups.
 
 ## Later
 
