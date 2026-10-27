@@ -1,6 +1,7 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
 import { ParseError, parse, print } from "../core/text";
 import type { Editor } from "../state/editor";
+import { copyText } from "./clipboard";
 
 /** The system and net as text, in the style of Inpla. Edit and load it back. */
 export function TextView(props: { ed: Editor }) {
@@ -44,14 +45,7 @@ export function TextView(props: { ed: Editor }) {
     URL.revokeObjectURL(a.href);
   };
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text());
-      setNote("Copied.");
-    } catch {
-      setNote("Couldn't copy; select the text and copy it yourself.");
-    }
-  };
+  const copy = async () => setNote((await copyText(text())) ? "Copied." : "Couldn't copy; select the text and copy it yourself.");
 
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
