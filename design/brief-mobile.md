@@ -269,3 +269,21 @@ B, C and the `?proto` switch go.
   refits it; selecting in it shows the same actions as on the net (so a
   wire can be deleted); and the tap-a-port-then-a-port wiring works there
   too.
+
+### Then (2026-10-27), on adding agents
+
+> i don't think we need that. why don't we make dragging an agent into the
+> sheet the main/only way to add an agent, and regular tapping on an agent
+> could be selecting it, which then allows for clicking on an edit button..
+> ok yeah i guess im converging on what you said? lol
+>
+> btw forgot to mention: can we allow for a double tap on the canvas to zoom
+> in on that area a bit? that works nicely on google maps
+
+- **Tiles:** dragging one out (up out of its row, or after a hold) is how
+  an agent is added; a tap no longer adds one in the middle. A tap selects
+  the tile, and an Edit button for it shows under the tiles. No Edit agent
+  action on the canvas. One exception stays: with a tap-to-wire end
+  waiting, tapping a tile plugs a new agent straight into it.
+- **Double tap on empty canvas** zooms in about twice, around the tap. On a
+  component it still opens or closes it.
