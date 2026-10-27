@@ -2,9 +2,11 @@
 
 The running list between sessions, open work only. The reasoning behind past
 decisions lives in `design/brief.md` (interface), `design/brief-types.md`
-(directions and types) and `design/brief-editors.md` (editors), each with
-its outcome at the end. Prototypes are in `design/prototypes/` (open
-`index.html`). Your own lists are at the bottom, as written.
+(directions and types), `design/brief-editors.md` (editors) and
+`design/brief-mobile.md` (phones), each with its outcome at the end.
+Prototypes are in `design/prototypes/` (open `index.html`); the phone
+prototypes are on the branch `mobile-protos`. Your own lists are at the
+bottom, as written.
 
 Tidied 2026-10-26: finished work was taken out. Its notes (measurements,
 alternatives tried and rejected, your quotes) are in this file as of commit
@@ -106,29 +108,30 @@ Choices made along the way that you haven't confirmed yet:
    parts of the net with no loose ends is cheap (connected components) and
    fits: those parts are exactly what "only what reaches the loose ends"
    never fires.
-3. **Mobile** (raised 2026-10-26): the same app made responsive for
-   phones, with touch handled properly. Phone first (where most people
-   find the app), tablets later. Editing on a phone is a real goal.
-   Decided: on touch, a tap keeps the hover, so an active pair shows its
-   preview on the first tap and fires on the second. Wires are drawn by
-   dragging from port to port, as on desktop; tapping one port and then
-   another is only a fallback. Planned stages: (1) fits the screen and
-   works with fingers (compact bars, pinch and pan, minimum on-screen tap
-   targets, fit padding for the bars actually shown); (2) reading by touch
-   (bottom sheet for what's tapped, long-press for Alt-click, sheets for
-   the other screens); (3) editing (palette drawer, wire snapping,
-   multi-select without Shift, clipboard buttons, rule editor on a narrow
-   screen). Stages 2 and 3 need a design round.
-   Stage 1 is built on the `mobile` branch (2026-10-26), not yet tried on
-   a real phone. Left over from it: on a phone the palette is hidden, so
-   agents can't be added and the types sheet, rule grid and agent editor
-   can't be opened; the fit ignores the card along the bottom, so it can
-   cover the net's lowest part; the "Tap again to fire" pill can run off
-   the right edge; the rule editor draws both halves small upright; the
-   translation says left/right where the panes are stacked; Copy link
-   doesn't use the phone's share sheet; a tapped button can keep its hover
-   colour; double-tap into components only hits exactly; page pinch-zoom
-   is blocked outside the canvas (an accessibility trade-off).
+3. **Mobile, the rest** (raised 2026-10-26; the canvas views done
+   2026-10-27, see `design/brief-mobile.md`). The net and the rule editor
+   work on a phone: the sheet along the bottom (agents, rules, selection),
+   holds for what Shift, Alt and drag-select did, wires by drag and drop
+   with tap-to-wire as the fallback, double tap to zoom. You, 2026-10-27:
+   the other screens are "good enough for now [...] as long as you can
+   scroll around to access everything". Not yet made for a phone:
+   - The agent editor, and the directions and types sheet: they scroll,
+     but aren't laid out for a narrow screen.
+   - The component editor: none of the rule editor's phone fixes (a snug
+     fit that stays put, the selection row with the net's actions,
+     tap-to-wire).
+   - The rule editor itself: fixed, not redesigned for a phone. A toast
+     ("Loaded … Undo") can sit over its header.
+   - The full rule grid, the text view and the combinator view: not
+     looked at on a phone. The translation says left/right where its panes
+     are stacked.
+   - Small things: Copy link doesn't use the phone's share sheet; a wired
+     port tapped on its own has no actions; going back to a link while the
+     agent editor is open loses its unsaved draft; a tapped button may
+     keep its hover colour (unchecked since stage 1); page pinch-zoom is
+     blocked outside the canvas (an accessibility trade-off).
+   - Tablets: they get the desktop layout, which hasn't been tried with
+     fingers.
 4. **The LLM create UI**, low priority (you, 2026-10-13: "not my main
    priority. in fact it's quite a low one"). The backend is live at POST
    /api/create (`netlify/edge-functions/create.ts`, logic in
