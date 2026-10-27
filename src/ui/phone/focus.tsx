@@ -20,6 +20,7 @@ export type Focus =
   | { kind: "hover" };
 
 export interface Action {
+  /** What it is, which decides where it goes among the others (`arrange`). */
   id: string;
   label: string;
   /** A shorter label for the button, where the label won't fit. */
@@ -28,6 +29,7 @@ export interface Action {
   run?: () => void;
   /** Why it can't be done now. */
   why?: string;
+  /** The main thing to do with what's selected: it comes first, and stands out. */
   primary?: boolean;
   danger?: boolean;
   /** Picking one of these instead of running. */
@@ -282,6 +284,7 @@ export function createFocus(host: FocusHost) {
 
   const say = (a: Action) => () => (a.why ? ed.notify(`${a.label}: ${a.why}`) : a.run?.());
 
+  /** What can be done with what's selected, in no order yet: `arrange` puts them in it. */
   const actions = createMemo((): Action[] => {
     const f = focus();
     m.rev();
@@ -291,7 +294,7 @@ export function createFocus(host: FocusHost) {
     switch (f.kind) {
       case "armed":
         // Along with why the last end tapped wouldn't take it.
-        return [{ id: "stop", label: "Stop wiring", icon: I.Close, run: () => (host.setArmed(undefined), m.hover()?.kind === "drag" && m.setHover(undefined)) }];
+        return [{ id: "stop", label: "Stop wiring", icon: I.Close, primary: true, run: () => (host.setArmed(undefined), m.hover()?.kind === "drag" && m.setHover(undefined)) }];
       case "run":
       case "hover":
         return [];
@@ -355,29 +358,33 @@ export function createFocus(host: FocusHost) {
     const out: Action[] = [
       { id: "copy", label: "Copy", icon: I.Copy, run: () => host.copy() },
       { id: "duplicate", label: "Duplicate", icon: I.Duplicate, run: () => host.duplicate(), why: noAgents ? "Select some agents to duplicate." : undefined },
+      { id: "delete", label: "Delete", icon: I.Trash, danger: true, run: () => dispatch({ kind: "selection/delete" }) },
+      { id: "cut", label: "Cut", icon: I.Cut, run: () => host.cut() },
+      paste,
+      { id: "connected", label: "Select connected", icon: I.Connected, run: () => host.selectConnected(), why: noAgents ? "Select an agent first." : undefined },
+      all,
+    ];
+    // What only agents have done to them isn't offered for components or wires alone.
+    if (!agents.length) return [...out, ...groupActions(groups, allCollapsed, true)];
+    out.push(
       {
         id: "flip",
         label: "Flip",
         icon: I.Flip,
         run: () => dispatch({ kind: "selection/flip", agents }),
-        why: m.mode() !== "manual" ? "Auto layout decides which way agents point. Switch to Manual layout first." : !agents.length ? "Components don't flip." : undefined,
+        why: m.mode() !== "manual" ? "Auto layout decides which way agents point. Switch to Manual layout first." : undefined,
       },
-      { id: "delete", label: "Delete", icon: I.Trash, danger: true, run: () => dispatch({ kind: "selection/delete" }) },
-      { id: "cut", label: "Cut", icon: I.Cut, run: () => host.cut() },
-      paste,
       {
         id: "change",
         label: "Change agent",
         icon: I.Swap,
         why: groups.length
           ? "Components can't be swapped for another agent."
-          : !agents.length
-            ? "Select an agent first."
-            : arities.length > 1
-              ? "Their numbers of aux ports differ."
-              : !alike.length
-                ? "No other agent has the same number of aux ports."
-                : undefined,
+          : arities.length > 1
+            ? "Their numbers of aux ports differ."
+            : !alike.length
+              ? "No other agent has the same number of aux ports."
+              : undefined,
         choices: () =>
           alike.map((t) => ({
             label: (
@@ -391,21 +398,24 @@ export function createFocus(host: FocusHost) {
             run: () => dispatch({ kind: "selection/change-type", agents, type: t.id }),
           })),
       },
-      { id: "connected", label: "Select connected", icon: I.Connected, run: () => host.selectConnected(), why: noAgents ? "Select an agent first." : undefined },
-      all,
-    ];
+    );
     const making = host.setMaking;
-    if (making) out.push({ id: "component", label: "Make component", icon: I.Component, run: () => making(true), why: agents.length ? undefined : "Select some agents first." });
-    if (groups.length) {
-      if (groups.length === 1 && !agents.length) {
-        const def = m.groups.groups.get(groups[0]!)!.def;
-        out.splice(4, 0, { id: "open", label: "Edit component", icon: I.Open, run: () => ed.openComponent(def) });
-      }
-      out.push(
-        { id: "expand", label: allCollapsed ? "Expand" : "Collapse", icon: I.Expand, run: () => dispatch({ kind: "component/set-collapsed", groups, collapsed: !allCollapsed }) },
-        { id: "apart", label: "Break apart", icon: I.Apart, run: ed.breakApart },
-      );
+    if (making) out.push({ id: "component", label: "Make component", icon: I.Component, run: () => making(true) });
+    return [...out, ...groupActions(groups, allCollapsed, false)];
+  };
+
+  /** What selected components have done to them: one alone is edited, as its main action. */
+  const groupActions = (groups: GroupId[], allCollapsed: boolean, alone: boolean): Action[] => {
+    if (!groups.length) return [];
+    const out: Action[] = [];
+    if (groups.length === 1 && alone) {
+      const def = m.groups.groups.get(groups[0]!)!.def;
+      out.push({ id: "open", label: "Edit component", icon: I.Open, primary: true, run: () => ed.openComponent(def) });
     }
+    out.push(
+      { id: "expand", label: allCollapsed ? "Expand" : "Collapse", icon: I.Expand, run: () => dispatch({ kind: "component/set-collapsed", groups, collapsed: !allCollapsed }) },
+      { id: "apart", label: "Break apart", icon: I.Apart, run: ed.breakApart },
+    );
     return out;
   };
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type Detent, type DetentMsg, type SheetAt, updateDetent } from "./detent";
+import { arrange, firstRow } from "./order";
 import { type TileEffect, type TileMsg, type TilePress, updateTile } from "./tile";
 import { type Transport, type TransportEffect, type TransportMsg, updateTransport } from "./transport";
 
@@ -155,5 +156,40 @@ describe("the sheet's height", () => {
     expect(lifted.detent).toBe("closed");
     expect(sheet([{ kind: "lift", on: false }], lifted).detent).toBe("open");
     expect(sheet([{ kind: "more" }], "peek").detent).toBe("open");
+  });
+});
+
+/** Actions by id; `main` the primary one. */
+const acts = (ids: string[], main?: string) => ids.map((id) => ({ id, primary: id === main }));
+const ids = (as: { id: string }[]) => as.map((a) => a.id);
+const more = { id: "more" };
+
+describe("the order of actions", () => {
+  it("puts the main action first and Delete last of the first row, just before More", () => {
+    const agent = arrange(acts(["all", "connected", "change", "paste", "cut", "delete", "flip", "duplicate", "copy", "component"]), 5, true);
+    expect(ids(agent)).toEqual(["copy", "duplicate", "flip", "delete", "cut", "paste", "change", "connected", "all", "component"]);
+    expect(ids(firstRow(agent, 5, more))).toEqual(["copy", "duplicate", "flip", "delete", "more"]);
+    const pair = arrange(acts(["fire", "rule", "delete", "ends", "connected", "all"], "fire"), 5, true);
+    expect(ids(firstRow(pair, 5, more))).toEqual(["fire", "rule", "ends", "delete", "more"]);
+    // Opened, the rest follow, and Delete stays where it was.
+    expect(ids(pair)).toEqual(["fire", "rule", "ends", "delete", "connected", "all"]);
+  });
+
+  it("puts Delete last when everything fits in the row", () => {
+    expect(ids(arrange(acts(["delete", "ends", "connected", "all"]), 5, true))).toEqual(["ends", "connected", "all", "delete"]);
+    expect(ids(arrange(acts(["rule", "delete", "all", "ends", "connected"], "rule"), 5, true))).toEqual(["rule", "ends", "connected", "all", "delete"]);
+    const wire = arrange(acts(["delete", "ends", "connected", "all"]), 5, true);
+    expect(ids(firstRow(wire, 5, more))).toEqual(ids(wire));
+  });
+
+  it("puts Delete last of the first row where nothing folds away", () => {
+    expect(ids(arrange(acts(["copy", "delete", "duplicate", "flip", "cut"]), 3, false))).toEqual(["copy", "duplicate", "delete", "flip", "cut"]);
+  });
+
+  it("keeps the main action first for a component, and does without Delete where there's none", () => {
+    const component = arrange(acts(["copy", "delete", "open", "apart", "expand", "all", "connected", "paste", "cut", "duplicate"], "open"), 5, true);
+    expect(ids(firstRow(component, 5, more))).toEqual(["open", "copy", "duplicate", "delete", "more"]);
+    expect(ids(arrange(acts(["select-wire", "rule", "fire"], "fire"), 5, true))).toEqual(["fire", "rule", "select-wire"]);
+    expect(ids(arrange(acts(["stop"], "stop"), 5, true))).toEqual(["stop"]);
   });
 });

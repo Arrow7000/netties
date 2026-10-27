@@ -4,8 +4,8 @@ import "./escape"; // a drag in progress hears Escape before any panel does
 /** How far the pointer may move and still count as a click rather than a pan or a drag. */
 const CLICK_SLOP = 5;
 
-/** Floating things that belong to whatever opened them: a click in one isn't a click outside. */
-const ATTACHED = ".popover, .menu, .toast";
+/** Floating things that belong to whatever opened them: a click in one isn't a click outside. The phone's action sheets and their scrims are too. */
+const ATTACHED = ".popover, .menu, .toast, .action-sheet, .action-sheet-scrim";
 
 /**
  * Whatever is open that Escape closes: panels, popovers and menus, the one

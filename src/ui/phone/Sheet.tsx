@@ -9,7 +9,7 @@ import { canLeave } from "../subEditor";
 import { type Detent, type DetentMsg, type SheetAt, updateDetent } from "./detent";
 import { createFocus } from "./focus";
 import type { Phone } from "./kit";
-import { FocusInfo, Ghost, HoldMenu, MakeDialog, RunButtons, Tile, TileHint, TypesLine, createSheets, edgeFades, tileList } from "./parts";
+import { Ghost, HoldMenu, MakeDialog, RunButtons, SelectionView, Tile, TileHint, TypesLine, edgeFades, tileList } from "./parts";
 
 type Face = "agents" | "rules" | "focus";
 
@@ -32,7 +32,6 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
   const ed = kit.ed;
   const m = ed.model;
   const f = createFocus(kit);
-  const sheets = createSheets(f.say);
 
   // How far up it is, by its machine (./detent.ts).
   const [height, setHeight] = createSignal<SheetAt>({ detent: "peek" });
@@ -183,13 +182,6 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
   const axis = () => (sideways() ? "y" : "x");
   const open = () => detent() === "open" || sideways();
 
-  /** The actions shown: all of them when the sheet is up; otherwise a row, with More to pull it up. */
-  const shownActions = () => {
-    const all = f.actions();
-    if (open() || all.length <= 5) return all;
-    return [...all.slice(0, 4), { id: "more", label: "More", icon: I.More, run: () => send({ kind: "more" }) }];
-  };
-
   return (
     <>
       <div
@@ -268,9 +260,16 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
             </Show>
 
             <Show when={face() === "focus"}>
-              <Show when={f.info()} fallback={<p class="palette-hint sheet-empty">Tap something on the canvas to see what it is.</p>}>
-                {(i) => <FocusInfo ref={measure} label={f.label()} info={i()} actions={shownActions()} say={f.say} onChoices={sheets.choices} />}
-              </Show>
+              {/* Pulled up, all the actions show; otherwise a row of them, with More to pull it up. On its side, a column with them all. */}
+              <SelectionView
+                ref={measure}
+                focus={f}
+                row={sideways() ? 3 : 5}
+                folds={!sideways()}
+                expanded={open()}
+                onMore={() => send({ kind: "more" })}
+                fallback={<p class="palette-hint sheet-empty">Tap something on the canvas to see what it is.</p>}
+              />
             </Show>
           </div>
         </div>
@@ -288,7 +287,6 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
       <Ghost kit={kit} />
       <HoldMenu kit={kit} selectAll={() => ed.dispatch({ kind: "selection/all" })} />
       <MakeDialog kit={kit} />
-      {sheets.view()}
     </>
   );
 }

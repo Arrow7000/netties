@@ -1,14 +1,13 @@
-import { Show, createEffect, createSignal } from "solid-js";
+import { createEffect, createSignal, on } from "solid-js";
 import type { Clip } from "../../core/clip";
 import type { Pt } from "../../layout/geometry";
 import type { Editor } from "../../state/editor";
 import type { NetModel, WireGesture } from "../../state/model";
 import type { CanvasPhone } from "../Canvas";
 import { compact } from "../compact";
-import * as I from "../icons";
 import { type FocusHost, type FocusKit, createFocus } from "./focus";
 import { type Pasted, type Phone, besideSelection, selectConnected } from "./kit";
-import { FocusInfo, createSheets } from "./parts";
+import { SelectionView } from "./parts";
 
 /**
  * The rule editor's result on a phone, worked as the net is: a tap on an
@@ -115,24 +114,24 @@ export function createRulePhone(opts: {
 
 /**
  * What's selected or tapped in the result, in a row of its own over the
- * rule editor's footer: the Selection face's words and actions, those that
- * don't fit a row under More. On a phone on its side, with Before beside
- * After, it's a column at the right instead, with room for them all.
+ * bottom of After: the net's Selection view (./parts.tsx), whose More opens
+ * the rest of the actions in the row, as the sheet's does by pulling up.
+ * On a phone on its side, with Before beside After, it's a column at the
+ * right instead, with room for them all.
  */
-export function RuleSelection(props: { focus: FocusKit; beside: boolean }) {
+export function RuleSelection(props: { focus: FocusKit; m: NetModel; beside: boolean }) {
   const f = props.focus;
-  const sheets = createSheets(f.say);
-  const shown = () => {
-    const all = f.actions();
-    if (props.beside || all.length <= 5) return all;
-    return [...all.slice(0, 4), { id: "more", label: "More", icon: I.More, run: () => sheets.more(f.label(), all.slice(4)) }];
-  };
+  const [expanded, setExpanded] = createSignal(false);
+  // Another selection, or none, folds the rest away again.
+  createEffect(on([() => f.focus()?.kind, props.m.selection, props.m.hover], () => setExpanded(false), { defer: true }));
   return (
-    <>
-      <Show when={f.info()}>
-        {(i) => <FocusInfo class={props.beside ? "rp-focus beside" : "rp-focus"} label={f.label()} info={i()} actions={shown()} say={f.say} onChoices={sheets.choices} />}
-      </Show>
-      {sheets.view()}
-    </>
+    <SelectionView
+      class={props.beside ? "rp-focus beside" : "rp-focus"}
+      focus={f}
+      row={props.beside ? 3 : 5}
+      folds={!props.beside}
+      expanded={expanded()}
+      onMore={() => setExpanded(true)}
+    />
   );
 }

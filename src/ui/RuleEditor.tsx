@@ -43,15 +43,12 @@ const PAD: { before: Pad; after: Pad } = { before: { t: 48, r: 24, b: 48, l: 24 
 /**
  * On a phone the rule is fitted snugly, below the captions, and zoomed in
  * no further than `PHONE_ZOOM`, so a small rule isn't drawn huge. The
- * result leaves room for the selection's row, which comes up over it
- * without moving anything: at the bottom (over the status line too), room
- * for its words, a line of them, and its buttons; with Before beside After,
- * a column at the right.
+ * result takes the whole of After: the selection's row comes up over it
+ * without moving anything, and only Fit fits it to what the row leaves.
  */
 const PHONE_PAD: Pad = { t: 30, r: 14, b: 14, l: 14 };
-const PHONE_AFTER_PAD: Pad = { ...PHONE_PAD, b: PHONE_PAD.b + 104 };
-const PHONE_AFTER_BESIDE: Pad = { ...PHONE_PAD, r: PHONE_PAD.r + 250 };
 const PHONE_ZOOM = 1.6;
+const NO_COVER: Pad = { t: 0, r: 0, b: 0, l: 0 };
 /** When the editor shows Before over After rather than beside it, as styles.css has it. */
 const STACKED = "(max-width: 760px)";
 
@@ -202,15 +199,33 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
   onCleanup(() => stackedMq.removeEventListener("change", onStacked));
   /** A phone on its side, with Before beside After. */
   const beside = () => compact() && !stacked();
-  const afterPad = () => (!compact() ? PAD.after : beside() ? PHONE_AFTER_BESIDE : PHONE_AFTER_PAD);
+  /** How much of After the selection's row covered when last fitted: only Fit fits clear of it. */
+  const [cover, setCover] = createSignal(NO_COVER);
+  const afterPad = (): Pad => {
+    if (!compact()) return PAD.after;
+    const c = cover();
+    return { t: PHONE_PAD.t + c.t, r: PHONE_PAD.r + c.r, b: PHONE_PAD.b + c.b, l: PHONE_PAD.l + c.l };
+  };
+  /** How much of After's canvas the selection's row covers now: along its bottom, or (beside) its right. */
+  const covered = (): Pad => {
+    const row = panel.querySelector(".rp-focus")?.getBoundingClientRect();
+    const r = afterEl.getBoundingClientRect();
+    if (!row || row.bottom <= r.top || row.top >= r.bottom || row.right <= r.left || row.left >= r.right) return NO_COVER;
+    const bottom = row.left <= r.left + 1 && row.right >= r.right - 1;
+    return bottom ? { ...NO_COVER, b: Math.max(0, r.bottom - row.top) } : { ...NO_COVER, r: Math.max(0, r.right - row.left) };
+  };
 
   /**
    * Before's height on a phone with Before over After: just what it needs at
    * the zoom both are drawn at, After getting the rest.
    */
   const [split, setSplit] = createSignal<number>();
-  /** Fit both sides at one zoom, so an agent is the same size on both. */
-  const fitBoth = () => {
+  /**
+   * Fit both sides at one zoom, so an agent is the same size on both: After
+   * all of it, or (asked to, by Fit) what `cover` leaves of it.
+   */
+  const fitBoth = (clear = NO_COVER) => {
+    setCover(clear);
     if (compact() && stacked()) return fitStacked();
     setSplit(undefined);
     const k = Math.min(lcam.fitZoom(), rcam.fitZoom(), compact() ? PHONE_ZOOM : Infinity);
@@ -225,7 +240,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
     const lb = lcam.bounds();
     const rb = rcam.bounds();
     if (!lb || !rb) return;
-    const [b, a] = [PHONE_PAD, PHONE_AFTER_PAD];
+    const [b, a] = [PHONE_PAD, afterPad()];
     const tall = (x: Box) => Math.max(x.y1 - x.y0, 60);
     const wide = (x: Box) => Math.max(x.x1 - x.x0, 60);
     const w = afterEl.offsetWidth;
@@ -246,7 +261,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
   createEffect(on(rhs.rev, () => queueMicrotask(() => !compact() && rcam.spills() && fitBoth()), { defer: true }));
   const tidy = () => {
     rhs.tidy();
-    queueMicrotask(fitBoth);
+    queueMicrotask(() => fitBoth());
   };
 
   /** Where a click on a palette tile drops an agent: in free space just right of the result, a little apart each time. */
@@ -318,12 +333,13 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
       touch?.setArmed(undefined);
     } else tryClose();
   };
-  dismissOnClickOutside(() => panel, ed.closeRule, dirty, () => flash(), ".palette, .top-right", escape);
+  // The phone's chrome that the editor opens (lists, menus) is the editor's too.
+  dismissOnClickOutside(() => panel, ed.closeRule, dirty, () => flash(), ".palette, .top-right, .phone-chrome", escape);
 
   onMount(() => {
     setSubEditor({ m: rhs, camera: rcam, centre, canLeave: () => (dirty() ? (flash(), false) : true) });
     onCleanup(() => setSubEditor(undefined));
-    requestAnimationFrame(fitBoth);
+    requestAnimationFrame(() => fitBoth());
     // A new size refits, except on a phone when only the height changed (as
     // when the split between the halves moves): the middle stays in the middle.
     let was: { w: number; h: number } | undefined;
@@ -563,9 +579,9 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
             </span>
             <span class="rp-hint">Drag agents in from the palette →</span>
             <div class="rp-tools">
-              {/* On a phone the view stays where it's put, so it's fitted again by asking. */}
+              {/* On a phone the view stays where it's put, so it's fitted again by asking: clear of the selection's row. */}
               <Show when={compact()}>
-                <button class="btn icon rp-fit" onClick={fitBoth} aria-label="Fit the rule in view">
+                <button class="btn icon rp-fit" onClick={() => fitBoth(covered())} aria-label="Fit the rule in view">
                   <Fit />
                 </button>
               </Show>
@@ -594,7 +610,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
           <Show when={compact() && touch}>
             {(t) => (
               <>
-                <RuleSelection focus={t().focus} beside={beside()} />
+                <RuleSelection focus={t().focus} m={rhs} beside={beside()} />
                 <HoldMenu kit={t().hold} selectAll={t().hold.selectAll} />
               </>
             )}

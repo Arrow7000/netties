@@ -4,8 +4,9 @@ import { closeOnEscape } from "../dismiss";
 import { ComponentGlyph, Glyph, dirsOf } from "../Glyph";
 import * as I from "../icons";
 import type { Info } from "../Panels";
-import type { Action, Choice } from "./focus";
+import type { Action, Choice, FocusKit } from "./focus";
 import type { Phone, TileWhat } from "./kit";
+import { arrange, firstRow } from "./order";
 import type { RunButton } from "./transport";
 
 /** The tile being carried, drawn above the finger. */
@@ -252,6 +253,42 @@ export function FocusInfo(props: {
 }
 
 /**
+ * What's selected or tapped, and what can be done with it: the net's
+ * Selection face and the rule editor's row alike. The actions come in their
+ * one order (./focus.tsx); where they're in rows of `row` that fold
+ * (`folds`), those past the first row wait under More until `expanded`,
+ * which `onMore` asks for. Picking one of several (Change agent) is a list
+ * of its own.
+ */
+export function SelectionView(props: {
+  focus: FocusKit;
+  row: number;
+  folds: boolean;
+  expanded: boolean;
+  onMore: () => void;
+  /** Shown when nothing is. */
+  fallback?: JSX.Element;
+  ref?: (el: HTMLDivElement) => void;
+  class?: string;
+}) {
+  const f = props.focus;
+  const sheets = createSheets(f.say);
+  const shown = () => {
+    const all = arrange(f.actions(), props.row, props.folds);
+    if (!props.folds || props.expanded) return all;
+    return firstRow<Action>(all, props.row, { id: "more", label: "More", icon: I.More, run: props.onMore });
+  };
+  return (
+    <>
+      <Show when={f.info()} fallback={props.fallback}>
+        {(i) => <FocusInfo ref={props.ref} class={props.class} label={f.label()} info={i()} actions={shown()} say={f.say} onChoices={sheets.choices} />}
+      </Show>
+      {sheets.view()}
+    </>
+  );
+}
+
+/**
  * A list that slides up from the bottom over everything, as phones do for
  * "more" and for picking one of several: a tap on an item or outside closes it.
  */
@@ -321,18 +358,16 @@ export function ActionSheet(props: {
   );
 }
 
-/** "More" and its pick-one lists, as action sheets, one at a time. */
+/** An action's pick-one list (Change agent's agents), as an action sheet. */
 export function createSheets(say: (a: Action) => () => void) {
   const [open, setOpen] = createSignal<{ title?: JSX.Element; items: (Action | Choice)[] }>();
   const choices = (a: Action) => setOpen({ title: a.label, items: a.choices?.() ?? [] });
-  /** The actions that didn't fit, as a list. */
-  const more = (title: JSX.Element, items: Action[]) => setOpen({ title, items });
   const view = () => (
     <Show when={open()} keyed>
       {(o) => <ActionSheet title={o.title} items={o.items} say={say} onChoices={choices} onClose={() => setOpen(undefined)} />}
     </Show>
   );
-  return { choices, more, view };
+  return { choices, view };
 }
 
 /**
