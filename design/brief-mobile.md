@@ -287,3 +287,14 @@ B, C and the `?proto` switch go.
   waiting, tapping a tile plugs a new agent straight into it.
 - **Double tap on empty canvas** zooms in about twice, around the tap. On a
   component it still opens or closes it.
+
+### Then, on the rule editor's footer
+
+> btw the rule editor selection bottom panel overflows sometimes depending
+> how long the name/description is
+
+(Two screenshots: with "∷ list item" selected Save just fits; with
+"δ duplicator" selected Save wraps onto a line of its own under Delete
+rule.) The selection comes out of the footer into its own row above it,
+with the full set of actions as on the net (see the rule editor point
+above); the footer keeps only Delete rule, Cancel and Save, on one line.
