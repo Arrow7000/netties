@@ -9,7 +9,7 @@ import { flattenPath, midway, polylinePath, resample, roundedPath } from "../ren
 import { STROKE, agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { NetModel, Plug, WireGesture } from "../state/model";
 import { onEscapeCancels } from "./escape";
-import { type Effect, type Gesture, type Hit, type Input, type Msg, type View, update, zoomAbout } from "./gesture";
+import { type Effect, type Gesture, HOLD, type Hit, type Input, type Msg, type Near, REACH, type View, reach, update, zoomAbout } from "./gesture";
 import { held } from "./keys";
 import { onThaw } from "./freeze";
 import { prefs } from "./prefs";
@@ -110,6 +110,19 @@ export interface CanvasProps {
   /** Shown over the canvas while the net is empty. */
   empty?: JSX.Element;
   class?: string;
+  /** Fingers as the phone layout has them (see `Ctx.phone`), and what the canvas tells it. */
+  phone?: CanvasPhone;
+}
+
+/** What the phone layout's chrome and the canvas share. */
+export interface CanvasPhone {
+  /** The wire started by a tap on an end, waiting for its other end. */
+  armed: () => WireGesture | undefined;
+  setArmed: (g: WireGesture | undefined) => void;
+  /** A finger held on empty canvas and lifted: where, on screen (client pixels), and in the net. */
+  onHoldMenu: (client: Pt, at: Pt) => void;
+  /** A finger's tap anywhere on the canvas. */
+  onTap: () => void;
 }
 
 const NO_PAD: Pad = { t: 40, r: 40, b: 40, l: 40 };
@@ -279,7 +292,9 @@ export function Canvas(props: CanvasProps) {
         const sx1 = b.x1 * v.k + v.x;
         const sy0 = b.y0 * v.k + v.y;
         const sy1 = b.y1 * v.k + v.y;
-        if (sx0 < p.l / 2 || sy0 < p.t / 2 || sx1 > w - p.r / 2 || sy1 > h - p.b / 2) fit(true);
+        // The phone's sheet covers all of the room it takes, not half.
+        const q = props.phone ? 1 : 0.5;
+        if (sx0 < p.l * q || sy0 < p.t * q || sx1 > w - p.r * q || sy1 > h - p.b * q) fit(true);
       },
       { defer: true },
     ),
@@ -397,36 +412,31 @@ export function Canvas(props: CanvasProps) {
   /**
    * What a finger pressed. A finger covers what it presses, and whatever the
    * zoom, it's the same size on screen: so the nearest thing within its
-   * reach in screen pixels, rather than what's exactly under it. Inside an
-   * agent, how deep the finger is counts as nearness, so the middle of an
-   * agent takes the agent and its edges go to its ports.
+   * reach in screen pixels (`reach` says which), rather than what's exactly
+   * under it. Inside an agent, how deep the finger is counts as nearness, so
+   * the middle of an agent takes the agent and its edges go to its ports.
    */
   const reachAt = (screen: Pt, target: Element): Hit => {
     // An animation draws no ends to press, and the collapse button is small and exact.
     if (ed.frame() || tooBig() || target.closest("[data-collapse]")) return hitAt(target);
     const v = view();
     const at = { x: (screen.x - v.x) / v.k, y: (screen.y - v.y) / v.k };
-    let best: Hit | undefined;
-    let score = Infinity;
-    const consider = (h: Hit, s: number) => {
-      if (s < score) [best, score] = [h, s];
-    };
-    for (const c of endsNear(at, REACH.end / v.k)) consider({ kind: "end", end: c.end }, c.d * v.k - endPull(v.k));
+    const near: Near = { ends: endsNear(at, REACH.end / v.k).map((c) => ({ end: c.end, d: c.d * v.k })), agents: [], wires: [] };
     const l = ed.layout();
     const net = ed.view().net;
     for (const [id, p] of l.placement) {
       if (!net.agents.has(id)) continue;
       const d = agentDistance(at, agentOutline(p, net.agent(id).wires.length - 1, ed.view().box.has(id)), p) * v.k;
-      if (d <= REACH.agent) consider({ kind: "agent", id }, d);
+      if (d <= REACH.agent) near.agents.push({ id, d });
     }
     for (const [id, pts] of l.routed.wires) {
       const f = flattenPath(pts, G.radius);
       let d = Infinity;
       for (let i = 1; i < f.length; i++) d = Math.min(d, distanceToSegment(at, f[i - 1]!, f[i]!));
-      if (d * v.k <= REACH.wire) consider({ kind: "wire", id }, d * v.k);
+      if (d * v.k <= REACH.wire) near.wires.push({ id, d: d * v.k });
     }
     // Nothing near: a component's outline, or nothing.
-    return best ?? hitAt(target);
+    return reach(near, v.k) ?? hitAt(target);
   };
 
   const ctx = {
@@ -441,7 +451,13 @@ export function Canvas(props: CanvasProps) {
     hover: () => ed.hover(),
     near: (at: Pt, reach: number) => endsNear(at, reach).map((c) => c.end),
     view: () => view(),
+    lastTap: () => lastTap,
+    get phone() {
+      return props.phone;
+    },
   };
+  /** The last finger's tap on nothing, for telling a double tap. */
+  let lastTap: { screen: Pt; time: number } | undefined;
 
   /** Carry out what the state machine says, given the gesture it was in. */
   const perform = (fx: Effect, was: Gesture | undefined) => {
@@ -487,7 +503,53 @@ export function Canvas(props: CanvasProps) {
         return props.onStuck?.(fx.id);
       case "select-wire":
         return ed.selectWire(fx.id);
+      case "await-hold": {
+        const id = fx.pointer;
+        unhold(id);
+        holds.set(id, setTimeout(() => (holds.delete(id), send({ kind: "hold", pointer: id })), HOLD));
+        return;
+      }
+      case "held":
+        navigator.vibrate?.(8);
+        return setRipple({ ...fx.screen, n: (ripple()?.n ?? 0) + 1 });
+      case "hold-menu": {
+        const r = svg.getBoundingClientRect();
+        return props.phone?.onHoldMenu({ x: fx.screen.x + r.left, y: fx.screen.y + r.top }, fx.at);
+      }
+      case "arm":
+        return props.phone?.setArmed(fx.g);
+      case "disarm":
+        return props.phone?.setArmed(undefined);
+      case "tapped":
+        lastTap = fx.empty ? { screen: fx.screen, time: fx.time } : undefined;
+        return props.phone?.onTap();
+      case "zoom":
+        return zoomGlide(fx.by, fx.about);
     }
+  };
+  /** Where a finger was held, for a moment of feedback. */
+  const [ripple, setRipple] = createSignal<Pt & { n: number }>();
+  /** Fingers that might be held, and the timers that would say so. */
+  const holds = new Map<number, ReturnType<typeof setTimeout>>();
+  const unhold = (id: number) => {
+    clearTimeout(holds.get(id));
+    holds.delete(id);
+  };
+  onCleanup(() => holds.forEach((t) => clearTimeout(t)));
+
+  /** Zoom by `by` about a point on screen, gliding there quickly. */
+  const zoomGlide = (by: number, about: Pt) => {
+    cancelAnimationFrame(glide);
+    const from = view();
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return setView(zoomAbout(from, from.k * by, about));
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - t0) / 200);
+      const e = 1 - Math.pow(1 - t, 3);
+      setView(zoomAbout(from, from.k * Math.pow(by, e), about));
+      if (t < 1) glide = requestAnimationFrame(tick);
+    };
+    glide = requestAnimationFrame(tick);
   };
 
   let previewFrame = 0;
@@ -529,7 +591,7 @@ export function Canvas(props: CanvasProps) {
     const screen = onScreen(e);
     const target = e.target as Element;
     const hit = input === "touch" ? reachAt(screen, target) : hitAt(target);
-    send({ kind: "down", pointer: e.pointerId, input, hit, button: e.button, screen, at: toWorld(e), shift: e.shiftKey, alt: e.altKey, space: space() });
+    send({ kind: "down", pointer: e.pointerId, input, hit, button: e.button, screen, at: toWorld(e), shift: e.shiftKey, alt: e.altKey, space: space(), time: e.timeStamp });
   };
 
   const onPointerMove = (e: PointerEvent) => {
@@ -589,14 +651,17 @@ export function Canvas(props: CanvasProps) {
   const preselectedWires = createMemo(() => new Set(preselected().wires));
 
   const onPointerUp = (e: PointerEvent) => {
+    unhold(e.pointerId);
     if (!drag()) return;
-    send({ kind: "up", pointer: e.pointerId, alt: e.altKey });
+    send({ kind: "up", pointer: e.pointerId, alt: e.altKey, time: e.timeStamp });
     // The mouse hovers what it's left over. A finger's tap has said what to hover.
     if (inputOf(e) === "mouse" && !drag()) ed.setHover(hoverAt(document.elementFromPoint(e.clientX, e.clientY)));
   };
 
   /** Drop whatever was being dragged, undoing what it did. Says whether there was anything. */
   const cancel = () => {
+    holds.forEach((t) => clearTimeout(t));
+    holds.clear();
     if (!drag()) return false;
     send({ kind: "cancel" });
     ed.setHover(undefined);
@@ -715,6 +780,16 @@ export function Canvas(props: CanvasProps) {
       const c = ends.get(endKey(e));
       if (c) return c.fits ? "candidate" : "blocked";
       return ed.view().net.wireAt(e) === NONE ? "empty" : "none";
+    }
+    // A wire started by a tap: its end, and where it could go, lit up as while dragging one.
+    const tapped = !wireDrag() && props.phone?.armed();
+    if (tapped) {
+      if (sameEnd(e, tapped.kind === "new" ? tapped.from : tapped.moving)) return "origin";
+      const h = ed.hover();
+      if (h?.kind === "drag" && h.target && sameEnd(h.target, e) && h.check?.kind === "refuse") return "refuse";
+      const open = ed.view().net.wireAt(e) === NONE || (e.kind === "free" && ed.freePorts.scratch);
+      if (!open) return "none";
+      return ed.checkDrop(tapped, e).kind === "refuse" ? "blocked" : "candidate";
     }
     const d = wireDrag();
     if (d) {
@@ -976,7 +1051,8 @@ export function Canvas(props: CanvasProps) {
             </g>
             <StepPreview ed={ed} hidden={busy() || !props.onFire || !!props.preview} />
             <Show when={firing()?.preview}>{(p) => <RulePreview preview={p()} system={sys} />}</Show>
-            <HoverPill ed={ed} hidden={busy() && drag()!.kind !== "click-wire"} canFire={!!props.onFire} canOpen={!!props.onStuck} touch={touched()} />
+            {/* The phone's sheet says what a tapped pair would do. */}
+            <HoverPill ed={ed} hidden={(busy() && drag()!.kind !== "click-wire") || !!props.phone} canFire={!!props.onFire} canOpen={!!props.onStuck} touch={touched()} />
           </g>
           <Show when={wireDrag()}>
             {(d) => (
@@ -1022,6 +1098,9 @@ export function Canvas(props: CanvasProps) {
           </Show>
         </g>
       </svg>
+      <Show when={ripple()} keyed>
+        {(r) => <div class="hold-ripple" style={{ left: `${r.x}px`, top: `${r.y}px` }} onAnimationEnd={() => setRipple(undefined)} />}
+      </Show>
       <Show when={tooBig()}>
         <div class="canvas-note">
           {ed.view().net.agents.size.toLocaleString()} agents: too many to draw. The counts still update as it runs.
@@ -1033,20 +1112,6 @@ export function Canvas(props: CanvasProps) {
     </div>
   );
 }
-
-/**
- * How far a finger reaches, in screen pixels: furthest to ends, which are
- * small, and least beyond an agent's outline, so pressing beside agents
- * still pans.
- */
-const REACH = { end: 22, wire: 16, agent: 8 };
-/**
- * How much nearer a finger counts ends than agents and wires, since ends sit
- * on agents' edges and wires run into them: 8 screen pixels, or less zoomed
- * out, where it's 5 of the net's units, so short wires and small agents
- * still have room to be pressed.
- */
-const endPull = (k: number) => Math.min(8, 5 * k);
 
 /** How far a point is outside an agent's outline, or, inside it, minus how deep it is. */
 function agentDistance(at: Pt, o: ReturnType<typeof agentOutline>, centre: Pt): number {

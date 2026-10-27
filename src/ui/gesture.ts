@@ -11,26 +11,48 @@ import type { DropCheck, Hover, WireGesture } from "../state/model";
  * is here.
  *
  * A mouse does one thing at a time. Fingers can do two: while one finger
- * carries a wire or agents, others move the view under it.
+ * carries a wire or agents, others move the view under it. In the phone
+ * layout a finger held still does what the missing keys did (see `hold`).
  *
  *   idle ──down──▶ press ──moves──▶ wire | move
  *        ──mouse down──▶ marquee | pan | click-wire
  *        ──finger down──▶ tap ──moves──▶ pan
- *   press | tap | pan ──another finger──▶ pan (pinching)
+ *        ──finger down again just after a tap on nothing──▶ zoom ──up, not moved──▶ idle (zoomed in)
+ *   tap ──held on nothing──▶ marquee ──up, not moved──▶ idle (a menu where it was held)
+ *   tap ──held on a wire──▶ pan (its wire selected)
+ *   press ──held on an agent──▶ press (the agent added or taken out)
+ *   press | tap | zoom | pan | a finger's marquee ──another finger──▶ pan (pinching)
  *   wire | move ──another finger──▶ the same, with a grip on the view
  *   any ──up──▶ idle (finishing what it was doing), or pan (fingers left on the view)
  *   any ──cancel (Escape, lost pointer)──▶ idle (undoing what it was doing)
  */
 export type Gesture =
-  /** A button or finger is down on a port or an agent, but hasn't moved far enough to drag it. `tapped` is what a tap leaves hovered. */
-  | { kind: "press"; on: "wire"; pointer: number; input: Input; g: WireGesture; start: Pt; tapped: Hover }
-  | { kind: "press"; on: "move"; pointer: number; input: Input; start: Pt; at: Pt; tapped: Hover }
-  /** A finger is down on a wire or on nothing: lifted where it is, it's a tap; moved, it pans. */
-  | { kind: "tap"; pointer: number; start: Pt; on: TapOn }
+  /**
+   * A button or finger is down on a port or an agent, but hasn't moved far
+   * enough to drag it. `tapped` is what a tap leaves hovered; `end`, the end
+   * pressed, which a tap in the phone layout can start a wire from.
+   */
+  | { kind: "press"; on: "wire"; pointer: number; input: Input; g: WireGesture; start: Pt; tapped: Hover; end: End }
+  /**
+   * `waiting`: a finger in the phone layout on an agent, whose selecting
+   * waits to see what the finger does. Lifted, it selects the agent; held,
+   * it adds the agent to the selection or takes it out, and stops waiting;
+   * dragged, it selects the agent and moves it.
+   */
+  | { kind: "press"; on: "move"; pointer: number; input: Input; start: Pt; at: Pt; tapped: Hover; waiting?: AgentId }
+  /** A finger is down on a wire or on nothing (at `at` in the net): lifted where it is, it's a tap; moved, it pans. */
+  | { kind: "tap"; pointer: number; start: Pt; at: Pt; on: TapOn }
   /** `screen` is where the pointer carrying the wire is; `grip`, other fingers moving the view meanwhile. */
   | { kind: "wire"; pointer: number; input: Input; g: WireGesture; cur: Pt; screen: Pt; target?: End; check?: DropCheck; grip?: Grip }
   | { kind: "move"; pointer: number; input: Input; last: Pt; screen: Pt; grip?: Grip }
-  | { kind: "marquee"; pointer: number; start: Pt; cur: Pt; additive: boolean; moved: boolean }
+  /** `finger`: drawn by a finger held on the canvas, which is there on screen now. */
+  | { kind: "marquee"; pointer: number; start: Pt; cur: Pt; additive: boolean; moved: boolean; finger?: Pt }
+  /**
+   * A finger down again on nothing just after tapping there: lifted, it zooms
+   * in about where it tapped; dragged up or down, it zooms out or in from
+   * `origin`, about `start`, as maps do.
+   */
+  | { kind: "zoom"; pointer: number; start: Pt; origin: View; moved: boolean }
   /** `before` is the view to go back to if the pan is cancelled. */
   | { kind: "pan"; input: Input; grip: Grip; before: View; moved: boolean }
   | { kind: "click-wire"; pointer: number; id: WireId; alt: boolean };
@@ -96,10 +118,14 @@ export type Msg =
       shift: boolean;
       alt: boolean;
       space: boolean;
+      /** When, in milliseconds, to tell a double tap from two taps. */
+      time: number;
     }
   /** `over` is the end really under the mouse (pointer capture hides it from the event). */
   | { kind: "move"; pointer: number; screen: Pt; at: Pt; over?: End }
-  | { kind: "up"; pointer: number; alt: boolean }
+  | { kind: "up"; pointer: number; alt: boolean; time: number }
+  /** A finger has stayed put since the canvas was asked to wait for it (`await-hold`). */
+  | { kind: "hold"; pointer: number }
   | { kind: "cancel" };
 
 export type Effect =
@@ -119,7 +145,23 @@ export type Effect =
   | { kind: "return-wire"; g: WireGesture }
   | { kind: "fire"; id: WireId }
   | { kind: "stuck"; id: WireId }
-  | { kind: "select-wire"; id: WireId };
+  | { kind: "select-wire"; id: WireId }
+  /** Send a `hold` for this finger once it has been down for `HOLD`, unless it has lifted. */
+  | { kind: "await-hold"; pointer: number }
+  /** A hold has counted: a buzz, and a ring where the finger is. */
+  | { kind: "held"; screen: Pt }
+  /** A finger held on empty canvas and lifted: a menu there, at `screen`, for pasting at `at`. */
+  | { kind: "hold-menu"; screen: Pt; at: Pt }
+  /** A wire started by a tap on an end, to be finished by a tap on another; or, `disarm`, let go. */
+  | { kind: "arm"; g: WireGesture }
+  | { kind: "disarm" }
+  /**
+   * A finger's tap on the canvas, at `screen` and `time`; `empty`, on nothing.
+   * The canvas remembers the last, for `Ctx.lastTap`.
+   */
+  | { kind: "tapped"; screen: Pt; time: number; empty: boolean }
+  /** Zoom in or out by `by`, about a point on screen, gliding there. */
+  | { kind: "zoom"; by: number; about: Pt };
 
 /** What `update` needs to know about the canvas and its net. Reading only. */
 export interface Ctx {
@@ -134,13 +176,86 @@ export interface Ctx {
   /** The ends within `reach` (in the net's units) of a point, nearest first. */
   near(at: Pt, reach: number): End[];
   view(): View;
+  /** The last finger's tap on nothing, as the `tapped` effect told it, to tell a double tap. */
+  lastTap(): { screen: Pt; time: number } | undefined;
+  /**
+   * Fingers in the phone layout (src/ui/phone). Holds count, a tap on an
+   * agent waits to see whether it was a tap, and a tap on an empty port or
+   * a loose end starts a wire, `armed` until a tap on another end finishes
+   * it. Without it, fingers do as they always have.
+   */
+  phone?: { armed(): WireGesture | undefined };
 }
+
+/** How long a finger stays put, in milliseconds, before a press is a hold. */
+export const HOLD = 420;
+
+/** How soon, in milliseconds, and how near, in screen pixels, a second tap makes a double tap. */
+export const DOUBLE = { time: 300, reach: 24 };
+
+/** How much a double tap zooms in; and dragging after one, how far up or down, in screen pixels, zooms by e. */
+export const DOUBLE_ZOOM = 2;
+const ZOOM_DRAG = 150;
 
 /** How far a pointer moves, in screen pixels, before a press becomes a drag. A finger wobbles more than a mouse. */
 export const SLOP: Record<Input, number> = { mouse: 3, touch: 8 };
 
 /** How far from a finger, in screen pixels, a wire it carries looks for an end to plug into. */
 export const SNAP = 30;
+
+/**
+ * How far a finger reaches, in screen pixels: furthest to ends, which are
+ * small, and least beyond an agent's outline, so pressing beside agents
+ * still pans.
+ */
+export const REACH = { end: 22, wire: 16, agent: 8 };
+
+/**
+ * How big an end is, in the net's units: the ring it gets when lit up, and
+ * the circle the mouse hits. A finger further from it than that, and
+ * `END_GRACE` screen pixels more, is taken to mean a wire within its reach
+ * rather than the end.
+ */
+export const END_SIZE = 6.5;
+export const END_GRACE = 6;
+
+/**
+ * How much nearer a finger counts ends than agents and wires, since ends sit
+ * on agents' edges and wires run into them: 8 screen pixels, or less zoomed
+ * out, where it's 5 of the net's units, so short wires and small agents
+ * still have room to be pressed.
+ */
+const endPull = (k: number) => Math.min(8, 5 * k);
+
+/** What's within a finger's reach, each with how far it is in screen pixels; inside an agent, minus how deep. */
+export interface Near {
+  ends: { end: End; d: number }[];
+  agents: { id: AgentId; d: number }[];
+  wires: { id: WireId; d: number }[];
+}
+
+/**
+ * What a finger pressed, of what's near it, with the view at zoom `k`: the
+ * nearest, counting ends a little nearer. Zoomed out everything is close
+ * together, so ends further than their own size (and a little) only count
+ * when there's no wire within reach: a finger on a wire takes the wire, not
+ * a port at its end. Undefined when nothing is in reach.
+ */
+export function reach(near: Near, k: number): Hit | undefined {
+  const wire = near.wires.some((w) => w.d <= REACH.wire);
+  let best: Hit | undefined;
+  let score = Infinity;
+  const consider = (h: Hit, d: number) => {
+    if (d < score) [best, score] = [h, d];
+  };
+  for (const e of near.ends) {
+    if (e.d > REACH.end || (wire && e.d > END_SIZE * k + END_GRACE)) continue;
+    consider({ kind: "end", end: e.end }, e.d - endPull(k));
+  }
+  for (const a of near.agents) if (a.d <= REACH.agent) consider({ kind: "agent", id: a.id }, a.d);
+  for (const w of near.wires) if (w.d <= REACH.wire) consider({ kind: "wire", id: w.id }, w.d);
+  return best;
+}
 
 /** How far the view zooms out and in. */
 export const ZOOM = { min: 0.15, max: 8 };
@@ -161,6 +276,8 @@ export function update(s: Gesture | undefined, msg: Msg, ctx: Ctx): Out {
       return s ? move(s, msg, ctx) : [s, []];
     case "up":
       return s ? up(s, msg, ctx) : [s, []];
+    case "hold":
+      return s ? hold(s, msg, ctx) : [s, []];
     case "cancel":
       return s ? [undefined, cancel(s)] : [s, []];
   }
@@ -182,13 +299,16 @@ function down(msg: Extract<Msg, { kind: "down" }>, ctx: Ctx): Out {
   }
   if (ctx.readonly) return pan();
   const hit = msg.hit;
-  const pressMove = (tapped: Hover): Gesture => ({ kind: "press", on: "move", pointer, input, start: screen, at: msg.at, tapped });
+  const pressMove = (tapped: Hover): Extract<Gesture, { kind: "press"; on: "move" }> => ({ kind: "press", on: "move", pointer, input, start: screen, at: msg.at, tapped });
+  /** In the phone layout, a finger that might be held. */
+  const holdable = input === "touch" && ctx.phone ? [{ kind: "await-hold", pointer } as const] : [];
   switch (hit.kind) {
     case "end": {
       const tapped: Hover = hit.end.kind === "port" ? { kind: "port", end: hit.end } : { kind: "free", name: hit.end.name };
-      return [{ kind: "press", on: "wire", pointer, input, g: ctx.gestureAt(hit.end), start: screen, tapped }, fx()];
+      return [{ kind: "press", on: "wire", pointer, input, g: ctx.gestureAt(hit.end), start: screen, tapped, end: hit.end }, fx()];
     }
     case "agent":
+      if (holdable.length) return [{ ...pressMove({ kind: "agent", id: hit.id }), waiting: hit.id }, holdable];
       return [pressMove({ kind: "agent", id: hit.id }), !ctx.isSelected(hit.id) || msg.shift ? fx({ kind: "pick", id: hit.id, additive: msg.shift }) : fx()];
     case "collapse":
       return [undefined, fx({ kind: "collapse", group: hit.group })];
@@ -198,14 +318,19 @@ function down(msg: Extract<Msg, { kind: "down" }>, ctx: Ctx): Out {
       if (input === "touch") {
         const h = ctx.hover();
         const armed = h?.kind === "wire" && h.id === hit.id;
-        return [{ kind: "tap", pointer, start: screen, on: { kind: "wire", id: hit.id, armed, alt: msg.alt } }, []];
+        return [{ kind: "tap", pointer, start: screen, at: msg.at, on: { kind: "wire", id: hit.id, armed, alt: msg.alt } }, holdable];
       }
       // Still pointing at it: keep its preview up while the button is down.
       return [{ kind: "click-wire", pointer, id: hit.id, alt: msg.alt }, [{ kind: "hover", hover: { kind: "wire", id: hit.id } }]];
     }
-    case "none":
-      if (input === "touch") return [{ kind: "tap", pointer, start: screen, on: { kind: "none" } }, []];
-      return [{ kind: "marquee", pointer, start: msg.at, cur: msg.at, additive: msg.shift, moved: false }, [unhover]];
+    case "none": {
+      if (input !== "touch") return [{ kind: "marquee", pointer, start: msg.at, cur: msg.at, additive: msg.shift, moved: false }, [unhover]];
+      const last = ctx.lastTap();
+      if (last && msg.time - last.time <= DOUBLE.time && !beyond(last.screen, screen, DOUBLE.reach)) {
+        return [{ kind: "zoom", pointer, start: screen, origin: ctx.view(), moved: false }, []];
+      }
+      return [{ kind: "tap", pointer, start: screen, at: msg.at, on: { kind: "none" } }, holdable];
+    }
   }
 }
 
@@ -215,7 +340,8 @@ function another(s: Gesture, msg: Extract<Msg, { kind: "down" }>, ctx: Ctx): Out
   const finger: Finger = { id: msg.pointer, from: msg.screen, at: msg.screen };
   switch (s.kind) {
     case "press":
-    case "tap": {
+    case "tap":
+    case "zoom": {
       if (s.kind === "press" && s.input !== "touch") return [s, []];
       // Two fingers pinch the view; the first lets go of what it pressed.
       const v = ctx.view();
@@ -232,7 +358,13 @@ function another(s: Gesture, msg: Extract<Msg, { kind: "down" }>, ctx: Ctx): Out
       if (s.input !== "touch" || fingers.length >= 2) return [s, []];
       return [{ ...s, grip: regrip(ctx, [...fingers, finger]) }, []];
     }
-    case "marquee":
+    case "marquee": {
+      // A second finger on a finger's marquee: it was a pinch after all.
+      if (!s.finger) return [s, []];
+      const v = ctx.view();
+      const first: Finger = { id: s.pointer, from: s.finger, at: s.finger };
+      return [{ kind: "pan", input: "touch", grip: { origin: v, fingers: [first, finger] }, before: v, moved: true }, []];
+    }
     case "click-wire":
       return [s, []];
   }
@@ -244,10 +376,12 @@ function move(s: Gesture, msg: Extract<Msg, { kind: "move" }>, ctx: Ctx): Out {
       if (msg.pointer !== s.pointer || !beyond(s.start, msg.screen, SLOP[s.input])) return [s, []];
       const { pointer, input } = s;
       if (s.on === "wire") return carry({ kind: "wire", pointer, input, g: s.g, cur: msg.at, screen: msg.screen }, msg.screen, msg.at, ctx.view().k, msg.over, ctx);
+      // A finger that was waiting drags the agent it's on: selected, unless it's among those selected already.
+      const picked: Effect[] = s.waiting !== undefined && !ctx.isSelected(s.waiting) ? [{ kind: "pick", id: s.waiting, additive: false }] : [];
       // Catch up with the pointer, so what's grabbed stays under it.
       return [
         { kind: "move", pointer, input, last: msg.at, screen: msg.screen },
-        [{ kind: "begin-move" }, { kind: "move-by", dx: msg.at.x - s.at.x, dy: msg.at.y - s.at.y }],
+        [...picked, { kind: "begin-move" }, { kind: "move-by", dx: msg.at.x - s.at.x, dy: msg.at.y - s.at.y }],
       ];
     }
     case "tap": {
@@ -268,10 +402,19 @@ function move(s: Gesture, msg: Extract<Msg, { kind: "move" }>, ctx: Ctx): Out {
       const [next, fx] = carry({ ...s, grip }, s.screen, at, v.k, undefined, ctx);
       return [next, [{ kind: "view", view: v }, ...fx]];
     }
+    case "zoom": {
+      if (msg.pointer !== s.pointer) return [s, []];
+      const moved = s.moved || beyond(s.start, msg.screen, SLOP.touch);
+      if (!moved) return [s, []];
+      // Down zooms in, up zooms out, about where the finger went down.
+      const k = s.origin.k * Math.exp((msg.screen.y - s.start.y) / ZOOM_DRAG);
+      return [{ ...s, moved }, [{ kind: "view", view: zoomAbout(s.origin, k, s.start) }]];
+    }
     case "marquee": {
       if (msg.pointer !== s.pointer) return [s, []];
-      const moved = s.moved || Math.hypot(msg.at.x - s.start.x, msg.at.y - s.start.y) * ctx.view().k > SLOP.mouse;
-      return [{ ...s, cur: msg.at, moved }, []];
+      const slop = s.finger ? SLOP.touch : SLOP.mouse;
+      const moved = s.moved || Math.hypot(msg.at.x - s.start.x, msg.at.y - s.start.y) * ctx.view().k > slop;
+      return [{ ...s, cur: msg.at, moved, finger: s.finger && msg.screen }, []];
     }
     case "pan": {
       if (!holds(s.grip, msg.pointer)) return [s, []];
@@ -313,13 +456,27 @@ function snap(g: WireGesture, at: Pt, k: number, ctx: Ctx): [End?, DropCheck?] {
 
 function up(s: Gesture, msg: Extract<Msg, { kind: "up" }>, ctx: Ctx): Out {
   switch (s.kind) {
-    case "press":
+    case "press": {
       if (msg.pointer !== s.pointer) return [s, []];
       // Pressing a port and letting go leaves its wire alone. A tap leaves what it tapped hovered.
-      return [undefined, s.input === "touch" ? [{ kind: "hover", hover: s.tapped }] : []];
-    case "tap":
+      if (s.input !== "touch") return [undefined, []];
+      const hover: Effect = { kind: "hover", hover: s.tapped };
+      const tap: Effect = { kind: "tapped", screen: s.start, time: msg.time, empty: false };
+      if (!ctx.phone) return [undefined, [hover, tap]];
+      if (s.on === "wire") return [undefined, [...tappedEnd(s.end, s.g, s.tapped, ctx), tap]];
+      // A tap on an agent selects it, unless it's among those selected already; and lets go of a wire waiting for its other end.
+      const pick: Effect[] = s.waiting !== undefined && !ctx.isSelected(s.waiting) ? [{ kind: "pick", id: s.waiting, additive: false }] : [];
+      return [undefined, [...disarm(ctx), ...pick, hover, tap]];
+    }
+    case "tap": {
       if (msg.pointer !== s.pointer) return [s, []];
-      return [undefined, tapped(s.on, ctx)];
+      const tap: Effect = { kind: "tapped", screen: s.start, time: msg.time, empty: s.on.kind === "none" };
+      return [undefined, [...disarm(ctx), ...tapped(s.on, ctx), tap]];
+    }
+    case "zoom":
+      if (msg.pointer !== s.pointer) return [s, []];
+      // Told as a tap on something, so a third tap doesn't make a second double tap.
+      return [undefined, [...(s.moved ? [] : [{ kind: "zoom", by: DOUBLE_ZOOM, about: s.start } as const]), { kind: "tapped", screen: s.start, time: msg.time, empty: false }]];
     case "wire":
     case "move": {
       if (msg.pointer !== s.pointer) {
@@ -336,6 +493,8 @@ function up(s: Gesture, msg: Extract<Msg, { kind: "up" }>, ctx: Ctx): Out {
     case "marquee":
       if (msg.pointer !== s.pointer) return [s, []];
       if (s.moved) return [undefined, [{ kind: "select-in", marquee: s }]];
+      // A finger held on the canvas and lifted without drawing anything.
+      if (s.finger) return [undefined, [{ kind: "hold-menu", screen: s.finger, at: s.start }]];
       return [undefined, s.additive ? [] : [{ kind: "clear-selection" }]];
     case "pan": {
       if (!holds(s.grip, msg.pointer)) return [s, []];
@@ -369,6 +528,60 @@ function tapped(on: TapOn, ctx: Ctx): Effect[] {
   return on.armed ? [{ kind: does, id: on.id }, { kind: "hover", hover: undefined }] : [hover];
 }
 
+/**
+ * A finger in the phone layout held still, before it moved. Held on nothing,
+ * it starts a marquee that adds to the selection (Shift-drag's job); held on
+ * a wire, it selects the wire, so an active pair's is selected rather than
+ * fired (Alt-click's), and the finger then only moves the view; held on an
+ * agent, it adds the agent to the selection or takes it out (Shift-click's).
+ */
+function hold(s: Gesture, msg: Extract<Msg, { kind: "hold" }>, ctx: Ctx): Out {
+  if (!ctx.phone || !("pointer" in s) || s.pointer !== msg.pointer) return [s, []];
+  switch (s.kind) {
+    case "tap": {
+      const held: Effect = { kind: "held", screen: s.start };
+      if (s.on.kind === "none") {
+        return [{ kind: "marquee", pointer: s.pointer, start: s.at, cur: s.at, additive: true, moved: false, finger: s.start }, [held, ...disarm(ctx)]];
+      }
+      const v = ctx.view();
+      const pan: Gesture = { kind: "pan", input: "touch", grip: { origin: v, fingers: [{ id: s.pointer, from: s.start, at: s.start }] }, before: v, moved: false };
+      // A pair's preview goes: it's a selected wire now, which a tap doesn't fire.
+      const hover: Hover | undefined = ctx.clickable(s.on.id) ? undefined : { kind: "wire", id: s.on.id };
+      return [pan, [held, { kind: "select-wire", id: s.on.id }, { kind: "hover", hover }]];
+    }
+    case "press":
+      if (s.on !== "move" || s.waiting === undefined) return [s, []];
+      return [{ ...s, waiting: undefined }, [{ kind: "held", screen: s.start }, { kind: "pick", id: s.waiting, additive: true }, { kind: "hover", hover: s.tapped }]];
+    default:
+      return [s, []];
+  }
+}
+
+/** Letting go of a wire started by a tap, if one is waiting. */
+const disarm = (ctx: Ctx): Effect[] => (ctx.phone?.armed() ? [{ kind: "disarm" }] : []);
+
+/** The end a wire started by a tap comes from: tapping it again lets go. */
+const armedFrom = (g: WireGesture): End => (g.kind === "new" ? g.from : g.moving);
+
+/**
+ * A finger's tap on an end, in the phone layout. With a wire waiting, the
+ * tap finishes it there if it can go there, or says why not; tapping the
+ * end it started from lets go. Otherwise an empty port, or a loose end,
+ * starts one.
+ */
+function tappedEnd(end: End, g: WireGesture, shown: Hover, ctx: Ctx): Effect[] {
+  const a = ctx.phone?.armed();
+  if (a) {
+    if (sameEnd(end, armedFrom(a))) return [{ kind: "disarm" }, { kind: "hover", hover: shown }];
+    const check = ctx.checkDrop(a, end);
+    if (check.kind === "ok") return [{ kind: "finish-wire", g: a, to: end }, { kind: "disarm" }, { kind: "hover", hover: undefined }];
+    if (check.kind === "back") return [{ kind: "disarm" }, { kind: "hover", hover: undefined }];
+    return [{ kind: "hover", hover: { kind: "drag", gesture: a, target: end, check } }];
+  }
+  if (g.kind === "new" || end.kind === "free") return [{ kind: "arm", g }, { kind: "hover", hover: shown }];
+  return [{ kind: "hover", hover: shown }];
+}
+
 function cancel(s: Gesture): Effect[] {
   switch (s.kind) {
     case "wire":
@@ -377,6 +590,8 @@ function cancel(s: Gesture): Effect[] {
       return [{ kind: "cancel-move" }];
     case "pan":
       return [{ kind: "view", view: s.before }];
+    case "zoom":
+      return [{ kind: "view", view: s.origin }];
     default:
       return [];
   }
