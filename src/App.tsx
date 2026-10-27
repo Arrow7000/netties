@@ -1,6 +1,6 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { createEditor } from "./state/editor";
-import { type Doc, fromShareHash, loadLocal } from "./state/persist";
+import { type Doc, arrival, fromShareHash, loadLocal, sharePushes } from "./state/persist";
 import { Canvas, type Pad, createCamera } from "./ui/Canvas";
 import { compact, fingers } from "./ui/compact";
 import { ComponentEditor } from "./ui/ComponentEditor";
@@ -82,22 +82,32 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
   const flash = (b: HTMLElement) => b.animate([{ background: "var(--accent-soft)", color: "var(--accent)" }, {}], { duration: 450, easing: "ease-out" });
 
   onMount(() => {
+    // Going back or forward to another address, or one typed in. Sharing pushes
+    // its link without a hashchange, so this never reloads what it just shared.
+    // (Entries with the same address hold the same net, so popstate adds nothing.)
     let hashNavigation = 0;
     const onHashChange = async () => {
       const hash = location.hash;
       const navigation = ++hashNavigation;
-      if (!hash.startsWith("#n=")) return setLinked(undefined);
-      const doc = await fromShareHash(hash);
+      const doc = hash.startsWith("#n=") ? await fromShareHash(hash) : undefined;
       if (navigation !== hashNavigation || location.hash !== hash) return;
-      if (!doc) {
-        ed.setMessage("Couldn't load this shared net.");
-        return;
-      }
-      try {
-        ed.load(doc);
-        setLinked(ed.fingerprint());
-      } catch {
-        ed.setMessage("Couldn't load this shared net.");
+      switch (arrival(hash, doc, ed.fingerprint())) {
+        case "no-net":
+          return setLinked(undefined);
+        case "unreadable":
+          return ed.setMessage("Couldn't load this shared net.");
+        case "showing":
+          return setLinked(ed.fingerprint());
+        case "load":
+          // Not over a panel with unsaved changes (it says so); any other panel closes first.
+          if (!canLeave()) return setLinked(undefined);
+          if (ed.screen().kind !== "net") ed.dispatch({ kind: "screen/close" });
+          try {
+            ed.load(doc!, "Loaded the net in the link.");
+            setLinked(ed.fingerprint());
+          } catch {
+            ed.setMessage("Couldn't load this shared net.");
+          }
       }
     };
     window.addEventListener("hashchange", onHashChange);
@@ -246,7 +256,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
     const print = ed.fingerprint();
     const hash = await toShareHash(ed.toDoc());
     const url = location.origin + location.pathname + hash;
-    history.replaceState(null, "", hash);
+    // A new entry, so the back button goes to the address before.
+    if (sharePushes(location.hash, hash)) history.pushState(null, "", hash);
     setLinked(print);
     try {
       await navigator.clipboard.writeText(url);

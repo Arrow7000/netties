@@ -75,3 +75,19 @@ export async function fromShareHash(hash: string): Promise<Doc | undefined> {
     return undefined;
   }
 }
+
+/**
+ * What going back or forward to an address (`hash`, holding `doc` once
+ * read) does to the net showing, whose fingerprint is `here`: nothing, with
+ * no net in the address, as it's only the address that changed; nothing
+ * either if its net is the one showing; otherwise its net is loaded, as a
+ * step that can be undone, so nothing is lost by going back.
+ */
+export function arrival(hash: string, doc: Doc | undefined, here: string): "no-net" | "unreadable" | "showing" | "load" {
+  if (!hash.startsWith("#n=")) return "no-net";
+  if (!doc) return "unreadable";
+  return JSON.stringify(doc) === here ? "showing" : "load";
+}
+
+/** Whether sharing makes a new history entry: not when the address holds that link already. */
+export const sharePushes = (current: string, hash: string) => current !== hash;

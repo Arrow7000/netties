@@ -537,7 +537,8 @@ export function createEditor(initial: Doc | undefined) {
     openRule: (left: string, right: string) => dispatch({ kind: "screen/open", screen: { kind: "rule", left, right } }),
     closeRule: () => dispatch({ kind: "screen/close" }),
 
-    load(doc: Doc) {
+    /** Load a document, as a step that can be undone; `said`, said with an Undo button, as loading an example is. */
+    load(doc: Doc, said?: string) {
       stop();
       setExampleStart(undefined);
       model.checkpoint();
@@ -545,8 +546,8 @@ export function createEditor(initial: Doc | undefined) {
       const n = enforceTypes();
       if (n) {
         model.bump();
-        notify(cutMessage(n), true);
-      }
+        notify(said ? `${said} ${cutMessage(n)}` : cutMessage(n), true);
+      } else if (said) notify(said, true);
       resetRun();
       model.requestFit();
     },
