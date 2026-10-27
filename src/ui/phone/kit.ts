@@ -6,7 +6,8 @@ import { type Pt, boxOf } from "../../layout/geometry";
 import type { Editor } from "../../state/editor";
 import type { NetModel, WireGesture } from "../../state/model";
 import type { Camera, CanvasPhone, Pad } from "../Canvas";
-import { compact } from "../compact";
+import { copyText } from "../clipboard";
+import { compact, sideways } from "../compact";
 import { HOLD } from "../gesture";
 import { GHOST_STUB, ghostPlug } from "../Palette";
 import { type TileEffect, type TileMsg, type TilePress, updateTile } from "./tile";
@@ -88,11 +89,13 @@ export function createPhone(ed: Editor, camera: Camera) {
     },
   };
 
-  /** The middle of the canvas that the chrome leaves showing, on screen. */
+  /** The middle of the canvas that the chrome leaves showing, on screen: above the sheet as it is now, not as the fit counts it. */
   const visibleMiddle = (): Pt => {
     const top = document.querySelector(".top-left")?.getBoundingClientRect().bottom ?? 60;
     const r = room();
-    return { x: (8 + innerWidth - r.r) / 2, y: (top + innerHeight - r.b) / 2 };
+    const sheet = document.querySelector(".sheet.phone-chrome")?.getBoundingClientRect();
+    const bottom = sheet && !sideways() ? sheet.top : innerHeight - r.b;
+    return { x: (8 + innerWidth - r.r) / 2, y: (top + bottom) / 2 };
   };
   const middleOfView = (): Pt => {
     const c = visibleMiddle();
@@ -113,13 +116,7 @@ export function createPhone(ed: Editor, camera: Camera) {
   const secure = typeof isSecureContext !== "undefined" && isSecureContext && !!navigator.clipboard;
   const canPaste = () => secure || !!held();
 
-  const writeText = (t: string) => {
-    if (secure) {
-      navigator.clipboard.writeText(t).catch(() => legacyCopy(t));
-      return;
-    }
-    legacyCopy(t);
-  };
+  const writeText = (t: string) => void copyText(t);
 
   const count = (n: number, one: string) => (n ? `${n} ${one}${n === 1 ? "" : "s"}` : "");
   /** What's selected, in words, for saying what was copied. */
@@ -475,21 +472,4 @@ export function selectConnected(m: NetModel, from?: AgentId[]) {
     }
   }
   m.pickMany([...seen], [...wires]);
-}
-
-/** Copy text where the async clipboard isn't allowed (plain http on a phone): a selected, read-only field. */
-function legacyCopy(t: string) {
-  const ta = document.createElement("textarea");
-  ta.value = t;
-  ta.setAttribute("readonly", "");
-  Object.assign(ta.style, { position: "fixed", top: "0", left: "0", opacity: "0", pointerEvents: "none" });
-  document.body.appendChild(ta);
-  ta.select();
-  ta.setSelectionRange(0, t.length);
-  try {
-    document.execCommand("copy");
-  } catch {
-    // ignore
-  }
-  ta.remove();
 }

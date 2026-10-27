@@ -14,6 +14,7 @@ import { TextView } from "./ui/TextView";
 import { Tooltips } from "./ui/Tooltip";
 import { TranslateView } from "./ui/TranslateView";
 import { TypesSheet } from "./ui/TypesSheet";
+import { copyText } from "./ui/clipboard";
 import { createPhone } from "./ui/phone/kit";
 import { PhoneSheet } from "./ui/phone/Sheet";
 import * as I from "./ui/icons";
@@ -259,14 +260,11 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
     // A new entry, so the back button goes to the address before.
     if (sharePushes(location.hash, hash)) history.pushState(null, "", hash);
     setLinked(print);
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       setCopied(true);
       clearTimeout(copiedTimer);
       copiedTimer = setTimeout(() => setCopied(false), 900);
-    } catch {
-      ed.setMessage("Couldn't copy the link; it's in the address bar.");
-    }
+    } else ed.setMessage("Copying to the clipboard failed. The link is in the address bar: copy it from there.");
   };
 
   const exportSVG = async () => {

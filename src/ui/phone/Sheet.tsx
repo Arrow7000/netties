@@ -85,11 +85,11 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
   /** Pulled up, the body scrolls, but only if the face is taller than it is, so there's no scrollbar for nothing. */
   const scrolls = () => open() && dragged() === undefined && contentH() + EDGE > bodyHeight() + 0.5;
 
-  // The net is fitted clear of the sheet at its peek, wherever it is now: opening it is
-  // like a keyboard coming up, and closing it leaves room to spare.
+  // The net is fitted clear of the sheet put away, wherever it is now: the net gets all
+  // the room there is, and a sheet pulled up covers some of it, like a keyboard.
   createEffect(() => {
     if (sideways()) kit.setRoom({ b: 8, r: 300 + 8 });
-    else kit.setRoom({ b: 8 + GRAB + FACES + PEEK + BAR + 2, r: 8 });
+    else kit.setRoom({ b: 8 + GRAB + BAR + 2, r: 8 });
   });
 
   // What's selected takes the sheet over, and lifts it to its peek if it was down;
