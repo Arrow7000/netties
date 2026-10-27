@@ -683,6 +683,45 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* The rule editor's selection, in a row of its own over its footer (src/ui/phone/rule.tsx). */
+.rp-focus {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  border-top: 1px solid var(--line);
+  background: var(--chrome);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.rp-focus.sheet-focus {
+  padding: 8px 12px 10px;
+}
+
+.rp-focus .sheet-acts {
+  margin: 8px 0 0;
+}
+
+.rp-focus.beside {
+  top: 0;
+  left: auto;
+  width: 250px;
+  overflow-y: auto;
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+
+.rp-focus.beside .sheet-acts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Fit and Tidy keep clear of it. */
+.rp-after:has(.rp-focus.beside) .rp-tools {
+  right: 258px;
+}
+
 .sheet-empty {
   padding: 14px 12px;
 }

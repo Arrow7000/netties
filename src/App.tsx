@@ -598,7 +598,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
         {(screen) => <ComponentEditor ed={ed} id={screen.id} />}
       </Show>
       <Show when={ed.screen().kind === "rule" ? ed.screen() as Extract<ReturnType<typeof ed.screen>, { kind: "rule" }> : undefined} keyed>
-        {(screen) => <RuleEditor ed={ed} left={screen.left} right={screen.right} />}
+        {(screen) => <RuleEditor ed={ed} left={screen.left} right={screen.right} phone={phone} />}
       </Show>
       <Tooltips />
       {import.meta.env.DEV && <Show when={freezeState()}>

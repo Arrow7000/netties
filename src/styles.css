@@ -3628,8 +3628,33 @@ button.select.open {
     max-width: 100%;
   }
 
+  /* The selection has a row of its own above the footer (src/ui/phone/rule.tsx), so this keeps to one line. */
   .rp-bar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+  }
+
+  /* Fit and Tidy, side by side in the result's top corner, clear of the selection's row. */
+  .rp-tools {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    display: flex;
+    gap: 6px;
+  }
+
+  /* The selection's row comes up over the bottom of the result and its status line. */
+  .rp-after {
+    position: relative;
+  }
+
+  .rp-tools .btn.icon,
+  .rp-tools .rp-tidy.btn.icon {
+    position: static;
+    width: 40px;
+    height: 40px;
+    background: var(--chrome);
+    border: 1px solid var(--line-2);
   }
 
   .rp-grip,

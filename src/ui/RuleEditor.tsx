@@ -7,13 +7,18 @@ import { interfaceNet, interfacePins, isSymmetric, netToRule, pairNet, parseIfac
 import { System } from "../core/system";
 import { parse, print } from "../core/text";
 import { badWires, canMeet, flip, ruleClashes, specOf } from "../core/types";
+import type { Box, Pt } from "../layout/geometry";
 import type { Editor } from "../state/editor";
 import { createNetModel } from "../state/model";
-import { Canvas, createCamera } from "./Canvas";
+import { Canvas, type Pad, createCamera } from "./Canvas";
+import { compact } from "./compact";
 import { dismissOnClickOutside } from "./dismiss";
-import { Check, Left, Pencil, Redo, Right, Tidy, Trash, Undo } from "./icons";
+import { Check, Fit, Left, Pencil, Redo, Right, Tidy, Trash, Undo } from "./icons";
 import { shortcuts } from "./keys";
 import { onThaw } from "./freeze";
+import type { Phone } from "./phone/kit";
+import { HoldMenu } from "./phone/parts";
+import { RuleSelection, createRulePhone } from "./phone/rule";
 import { gridTypes } from "./RuleGrid";
 import { setSubEditor } from "./subEditor";
 
@@ -33,6 +38,23 @@ const BOTTOM = 84;
 
 const UNSAVED = "Unsaved changes: save or cancel them first.";
 
+/** Room left around each half when fitting: for the captions, and on a desktop the hint and Tidy. */
+const PAD: { before: Pad; after: Pad } = { before: { t: 48, r: 24, b: 48, l: 24 }, after: { t: 60, r: 56, b: 60, l: 56 } };
+/**
+ * On a phone the rule is fitted snugly, below the captions, and zoomed in
+ * no further than `PHONE_ZOOM`, so a small rule isn't drawn huge. The
+ * result leaves room for the selection's row, which comes up over it
+ * without moving anything: at the bottom (over the status line too), room
+ * for its words, a line of them, and its buttons; with Before beside After,
+ * a column at the right.
+ */
+const PHONE_PAD: Pad = { t: 30, r: 14, b: 14, l: 14 };
+const PHONE_AFTER_PAD: Pad = { ...PHONE_PAD, b: PHONE_PAD.b + 104 };
+const PHONE_AFTER_BESIDE: Pad = { ...PHONE_PAD, r: PHONE_PAD.r + 250 };
+const PHONE_ZOOM = 1.6;
+/** When the editor shows Before over After rather than beside it, as styles.css has it. */
+const STACKED = "(max-width: 760px)";
+
 /**
  * Draw what a pair turns into, in a panel beside the palette. The pair sits
  * small on the left; the result is built on the right, around the
@@ -41,7 +63,7 @@ const UNSAVED = "Unsaved changes: save or cancel them first.";
  * wired to what; rewiring, adding or removing agents, or the description
  * is. A panel with changes stays open until they're saved or cancelled.
  */
-export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
+export function RuleEditor(props: { ed: Editor; left: string; right: string; phone?: Phone }) {
   const ed = props.ed;
   const sys = () => ed.system;
   // A rule stored the other way round is edited from its own point of view.
@@ -103,6 +125,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
   const canSave = () => complete() && (dirty() || !saved().has);
 
   let panel!: HTMLDivElement;
+  let beforeEl!: HTMLDivElement;
   let afterEl!: HTMLDivElement;
   let cancelBtn!: HTMLButtonElement;
   let saveBtn!: HTMLButtonElement;
@@ -172,14 +195,55 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     return n ? `${word} rule: ${sym(n[0])} with ${sym(n[1])} (⌥${d < 0 ? "←" : "→"})` : "No more pairs that way";
   };
 
+  const stackedMq = matchMedia(STACKED);
+  const [stacked, setStacked] = createSignal(stackedMq.matches);
+  const onStacked = (e: MediaQueryListEvent) => setStacked(e.matches);
+  stackedMq.addEventListener("change", onStacked);
+  onCleanup(() => stackedMq.removeEventListener("change", onStacked));
+  /** A phone on its side, with Before beside After. */
+  const beside = () => compact() && !stacked();
+  const afterPad = () => (!compact() ? PAD.after : beside() ? PHONE_AFTER_BESIDE : PHONE_AFTER_PAD);
+
+  /**
+   * Before's height on a phone with Before over After: just what it needs at
+   * the zoom both are drawn at, After getting the rest.
+   */
+  const [split, setSplit] = createSignal<number>();
   /** Fit both sides at one zoom, so an agent is the same size on both. */
   const fitBoth = () => {
-    const k = Math.min(lcam.fitZoom(), rcam.fitZoom());
+    if (compact() && stacked()) return fitStacked();
+    setSplit(undefined);
+    const k = Math.min(lcam.fitZoom(), rcam.fitZoom(), compact() ? PHONE_ZOOM : Infinity);
     lcam.fitAt(k);
     rcam.fitAt(k);
   };
-  // Keep the view while editing, unless the result spills out of it.
-  createEffect(on(rhs.rev, () => queueMicrotask(() => rcam.spills() && fitBoth()), { defer: true }));
+  /**
+   * The zoom that fits Before and After into the height they share, and
+   * each into the width; then the height is split between them to suit.
+   */
+  const fitStacked = () => {
+    const lb = lcam.bounds();
+    const rb = rcam.bounds();
+    if (!lb || !rb) return;
+    const [b, a] = [PHONE_PAD, PHONE_AFTER_PAD];
+    const tall = (x: Box) => Math.max(x.y1 - x.y0, 60);
+    const wide = (x: Box) => Math.max(x.x1 - x.x0, 60);
+    const w = afterEl.offsetWidth;
+    const h = beforeEl.offsetHeight + afterEl.offsetHeight - b.t - b.b - a.t - a.b;
+    const k = Math.min(PHONE_ZOOM, (w - b.l - b.r) / wide(lb), (w - a.l - a.r) / wide(rb), h / (tall(lb) + tall(rb)));
+    if (!(k > 0)) return;
+    setSplit(Math.round(tall(lb) * k + b.t + b.b));
+    // Once the halves have their new heights.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        lcam.fitAt(k);
+        rcam.fitAt(k);
+      }),
+    );
+  };
+  // Keep the view while editing, unless the result spills out of it. On a
+  // phone, where the view is the finger's to move, it stays put regardless.
+  createEffect(on(rhs.rev, () => queueMicrotask(() => !compact() && rcam.spills() && fitBoth()), { defer: true }));
   const tidy = () => {
     rhs.tidy();
     queueMicrotask(fitBoth);
@@ -217,8 +281,11 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     return { clip, text: print(s, piece.net) };
   };
 
-  /** Paste into the result: only agents this system has, with any loose ends left as empty ports. */
-  const paste = (src: Clip | { system: System; net: Net }) => {
+  /**
+   * Paste into the result, at `at` in it, or else under the pointer or in the
+   * middle: only agents this system has, with any loose ends left as empty ports.
+   */
+  const paste = (src: Clip | { system: System; net: Net }, at?: Pt) => {
     const from = "v" in src ? System.fromJSON(src.system) : src.system;
     const piece = "v" in src ? Net.fromJSON(src.net) : src.net;
     const rel = new Map("v" in src ? src.positions : []);
@@ -234,17 +301,21 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     const r = afterEl.getBoundingClientRect();
     const c = pointer && rcam.contains(pointer.x, pointer.y) ? pointer : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     rhs.checkpoint();
-    rhs.insertPiece(piece, new Groups(), rel, rcam.toWorld(c.x, c.y) ?? { x: 0, y: 0 });
+    rhs.insertPiece(piece, new Groups(), rel, at ?? rcam.toWorld(c.x, c.y) ?? { x: 0, y: 0 });
     rhs.bump();
     return undefined;
   };
 
+  /** Fingers on a phone, as on the net: a tap on an end starts a wire, and the selection gets a row of its own. */
+  const touch = props.phone && createRulePhone({ ed, kit: props.phone, m: rhs, freeLabel: ifaceLabel, copy, paste });
+
   // Escape lets go of a pending delete, then the selection, then closes.
   const escape = () => {
     if (confirmDelete()) setConfirmDelete(false);
-    else if (rhs.selection() || rhs.armed()) {
+    else if (rhs.selection() || rhs.armed() || touch?.armed()) {
       rhs.clearSelection();
       rhs.clearArmed();
+      touch?.setArmed(undefined);
     } else tryClose();
   };
   dismissOnClickOutside(() => panel, ed.closeRule, dirty, () => flash(), ".palette, .top-right", escape);
@@ -253,7 +324,16 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
     setSubEditor({ m: rhs, camera: rcam, centre, canLeave: () => (dirty() ? (flash(), false) : true) });
     onCleanup(() => setSubEditor(undefined));
     requestAnimationFrame(fitBoth);
-    const ro = new ResizeObserver(() => fitBoth());
+    // A new size refits, except on a phone when only the height changed (as
+    // when the split between the halves moves): the middle stays in the middle.
+    let was: { w: number; h: number } | undefined;
+    const ro = new ResizeObserver(() => {
+      const r = afterEl.getBoundingClientRect();
+      const last = was;
+      was = { w: r.width, h: r.height };
+      if (compact() && last && Math.abs(r.width - last.w) < 1) return rcam.setView((v) => ({ ...v, y: v.y + (r.height - last.h) / 2 }));
+      fitBoth();
+    });
     ro.observe(afterEl);
     onCleanup(() => ro.disconnect());
 
@@ -460,24 +540,39 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
         </span>
       </header>
 
-      <div class="rp-body">
-        <div class="rp-before">
+      <div class="rp-body" style={split() ? { "grid-template-rows": `${split()}px 26px minmax(0, 1fr)` } : undefined}>
+        <div ref={beforeEl} class="rp-before">
           <span class="rp-cap">Before</span>
-          <Canvas m={lhs} camera={lcam} readonly freeLabel={ifaceLabel} twinHover={() => hoveredEnd(rhs)} pad={{ t: 48, r: 24, b: 48, l: 24 }} />
+          <Canvas m={lhs} camera={lcam} readonly freeLabel={ifaceLabel} twinHover={() => hoveredEnd(rhs)} pad={compact() ? PHONE_PAD : PAD.before} />
         </div>
         <div class="rp-arrow" aria-hidden="true">
           →
         </div>
         <div class="rp-after">
           <div ref={afterEl} class="rp-wrap">
-            <Canvas m={rhs} camera={rcam} freeLabel={ifaceLabel} twinHover={() => hoveredEnd(lhs)} pad={{ t: 60, r: 56, b: 60, l: 56 }} />
+            <Canvas
+              m={rhs}
+              camera={rcam}
+              freeLabel={ifaceLabel}
+              twinHover={() => hoveredEnd(lhs)}
+              pad={afterPad()}
+              phone={compact() ? touch?.canvas : undefined}
+            />
             <span class="rp-cap">
               After<Show when={!saved().has}> · no rule yet</Show>
             </span>
             <span class="rp-hint">Drag agents in from the palette →</span>
-            <button class="btn icon rp-tidy" onClick={tidy} disabled={!rhs.net.agents.size} title="Tidy: lay the result out afresh">
-              <Tidy />
-            </button>
+            <div class="rp-tools">
+              {/* On a phone the view stays where it's put, so it's fitted again by asking. */}
+              <Show when={compact()}>
+                <button class="btn icon rp-fit" onClick={fitBoth} aria-label="Fit the rule in view">
+                  <Fit />
+                </button>
+              </Show>
+              <button class="btn icon rp-tidy" onClick={tidy} disabled={!rhs.net.agents.size} title="Tidy: lay the result out afresh">
+                <Tidy />
+              </button>
+            </div>
           </div>
           <div class="rp-status" classList={{ bad: !complete() || !status().symmetric }}>
             <Show
@@ -496,6 +591,14 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
                   ? "Not symmetric: the result depends on which one is on top."
                   : "Every port and every end has a wire."}
           </div>
+          <Show when={compact() && touch}>
+            {(t) => (
+              <>
+                <RuleSelection focus={t().focus} beside={beside()} />
+                <HoldMenu kit={t().hold} selectAll={t().hold.selectAll} />
+              </>
+            )}
+          </Show>
         </div>
       </div>
 
@@ -523,7 +626,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string }) {
             </Show>
           </div>
         </Show>
-        <Show when={selected().length}>
+        <Show when={!compact() && selected().length}>
           <div class="rp-selection">
             <span>{selectedText()}</span>
             <button class="btn small outline" onClick={() => rhs.flipAgents(selected())} title="Flip (X)">

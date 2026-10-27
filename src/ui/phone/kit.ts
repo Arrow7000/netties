@@ -4,7 +4,7 @@ import { type AgentId, type End, type WireId, sameEnd } from "../../core/net";
 import { parse } from "../../core/text";
 import { type Pt, boxOf } from "../../layout/geometry";
 import type { Editor } from "../../state/editor";
-import type { WireGesture } from "../../state/model";
+import type { NetModel, WireGesture } from "../../state/model";
 import type { Camera, CanvasPhone, Pad } from "../Canvas";
 import { compact } from "../compact";
 import { HOLD } from "../gesture";
@@ -131,9 +131,8 @@ export function createPhone(ed: Editor, camera: Camera) {
       .join(" and ");
   };
 
-  const copy = (quiet = false) => {
-    const c = ed.copySelection();
-    if (!c) return false;
+  /** Keep what was copied: here, for pasting back, and as text on the phone's clipboard. */
+  const keep = (c: { clip: Clip; text: string }) => {
     setHeld(c);
     try {
       localStorage.setItem(CLIP_KEY, JSON.stringify(c));
@@ -141,6 +140,12 @@ export function createPhone(ed: Editor, camera: Camera) {
       // ignore
     }
     writeText(c.text);
+  };
+
+  const copy = (quiet = false) => {
+    const c = ed.copySelection();
+    if (!c) return false;
+    keep(c);
     if (!quiet) ed.notify(`Copied ${what()}.`);
     return true;
   };
@@ -169,73 +174,44 @@ export function createPhone(ed: Editor, camera: Camera) {
     }
   };
   /**
-   * Paste at `at`, or in the middle of the view: what's on the phone's
-   * clipboard if it can be read and holds a net, otherwise what was last
-   * copied here.
+   * What a paste pastes: what's on the phone's clipboard if it can be read
+   * and holds a net, otherwise what was last copied here. Nothing, having
+   * said why, when there's nothing to paste.
    */
-  const paste = async (at?: Pt) => {
-    const spot = at ?? pasteSpot();
+  const clipboard = async (): Promise<Pasted | undefined> => {
     const mine = held();
     if (secure) {
       try {
         const text = await navigator.clipboard.readText();
         if (text.trim() && text.trim() !== mine?.text.trim()) {
           try {
-            return pasteFrom(parse(text), spot);
+            return parse(text);
           } catch (err) {
-            if (!mine) return ed.notify(`The clipboard doesn't hold a net: ${err instanceof Error ? err.message : String(err)}`);
+            if (!mine) {
+              ed.notify(`The clipboard doesn't hold a net: ${err instanceof Error ? err.message : String(err)}`);
+              return undefined;
+            }
           }
         }
       } catch {
         // Not allowed: fall back on what was copied here.
       }
     }
-    if (!mine) return ed.notify("Nothing to paste yet: copy something first.");
-    pasteFrom(mine.clip, spot);
+    if (!mine) ed.notify("Nothing to paste yet: copy something first.");
+    return mine?.clip;
   };
-
-  /** The box round the selected agents, in the net's coordinates. */
-  const selectionBox = () => {
-    const l = m.layout();
-    const v = m.view().net;
-    let b: { x0: number; y0: number; x1: number; y1: number } | undefined;
-    for (const [id, p] of l.placement) {
-      if (!v.agents.has(id) || !m.isSelected(id)) continue;
-      const q = boxOf(p, v.agent(id).wires.length - 1);
-      b = b ? { x0: Math.min(b.x0, q.x0), y0: Math.min(b.y0, q.y0), x1: Math.max(b.x1, q.x1), y1: Math.max(b.y1, q.y1) } : q;
-    }
-    return b;
+  /** Paste at `at`, or in the middle of the view. */
+  const paste = async (at?: Pt) => {
+    const spot = at ?? pasteSpot();
+    const src = await clipboard();
+    if (src) pasteFrom(src, spot);
   };
 
   /** Copy and paste beside, in one; the clipboard is left alone. */
   const duplicate = () => {
     const c = ed.copySelection();
-    const b = selectionBox();
     if (!c) return;
-    const at = b ? { x: b.x1 + (b.x1 - b.x0) / 2 + 36, y: (b.y0 + b.y1) / 2 } : pasteSpot();
-    pasteFrom(c.clip, at);
-  };
-
-  /** Everything joined by wires to these agents (the selected ones, by default), and those wires. */
-  const selectConnected = (from?: AgentId[]) => {
-    const v = m.view().net;
-    const seen = new Set<AgentId>(from ?? [...v.agents.keys()].filter((id) => m.isSelected(id)));
-    const wires = new Set<WireId>();
-    const todo = [...seen];
-    while (todo.length) {
-      const a = todo.pop()!;
-      for (const w of v.agent(a).wires) {
-        if (!v.wires.has(w)) continue;
-        wires.add(w);
-        for (const e of v.wire(w).ends) {
-          if (e.kind === "port" && !seen.has(e.agent)) {
-            seen.add(e.agent);
-            todo.push(e.agent);
-          }
-        }
-      }
-    }
-    m.pickMany([...seen], [...wires]);
+    pasteFrom(c.clip, besideSelection(m) ?? pasteSpot());
   };
 
   /** When a tile last added something: what that selects isn't a tap on the canvas. */
@@ -436,12 +412,14 @@ export function createPhone(ed: Editor, camera: Camera) {
     setRoom,
     visibleMiddle,
     middleOfView,
+    keep,
+    clipboard,
     copy,
     cut,
     paste,
     canPaste,
     duplicate,
-    selectConnected,
+    selectConnected: (from?: AgentId[]) => selectConnected(m, from),
     fromTile,
     openTile,
     pressTile,
@@ -454,6 +432,50 @@ export function createPhone(ed: Editor, camera: Camera) {
 }
 
 export type Phone = ReturnType<typeof createPhone>;
+
+/** What can be pasted: a clip copied here, or a net read from text. */
+export type Pasted = Parameters<Editor["paste"]>[0];
+
+/** The box round the selected agents, in the net's coordinates. */
+function selectionBox(m: NetModel) {
+  const l = m.layout();
+  const v = m.view().net;
+  let b: { x0: number; y0: number; x1: number; y1: number } | undefined;
+  for (const [id, p] of l.placement) {
+    if (!v.agents.has(id) || !m.isSelected(id)) continue;
+    const q = boxOf(p, v.agent(id).wires.length - 1);
+    b = b ? { x0: Math.min(b.x0, q.x0), y0: Math.min(b.y0, q.y0), x1: Math.max(b.x1, q.x1), y1: Math.max(b.y1, q.y1) } : q;
+  }
+  return b;
+}
+
+/** Where a copy of the selected agents goes when duplicated: just right of them. */
+export function besideSelection(m: NetModel): Pt | undefined {
+  const b = selectionBox(m);
+  return b && { x: b.x1 + (b.x1 - b.x0) / 2 + 36, y: (b.y0 + b.y1) / 2 };
+}
+
+/** Select everything joined by wires to these agents (the selected ones, by default), and those wires. */
+export function selectConnected(m: NetModel, from?: AgentId[]) {
+  const v = m.view().net;
+  const seen = new Set<AgentId>(from ?? [...v.agents.keys()].filter((id) => m.isSelected(id)));
+  const wires = new Set<WireId>();
+  const todo = [...seen];
+  while (todo.length) {
+    const a = todo.pop()!;
+    for (const w of v.agent(a).wires) {
+      if (!v.wires.has(w)) continue;
+      wires.add(w);
+      for (const e of v.wire(w).ends) {
+        if (e.kind === "port" && !seen.has(e.agent)) {
+          seen.add(e.agent);
+          todo.push(e.agent);
+        }
+      }
+    }
+  }
+  m.pickMany([...seen], [...wires]);
+}
 
 /** Copy text where the async clipboard isn't allowed (plain http on a phone): a selected, read-only field. */
 function legacyCopy(t: string) {

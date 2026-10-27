@@ -4,6 +4,7 @@ import { type AgentId, type End, NONE, type WireId } from "../core/net";
 import { pairKey } from "../core/system";
 import { type Effective, canMeet, clash, clashText, endSpec, specOf } from "../core/types";
 import type { Editor } from "../state/editor";
+import type { NetModel } from "../state/model";
 import { Menu, MenuItem } from "./Menu";
 import { held } from "./keys";
 import { fingers } from "./compact";
@@ -43,9 +44,11 @@ export interface Info {
   lines: { text: JSX.Element; tone?: "bad" | "accent" }[];
 }
 
-/** Names for things on the canvas, as people would say them. */
-function namer(ed: Editor) {
-  const m = ed.model;
+/**
+ * Names for things on the canvas, as people would say them. In a rule's
+ * result a free end is one of the rule's ends, named by `freeLabel`.
+ */
+function namer(m: NetModel, freeLabel: (name: string) => string = (n) => n) {
   const view = () => m.view();
   const typeOf = (id: AgentId) => {
     const v = view();
@@ -54,7 +57,7 @@ function namer(ed: Editor) {
   };
   const sym = (id: AgentId) => <Sym s={typeOf(id)?.symbol ?? "?"} />;
   const end = (e: End): JSX.Element => {
-    if (e.kind === "free") return <>loose end <Sym s={e.name} /></>;
+    if (e.kind === "free") return <>{m.freePorts.surface === "rule" ? "end" : "loose end"} <Sym s={freeLabel(e.name)} /></>;
     const box = view().box.has(e.agent);
     if (box) return <>port {e.slot + 1} of {typeOf(e.agent)?.name ?? "the component"}</>;
     return e.slot === 0 ? <>the principal port of {sym(e.agent)}</> : <>aux port {e.slot} of {sym(e.agent)}</>;
@@ -82,12 +85,13 @@ export function HoverPanel(props: { ed: Editor }) {
 /**
  * What the hover panel says about what's pointed at (or tapped), if
  * anything. `hints: false` leaves out what clicking would do, for a panel
- * with buttons that do it.
+ * with buttons that do it. It's about the main net, or `m`, such as a
+ * rule's result, whose ends `freeLabel` names.
  */
-export function hoverInfo(ed: Editor, opts: { hints?: boolean } = {}) {
+export function hoverInfo(ed: Editor, opts: { hints?: boolean; m?: NetModel; freeLabel?: (name: string) => string } = {}) {
   const hints = opts.hints ?? true;
-  const m = ed.model;
-  const n = namer(ed);
+  const m = opts.m ?? ed.model;
+  const n = namer(m, opts.freeLabel);
 
   const typed = () => (ed.rev(), ed.system.typing.dirs !== "off" || ed.system.typing.types !== "off");
   const info = createMemo((): Info | undefined => {
@@ -138,6 +142,19 @@ export function hoverInfo(ed: Editor, opts: { hints?: boolean } = {}) {
       }
       case "free": {
         const other = v.net.partner({ kind: "free", name: h.name });
+        if (m.freePorts.surface === "rule") {
+          // One of the wires the pair held: what it carries is the far side of the pair's port.
+          const spec = m.specAt({ kind: "free", name: h.name });
+          return {
+            title: (
+              <>
+                End <Sym s={opts.freeLabel?.(h.name) ?? h.name} />
+              </>
+            ),
+            aside: typed() && (spec.pol || spec.type) ? <PortBadge spec={spec} /> : undefined,
+            lines: [{ text: other ? "One of the wires the pair held. It stays when the pair goes." : "One of the wires the pair held: wire it to something in the result." }],
+          };
+        }
         return {
           title: (
             <>
@@ -385,7 +402,7 @@ interface Action {
 export function SelectionPanel(props: { ed: Editor }) {
   const ed = props.ed;
   const m = ed.model;
-  const n = namer(ed);
+  const n = namer(ed.model);
   const [why, setWhy] = createSignal<string>();
   const [making, setMaking] = createSignal(false);
 

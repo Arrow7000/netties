@@ -3,6 +3,7 @@ import { Portal } from "solid-js/web";
 import { closeOnEscape } from "../dismiss";
 import { ComponentGlyph, Glyph, dirsOf } from "../Glyph";
 import * as I from "../icons";
+import type { Info } from "../Panels";
 import type { Action, Choice } from "./focus";
 import type { Phone, TileWhat } from "./kit";
 import type { RunButton } from "./transport";
@@ -192,6 +193,41 @@ export function ActionButton(props: { a: Action; say: (a: Action) => () => void;
   );
 }
 
+/** What the Selection face says about what it holds, and what can be done with it, as buttons. */
+export function FocusInfo(props: {
+  label: string;
+  info: Info;
+  actions: Action[];
+  say: (a: Action) => () => void;
+  onChoices: (a: Action) => void;
+  ref?: (el: HTMLDivElement) => void;
+  class?: string;
+}) {
+  return (
+    <div class={`sheet-focus ${props.class ?? ""}`} ref={props.ref}>
+      <div class="sheet-kind">{props.label}</div>
+      <div class="panel-title">
+        <span>{props.info.title}</span>
+        <Show when={props.info.aside}>
+          <span class="panel-aside">{props.info.aside}</span>
+        </Show>
+      </div>
+      <For each={props.info.lines}>
+        {(l) => (
+          <div class="panel-line" classList={{ bad: l.tone === "bad", accent: l.tone === "accent" }}>
+            {l.text}
+          </div>
+        )}
+      </For>
+      <Show when={props.actions.length}>
+        <div class="sheet-acts">
+          <For each={props.actions}>{(a) => <ActionButton a={a} say={props.say} onChoices={props.onChoices} />}</For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 /**
  * A list that slides up from the bottom over everything, as phones do for
  * "more" and for picking one of several: a tap on an item or outside closes it.
@@ -266,16 +302,21 @@ export function ActionSheet(props: {
 export function createSheets(say: (a: Action) => () => void) {
   const [open, setOpen] = createSignal<{ title?: JSX.Element; items: (Action | Choice)[] }>();
   const choices = (a: Action) => setOpen({ title: a.label, items: a.choices?.() ?? [] });
+  /** The actions that didn't fit, as a list. */
+  const more = (title: JSX.Element, items: Action[]) => setOpen({ title, items });
   const view = () => (
     <Show when={open()} keyed>
       {(o) => <ActionSheet title={o.title} items={o.items} say={say} onChoices={choices} onClose={() => setOpen(undefined)} />}
     </Show>
   );
-  return { choices, view };
+  return { choices, more, view };
 }
 
-/** A finger held on empty canvas and lifted: paste there, or select everything. */
-export function HoldMenu(props: { kit: Phone }) {
+/**
+ * A finger held on empty canvas and lifted: paste there, or select
+ * everything. On the net, or in a rule's result (./rule.tsx).
+ */
+export function HoldMenu(props: { kit: Pick<Phone, "heldAt" | "setHeldAt" | "canPaste" | "paste">; selectAll: () => void }) {
   const kit = props.kit;
   let el: HTMLDivElement | undefined;
   onMount(() => {
@@ -306,7 +347,7 @@ export function HoldMenu(props: { kit: Phone }) {
               class="btn"
               onClick={() => {
                 kit.setHeldAt(undefined);
-                kit.ed.dispatch({ kind: "selection/all" });
+                props.selectAll();
               }}
             >
               <I.SelectAll />

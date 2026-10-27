@@ -8,7 +8,7 @@ import { GRID_FITS, GridLegend, GridSummary, RuleGrid } from "../RuleGrid";
 import { canLeave } from "../subEditor";
 import { createFocus } from "./focus";
 import type { Phone } from "./kit";
-import { ActionButton, Ghost, HoldMenu, MakeDialog, RunButtons, Tile, TileHint, TypesLine, createSheets, tileList } from "./parts";
+import { FocusInfo, Ghost, HoldMenu, MakeDialog, RunButtons, Tile, TileHint, TypesLine, createSheets, tileList } from "./parts";
 
 type Detent = "closed" | "peek" | "open";
 type Face = "agents" | "rules" | "focus";
@@ -278,29 +278,7 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
 
             <Show when={face() === "focus"}>
               <Show when={f.info()} fallback={<p class="palette-hint sheet-empty">Tap something on the canvas to see what it is.</p>}>
-                {(i) => (
-                  <div class="sheet-focus" ref={measure}>
-                    <div class="sheet-kind">{f.label()}</div>
-                    <div class="panel-title">
-                      <span>{i().title}</span>
-                      <Show when={i().aside}>
-                        <span class="panel-aside">{i().aside}</span>
-                      </Show>
-                    </div>
-                    <For each={i().lines}>
-                      {(l) => (
-                        <div class="panel-line" classList={{ bad: l.tone === "bad", accent: l.tone === "accent" }}>
-                          {l.text}
-                        </div>
-                      )}
-                    </For>
-                    <Show when={shownActions().length}>
-                      <div class="sheet-acts">
-                        <For each={shownActions()}>{(a) => <ActionButton a={a} say={f.say} onChoices={sheets.choices} />}</For>
-                      </div>
-                    </Show>
-                  </div>
-                )}
+                {(i) => <FocusInfo ref={measure} label={f.label()} info={i()} actions={shownActions()} say={f.say} onChoices={sheets.choices} />}
               </Show>
             </Show>
           </div>
@@ -317,7 +295,7 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
         </div>
       </div>
       <Ghost kit={kit} />
-      <HoldMenu kit={kit} />
+      <HoldMenu kit={kit} selectAll={() => ed.dispatch({ kind: "selection/all" })} />
       <MakeDialog kit={kit} />
       {sheets.view()}
     </>

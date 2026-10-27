@@ -185,6 +185,12 @@ export interface Ctx {
    * it. Without it, fingers do as they always have.
    */
   phone?: { armed(): WireGesture | undefined };
+  /**
+   * A rule's result: its free ends are the rule's interface, fixed in place,
+   * so a tap on one that has a wire leaves it be, as on a wired port, rather
+   * than picking the loose end up.
+   */
+  fixedEnds?: boolean;
 }
 
 /** How long a finger stays put, in milliseconds, before a press is a hold. */
@@ -566,8 +572,8 @@ const armedFrom = (g: WireGesture): End => (g.kind === "new" ? g.from : g.moving
 /**
  * A finger's tap on an end, in the phone layout. With a wire waiting, the
  * tap finishes it there if it can go there, or says why not; tapping the
- * end it started from lets go. Otherwise an empty port, or a loose end,
- * starts one.
+ * end it started from lets go. Otherwise an empty port or end, or a loose
+ * end, starts one.
  */
 function tappedEnd(end: End, g: WireGesture, shown: Hover, ctx: Ctx): Effect[] {
   const a = ctx.phone?.armed();
@@ -578,7 +584,7 @@ function tappedEnd(end: End, g: WireGesture, shown: Hover, ctx: Ctx): Effect[] {
     if (check.kind === "back") return [{ kind: "disarm" }, { kind: "hover", hover: undefined }];
     return [{ kind: "hover", hover: { kind: "drag", gesture: a, target: end, check } }];
   }
-  if (g.kind === "new" || end.kind === "free") return [{ kind: "arm", g }, { kind: "hover", hover: shown }];
+  if (g.kind === "new" || (end.kind === "free" && !ctx.fixedEnds)) return [{ kind: "arm", g }, { kind: "hover", hover: shown }];
   return [{ kind: "hover", hover: shown }];
 }
 

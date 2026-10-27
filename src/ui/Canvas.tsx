@@ -54,6 +54,8 @@ export function createCamera() {
     fitAt: (k: number) => host?.fitAt(k),
     /** Whether part of the net is out of view (and nothing is being dragged). */
     spills: () => host?.spills() ?? false,
+    /** The box the net takes, labels and all, in its own units: what fitting fits. */
+    bounds: (): Box | undefined => host?.bounds(),
     /** The world point under a client position, if it's over the canvas. */
     toWorld(clientX: number, clientY: number): Pt | undefined {
       const el = host?.el();
@@ -79,6 +81,7 @@ interface Host {
   fitZoom(): number;
   fitAt(k: number): void;
   spills(): boolean;
+  bounds(): Box;
   el(): SVGSVGElement;
 }
 
@@ -247,7 +250,7 @@ export function Canvas(props: CanvasProps) {
       const { w, h } = size();
       return b.x0 * v.k + v.x < 0 || b.y0 * v.k + v.y < 0 || b.x1 * v.k + v.x > w || b.y1 * v.k + v.y > h;
     };
-    cam.attach({ fit, fitZoom, fitAt: (k) => fit(false, k), spills, el: () => svg });
+    cam.attach({ fit, fitZoom, fitAt: (k) => fit(false, k), spills, bounds: contentBounds, el: () => svg });
     const ro = new ResizeObserver(() => {
       const r = svg.getBoundingClientRect();
       setSize({ w: r.width, h: r.height });
@@ -455,6 +458,7 @@ export function Canvas(props: CanvasProps) {
     get phone() {
       return props.phone;
     },
+    fixedEnds: !ed.freePorts.scratch,
   };
   /** The last finger's tap on nothing, for telling a double tap. */
   let lastTap: { screen: Pt; time: number } | undefined;

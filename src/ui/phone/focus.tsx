@@ -2,11 +2,11 @@ import { type JSX, createMemo } from "solid-js";
 import type { GroupId } from "../../core/groups";
 import { type AgentId, type End, NONE, type WireId } from "../../core/net";
 import { clash, endSpec, specOf } from "../../core/types";
-import type { DropCheck } from "../../state/model";
+import type { Editor, EditorMsg } from "../../state/editor";
+import type { DropCheck, NetModel, WireGesture } from "../../state/model";
 import { Glyph } from "../Glyph";
 import * as I from "../icons";
 import { type Info, hoverInfo } from "../Panels";
-import type { Phone } from "./kit";
 import type { RunButton } from "./transport";
 
 /** What the Selection face is about: what's selected or tapped, or what an armed button or a tapped end is doing. */
@@ -46,11 +46,39 @@ const Sym = (props: { s: string }) => <i class="sym">{props.s}</i>;
 
 const RUN_NAME: Record<RunButton, string> = { step: "Step", all: "Step all", run: "Run" };
 
+/**
+ * What the Selection face is about and acts on: the main net, through the
+ * phone's kit, or a rule's result, through the rule editor (`rule`). A
+ * rule's result has no pairs to fire and no components, and its free ends
+ * are the rule's ends, named by `rule.freeLabel`.
+ */
+export interface FocusHost {
+  ed: Editor;
+  m: NetModel;
+  /** The wire started by a tap on an end, waiting for its other end. */
+  armed(): WireGesture | undefined;
+  setArmed(g: WireGesture | undefined): void;
+  armedRun?(): RunButton | undefined;
+  copy(): void;
+  cut(): void;
+  paste(): void;
+  canPaste(): boolean;
+  duplicate(): void;
+  selectConnected(from?: AgentId[]): void;
+  /** Start making a component of the selection, where there can be one. */
+  setMaking?(on: boolean): void;
+  /** Where edits of the selection go, if not to the editor. */
+  dispatch?(msg: EditorMsg): void;
+  rule?: { freeLabel(name: string): string };
+}
+
 /** The focus, its words for the sheet, and what can be done with it. */
-export function createFocus(kit: Phone) {
-  const ed = kit.ed;
-  const m = kit.m;
-  const hover = hoverInfo(ed);
+export function createFocus(host: FocusHost) {
+  const ed = host.ed;
+  const m = host.m;
+  const rule = host.rule;
+  const dispatch = (msg: EditorMsg) => (host.dispatch ?? ed.dispatch)(msg);
+  const hover = hoverInfo(ed, { m, freeLabel: rule?.freeLabel });
 
   const typeOf = (id: AgentId) => {
     const v = m.view();
@@ -70,7 +98,7 @@ export function createFocus(kit: Phone) {
     return [...new Set(v.wire(w).ends.flatMap((e) => (e.kind === "port" ? [e.agent] : [])))];
   };
   const endName = (e: End): JSX.Element => {
-    if (e.kind === "free") return <>loose end <Sym s={e.name} /></>;
+    if (e.kind === "free") return rule ? <>end <Sym s={rule.freeLabel(e.name)} /></> : <>loose end <Sym s={e.name} /></>;
     const t = typeOf(e.agent);
     if (m.view().box.has(e.agent)) return <>port {e.slot + 1} of {t?.name ?? "the component"}</>;
     return e.slot === 0 ? <>the principal port of <Sym s={t?.symbol ?? "?"} /></> : <>aux port {e.slot} of <Sym s={t?.symbol ?? "?"} /></>;
@@ -78,17 +106,18 @@ export function createFocus(kit: Phone) {
 
   const focus = createMemo((): Focus | undefined => {
     m.rev();
-    const a = kit.armed();
+    const a = host.armed();
     const h = m.hover();
     if (a) {
       const from = a.kind === "new" ? a.from : a.moving;
       return { kind: "armed", from, refused: h?.kind === "drag" && h.check?.kind === "refuse" ? h.check : undefined };
     }
-    const run = kit.armedRun();
+    const run = host.armedRun?.();
     if (run) return { kind: "run", button: run };
     if (h && (h.kind === "port" || h.kind === "free" || h.kind === "drag")) return { kind: "hover" };
     const s = m.selection();
-    const paired = (w: WireId) => m.activeWires().has(w) || m.stuckWires().has(w);
+    // A rule's result doesn't fire, so a pair in it is just a wire.
+    const paired = (w: WireId) => !rule && (m.activeWires().has(w) || m.stuckWires().has(w));
     // A tapped pair's preview showing comes first; then a selected wire.
     if (h?.kind === "wire" && paired(h.id)) {
       return { kind: "pair", wire: h.id, active: m.activeWires().has(h.id), selected: s?.kind === "wire" && s.id === h.id };
@@ -132,7 +161,7 @@ export function createFocus(kit: Phone) {
       }
       case "hover": {
         const h = m.hover();
-        return h?.kind === "port" ? "Port" : h?.kind === "free" ? "Loose end" : h?.kind === "drag" ? "Wiring" : h?.kind === "group" ? "Component" : h?.kind === "wire" ? "Wire" : "Agent";
+        return h?.kind === "port" ? "Port" : h?.kind === "free" ? (rule ? "End" : "Loose end") : h?.kind === "drag" ? "Wiring" : h?.kind === "group" ? "Component" : h?.kind === "wire" ? "Wire" : "Agent";
       }
     }
   });
@@ -145,7 +174,7 @@ export function createFocus(kit: Phone) {
       case "armed": {
         const lines: Info["lines"] = [];
         if (f.refused?.kind === "refuse") lines.push({ text: f.refused.why, tone: "bad" });
-        lines.push({ text: "Tap a lit port or loose end to wire it there, or an agent below to plug a new one in." });
+        lines.push({ text: rule ? "Tap a lit port or end to wire it there." : "Tap a lit port or loose end to wire it there, or an agent below to plug a new one in." });
         return { title: <>Wire from {endName(f.from)}</>, lines };
       }
       case "run": {
@@ -243,6 +272,9 @@ export function createFocus(kit: Phone) {
         if (h?.kind === "port" && m.view().net.wireAt(h.end) === NONE) {
           return { ...i, lines: [{ text: "Drag to draw a wire, or tap another port to wire them." }] };
         }
+        if (rule && h?.kind === "free" && m.view().net.wireAt({ kind: "free", name: h.name }) === NONE) {
+          return { ...i, lines: [...i.lines, { text: "Drag to draw a wire, or tap a port to wire them." }] };
+        }
         return i;
       }
     }
@@ -253,12 +285,13 @@ export function createFocus(kit: Phone) {
   const actions = createMemo((): Action[] => {
     const f = focus();
     m.rev();
-    const paste: Action = { id: "paste", label: "Paste", icon: I.Paste, run: () => kit.paste(), why: kit.canPaste() ? undefined : "Copy something first." };
-    const all: Action = { id: "all", label: "Select all", icon: I.SelectAll, run: () => ed.dispatch({ kind: "selection/all" }) };
+    const paste: Action = { id: "paste", label: "Paste", icon: I.Paste, run: () => host.paste(), why: host.canPaste() ? undefined : "Copy something first." };
+    const all: Action = { id: "all", label: "Select all", icon: I.SelectAll, run: () => dispatch({ kind: "selection/all" }) };
     if (!f) return [paste, all];
     switch (f.kind) {
       case "armed":
-        return [{ id: "stop", label: "Stop wiring", icon: I.Close, run: () => kit.setArmed(undefined) }];
+        // Along with why the last end tapped wouldn't take it.
+        return [{ id: "stop", label: "Stop wiring", icon: I.Close, run: () => (host.setArmed(undefined), m.hover()?.kind === "drag" && m.setHover(undefined)) }];
       case "run":
       case "hover":
         return [];
@@ -268,7 +301,7 @@ export function createFocus(kit: Phone) {
         const tb = typeOf(p[1])!.id;
         const out: Action[] = f.active
           ? [
-              { id: "fire", label: "Fire", icon: I.Step, primary: true, run: () => ed.dispatch({ kind: "run/fire", wire: f.wire }) },
+              { id: "fire", label: "Fire", icon: I.Step, primary: true, run: () => dispatch({ kind: "run/fire", wire: f.wire }) },
               { id: "rule", label: "Open rule", icon: I.Rule, run: () => ed.openRule(ta, tb) },
             ]
           : [{ id: "rule", label: "Write rule", icon: I.Rule, primary: true, run: () => ed.openRule(ta, tb) }];
@@ -291,9 +324,9 @@ export function createFocus(kit: Phone) {
     const ends = agentsOf(w);
     const none = ends.length ? undefined : "Both its ends are loose.";
     return [
-      { id: "delete", label: "Delete", icon: I.Trash, danger: true, run: () => ed.dispatch({ kind: "selection/delete" }) },
+      { id: "delete", label: "Delete", icon: I.Trash, danger: true, run: () => dispatch({ kind: "selection/delete" }) },
       { id: "ends", label: ends.length === 1 ? "Select its agent" : "Select its agents", short: ends.length === 1 ? "Its agent" : "Its agents", icon: I.Ends, run: () => m.pickMany(ends, []), why: none },
-      { id: "connected", label: "Select connected", short: "Connected", icon: I.Connected, run: () => kit.selectConnected(ends), why: none },
+      { id: "connected", label: "Select connected", short: "Connected", icon: I.Connected, run: () => host.selectConnected(ends), why: none },
       all,
     ];
   };
@@ -320,17 +353,17 @@ export function createFocus(kit: Phone) {
     const allCollapsed = groups.every((g) => m.groups.groups.get(g)?.collapsed);
     const noAgents = !agents.length && !groups.length;
     const out: Action[] = [
-      { id: "copy", label: "Copy", icon: I.Copy, run: () => kit.copy() },
-      { id: "duplicate", label: "Duplicate", icon: I.Duplicate, run: kit.duplicate, why: noAgents ? "Select some agents to duplicate." : undefined },
+      { id: "copy", label: "Copy", icon: I.Copy, run: () => host.copy() },
+      { id: "duplicate", label: "Duplicate", icon: I.Duplicate, run: () => host.duplicate(), why: noAgents ? "Select some agents to duplicate." : undefined },
       {
         id: "flip",
         label: "Flip",
         icon: I.Flip,
-        run: () => ed.dispatch({ kind: "selection/flip", agents }),
+        run: () => dispatch({ kind: "selection/flip", agents }),
         why: m.mode() !== "manual" ? "Auto layout decides which way agents point. Switch to Manual layout first." : !agents.length ? "Components don't flip." : undefined,
       },
-      { id: "delete", label: "Delete", icon: I.Trash, danger: true, run: () => ed.dispatch({ kind: "selection/delete" }) },
-      { id: "cut", label: "Cut", icon: I.Cut, run: kit.cut },
+      { id: "delete", label: "Delete", icon: I.Trash, danger: true, run: () => dispatch({ kind: "selection/delete" }) },
+      { id: "cut", label: "Cut", icon: I.Cut, run: () => host.cut() },
       paste,
       {
         id: "change",
@@ -355,20 +388,21 @@ export function createFocus(kit: Phone) {
             lead: <Glyph type={t} />,
             disabled: breaks(t.id) > 0,
             note: breaks(t.id) ? `Its ports wouldn't fit ${breaks(t.id) === 1 ? "1 wire" : `${breaks(t.id)} wires`}` : undefined,
-            run: () => ed.dispatch({ kind: "selection/change-type", agents, type: t.id }),
+            run: () => dispatch({ kind: "selection/change-type", agents, type: t.id }),
           })),
       },
-      { id: "connected", label: "Select connected", icon: I.Connected, run: () => kit.selectConnected(), why: noAgents ? "Select an agent first." : undefined },
+      { id: "connected", label: "Select connected", icon: I.Connected, run: () => host.selectConnected(), why: noAgents ? "Select an agent first." : undefined },
       all,
-      { id: "component", label: "Make component", icon: I.Component, run: () => kit.setMaking(true), why: agents.length ? undefined : "Select some agents first." },
     ];
+    const making = host.setMaking;
+    if (making) out.push({ id: "component", label: "Make component", icon: I.Component, run: () => making(true), why: agents.length ? undefined : "Select some agents first." });
     if (groups.length) {
       if (groups.length === 1 && !agents.length) {
         const def = m.groups.groups.get(groups[0]!)!.def;
         out.splice(4, 0, { id: "open", label: "Edit component", icon: I.Open, run: () => ed.openComponent(def) });
       }
       out.push(
-        { id: "expand", label: allCollapsed ? "Expand" : "Collapse", icon: I.Expand, run: () => ed.dispatch({ kind: "component/set-collapsed", groups, collapsed: !allCollapsed }) },
+        { id: "expand", label: allCollapsed ? "Expand" : "Collapse", icon: I.Expand, run: () => dispatch({ kind: "component/set-collapsed", groups, collapsed: !allCollapsed }) },
         { id: "apart", label: "Break apart", icon: I.Apart, run: ed.breakApart },
       );
     }

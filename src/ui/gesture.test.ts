@@ -461,6 +461,24 @@ describe("phone fingers", () => {
     expect(run([touch(10, { kind: "end", end: p }), lift(10)], phone({ gestureAt: () => wired })).fx).toEqual([]);
   });
 
+  it("starts a wire from a rule's empty interface end, but leaves one with a wire be", () => {
+    armed = undefined;
+    const end = free("L1");
+    expect(run([touch(10, { kind: "end", end }), lift(10)], phone({ fixedEnds: true })).fx).toEqual([{ kind: "arm", g: { kind: "new", from: end } }]);
+    const wired: WireGesture = { kind: "carry", wire: 3, moving: end, anchor: port(2, 1) };
+    expect(run([touch(10, { kind: "end", end }), lift(10)], phone({ fixedEnds: true, gestureAt: () => wired })).fx).toEqual([]);
+  });
+
+  it("finishes a waiting wire on a rule's interface end it may go to, and says why not on one it may not", () => {
+    armed = { kind: "new", from: p };
+    const end = free("R2");
+    expect(run([touch(10, { kind: "end", end }), lift(10)], phone({ fixedEnds: true })).fx).toEqual([{ kind: "finish-wire", g: armed, to: end }, { kind: "disarm" }]);
+    const taken: DropCheck = { kind: "refuse", why: "This interface port already has a wire." };
+    expect(run([touch(10, { kind: "end", end }), lift(10)], phone({ fixedEnds: true, checkDrop: () => taken }), true).fx).toEqual([
+      { kind: "hover", hover: { kind: "drag", gesture: armed, target: end, check: taken } },
+    ]);
+  });
+
   it("finishes a waiting wire on a tap on an end it may go to, says why not on one it may not, and lets go on its own end", () => {
     armed = { kind: "new", from: p };
     const q = port(2, 0);
