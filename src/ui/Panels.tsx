@@ -37,7 +37,7 @@ export function PortBadge(props: { spec: Effective }) {
 /** Principal or aux, as a small tag. */
 const SlotTag = (props: { slot: number }) => <span class="slot-tag">{props.slot === 0 ? "principal" : `aux ${props.slot}`}</span>;
 
-interface Info {
+export interface Info {
   title: JSX.Element;
   aside?: JSX.Element;
   lines: { text: JSX.Element; tone?: "bad" | "accent" }[];
@@ -71,7 +71,21 @@ function namer(ed: Editor) {
 
 /** What the pointer is over. Information only: it appears and goes with the pointer. */
 export function HoverPanel(props: { ed: Editor }) {
-  const ed = props.ed;
+  const info = hoverInfo(props.ed);
+  return (
+    <Show when={info()}>
+      {(i) => <InfoBox info={i()} class="hover-panel" />}
+    </Show>
+  );
+}
+
+/**
+ * What the hover panel says about what's pointed at (or tapped), if
+ * anything. `hints: false` leaves out what clicking would do, for a panel
+ * with buttons that do it.
+ */
+export function hoverInfo(ed: Editor, opts: { hints?: boolean } = {}) {
+  const hints = opts.hints ?? true;
   const m = ed.model;
   const n = namer(ed);
 
@@ -307,7 +321,7 @@ export function HoverPanel(props: { ed: Editor }) {
               </>
             ),
             aside: "rule breaks the types",
-            lines: [{ text: "It joins ports that don't fit, so it can't fire.", tone: "bad" }, { text: `${fingers() ? "Tap" : "Click"} to fix it.` }],
+            lines: [{ text: "It joins ports that don't fit, so it can't fire.", tone: "bad" as const }, ...(hints ? [{ text: `${fingers() ? "Tap" : "Click"} to fix it.` }] : [])],
           };
         }
         const here = [...m.activeWires(), ...m.stuckWires()].filter((w) => {
@@ -323,22 +337,18 @@ export function HoverPanel(props: { ed: Editor }) {
             </>
           ),
           aside: has ? "has a rule" : "no rule yet",
-          lines: has
+          lines: (has
             ? [
                 { text: `${ed.system.ruleFor(h.a, h.b)!.rule.description ?? "Says what the pair turns into when they meet."}${count}` },
                 { text: `${fingers() ? "Tap" : "Click"} to see or change it.` },
               ]
-            : [{ text: `Nothing happens when they meet.${count}`, tone: here ? "bad" : undefined }, { text: `${fingers() ? "Tap" : "Click"} to write a rule.` }],
+            : [{ text: `Nothing happens when they meet.${count}`, tone: here ? "bad" as const : undefined }, { text: `${fingers() ? "Tap" : "Click"} to write a rule.` }]
+          ).slice(0, hints ? 2 : 1),
         };
       }
     }
   });
-
-  return (
-    <Show when={info()}>
-      {(i) => <InfoBox info={i()} class="hover-panel" />}
-    </Show>
-  );
+  return info;
 }
 
 function InfoBox(props: { info: Info; class: string; children?: JSX.Element }) {

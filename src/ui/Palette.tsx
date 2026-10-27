@@ -1,4 +1,4 @@
-import { For, type JSX, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, type JSX, Show, createEffect, createRoot, createSignal, onCleanup } from "solid-js";
 import { Portal } from "solid-js/web";
 import type { AgentType } from "../core/net";
 import { portPos, shape } from "../layout/geometry";
@@ -14,6 +14,10 @@ import { canLeave, subEditor } from "./subEditor";
 import { onThaw } from "./freeze";
 import { onEscapeCancels } from "./escape";
 
+/** The big rule grid, open or not: the phone's sheet opens it too. */
+const [gridShown, setGridShown] = createRoot(() => createSignal(false));
+export const openRuleGrid = () => setGridShown(true);
+
 interface Carry {
   what: { kind: "type" | "component"; id: string };
   x: number;
@@ -26,6 +30,7 @@ interface Carry {
  * and the grid of rules.
  */
 export function Palette(props: { ed: Editor; camera: Camera }) {
+  onCleanup(() => setGridShown(false));
   const ed = props.ed;
   const m = ed.model;
   const editing = () => {
@@ -38,7 +43,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
   const stopCarry = () => { cancelCarry?.(); };
   onCleanup(onThaw(stopCarry));
   onCleanup(stopCarry);
-  const [gridOpen, setGridOpenSignal] = createSignal(false);
+  const [gridOpen, setGridOpenSignal] = [gridShown, setGridShown];
   // The big grid and a rule editor sit in the same spot: opening one closes the other.
   const setGridOpen = (open: boolean) => {
     if (open && subEditor()) {
@@ -256,7 +261,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
 }
 
 /** How long the wire stubs are on the agent carried in from the palette. */
-const GHOST_STUB = 9;
+export const GHOST_STUB = 9;
 
 /**
  * Where the stub of port `slot` ends, on screen, on the agent being carried
@@ -264,7 +269,7 @@ const GHOST_STUB = 9;
  * covers: the ghost is centred on the pointer, drawn at whatever size it has
  * on screen.
  */
-function ghostPlug(t: AgentType, slot: number, x: number, y: number) {
+export function ghostPlug(t: AgentType, slot: number, x: number, y: number) {
   const svg = document.querySelector(".drag-ghost svg");
   if (!svg) return undefined;
   const r = svg.getBoundingClientRect();

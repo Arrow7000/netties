@@ -3427,9 +3427,10 @@ button.select.open {
 
 /*
  * Phones, upright or sideways (src/ui/compact.ts has the same query). The
- * palette goes; the bars keep only what fits across 360px, the rest is in
- * menus; every control is at least 40px for a finger; the other screens
- * fill the screen. Islands sit 8px in, clear of the notch and home bar.
+ * palette and the bottom bar give way to the sheet (src/phone.css); the top
+ * bar keeps only what fits across 360px, the rest is in menus; every
+ * control is at least 40px for a finger; the other screens fill the
+ * screen. Islands sit 8px in, clear of the notch and home bar.
  */
 @media (max-width: 760px), (max-height: 500px) {
   .palette {
@@ -3444,16 +3445,6 @@ button.select.open {
   .top-right {
     top: calc(8px + env(safe-area-inset-top));
     right: calc(8px + env(safe-area-inset-right));
-  }
-
-  .bottom-bar {
-    left: calc(8px + env(safe-area-inset-left));
-    right: calc(8px + env(safe-area-inset-right));
-    bottom: calc(8px + env(safe-area-inset-bottom));
-  }
-
-  .transport {
-    padding: 4px;
   }
 
   .island .btn {
@@ -3492,7 +3483,7 @@ button.select.open {
     min-width: 0;
   }
 
-  /* Above the bottom bar while a menu is open. */
+  /* Above the sheet while a menu is open. */
   .top-left:has(.menu) {
     z-index: 12;
   }
@@ -3554,53 +3545,13 @@ button.select.open {
     max-width: calc(100vw - 16px);
   }
 
-  /* What's tapped or selected: a card along the bottom, above the bar. */
-  .panel-stack {
-    left: calc(8px + env(safe-area-inset-left));
-    right: calc(8px + env(safe-area-inset-right));
-    bottom: calc(66px + env(safe-area-inset-bottom));
-    align-items: stretch;
-  }
-
-  .panel {
-    width: auto;
-    min-width: 0;
-    max-width: none;
-    max-height: 40dvh;
-    overflow-y: auto;
-  }
-
-  /* A tap both points at something and selects it: show it once. */
-  .panel-stack:has(.selection-panel) .hover-panel {
-    display: none;
-  }
-
-  .panel-row {
-    flex-wrap: wrap;
-  }
-
-  .panel-row .btn.small {
-    height: 36px;
-    min-width: 36px;
-  }
-
-  .panel-row .btn.small.icon {
-    width: 36px;
-  }
-
-  .panel-row .input {
-    height: 36px;
-    flex: 1;
-  }
-
-  /* The keyboard hints mean nothing on a phone; reasons for a disabled action still show. */
-  .panel-why:not(.on),
+  /* The keyboard hints mean nothing on a phone. */
   .toast .kbd,
   .rp-bar .kbd {
     display: none;
   }
 
-  /* Under the top bar, clear of the card along the bottom; over a full-screen editor, at the very top, clear of its Save. */
+  /* Under the top bar, clear of the sheet along the bottom; over a full-screen editor, at the very top, clear of its Save. */
   .toast {
     top: calc(66px + env(safe-area-inset-top));
     bottom: auto;
@@ -3715,10 +3666,3 @@ button.select.open {
   }
 }
 
-/* Sideways, the card keeps to the left, wide enough for its actions to fit on one line. */
-@media (max-height: 500px) and (orientation: landscape) {
-  .panel-stack {
-    right: auto;
-    width: min(580px, calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));
-  }
-}

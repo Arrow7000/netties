@@ -27,3 +27,12 @@ export const fingers = createRoot(() => {
   }
   return on;
 });
+
+/** A phone on its side: short, and wider than tall. styles.css has the same query. */
+export const sideways = createRoot(() => {
+  if (typeof matchMedia === "undefined") return () => false;
+  const mq = matchMedia("(max-height: 500px) and (orientation: landscape)");
+  const [on, setOn] = createSignal(mq.matches);
+  mq.addEventListener("change", (e) => setOn(e.matches));
+  return on;
+});

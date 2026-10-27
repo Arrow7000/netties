@@ -14,6 +14,8 @@ import { TextView } from "./ui/TextView";
 import { Tooltips } from "./ui/Tooltip";
 import { TranslateView } from "./ui/TranslateView";
 import { TypesSheet } from "./ui/TypesSheet";
+import { createPhone } from "./ui/phone/kit";
+import { PhoneSheet } from "./ui/phone/Sheet";
 import * as I from "./ui/icons";
 import { held, shortcuts } from "./ui/keys";
 import { freezeState } from "./ui/freeze";
@@ -37,6 +39,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
   ed.init();
   const m = ed.model;
   const camera = createCamera();
+  const phone = createPhone(ed, camera);
 
   const stored = safeGet(THEME_KEY);
   const [theme, setTheme] = createSignal<string | undefined>(stored === "light" || stored === "dark" ? stored : undefined);
@@ -199,10 +202,9 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
 
   createEffect(on(m.fitTick, () => queueMicrotask(camera.fit), { defer: true }));
 
-  // On a phone the canvas is fitted between the bars actually shown, measured,
-  // so the room they take follows rotation and the safe areas.
+  // On a phone the canvas is fitted between the top bar, measured, so the room
+  // it takes follows rotation and the safe areas, and the sheet at its peek.
   let topBar!: HTMLDivElement;
-  let bottomBar!: HTMLDivElement;
   const [viewport, setViewport] = createSignal(0);
   onMount(() => {
     const resized = () => setViewport((n) => n + 1);
@@ -224,9 +226,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
     if (!compact()) return DESKTOP_PAD;
     viewport();
     const top = topBar.getBoundingClientRect();
-    const bars = [...bottomBar.querySelectorAll(".island")].map((el) => el.getBoundingClientRect().top);
-    const bottom = bars.length ? Math.min(...bars) : innerHeight;
-    return { t: top.bottom + 12, r: top.left + 8, b: innerHeight - bottom + 12, l: top.left + 8 };
+    const sheet = phone.room();
+    return { t: top.bottom + 12, r: sheet.r + 8, b: sheet.b + 12, l: top.left + 8 };
   };
 
   /** Clicking a pair with no rule opens the rule editor for it. */
@@ -333,6 +334,35 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
     />
   );
 
+  /** The phone's view menu: speed, layout, and the preferences. */
+  const viewMenu = () => (
+    <Menu label={<I.Sliders />} title="Speed, layout and view" class="icon" menuClass="view-menu" bare>
+      {(close) => (
+        <>
+          <div class="menu-row">
+            <span class="menu-label">Speed</span>
+            {speed()}
+          </div>
+          <div class="menu-row">
+            <span class="menu-label">Layout</span>
+            {layout()}
+          </div>
+          <hr />
+          <div class="menu-head">Just for you, in this browser</div>
+          {wireTypes(close)}
+          <MenuItem
+            lead={dark() ? <I.Check /> : <span class="mi-blank" />}
+            title="Dark theme"
+            onClick={() => {
+              toggleTheme();
+              close();
+            }}
+          />
+        </>
+      )}
+    </Menu>
+  );
+
   return (
     <div class="app">
       <Canvas
@@ -345,10 +375,11 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
         fitPreviews={() => ed.running() || (compact() && fingers())}
         onStuck={openStuck}
         pad={pad()}
+        phone={compact() ? phone.canvas : undefined}
         empty={
           <div class="empty-card">
             <b>The net is empty</b>
-            {compact() ? "Load one from Examples." : "Drag an agent in from the panel on the right, or load an example."}
+            {compact() ? "Drag an agent in from below, or load one from Examples." : "Drag an agent in from the panel on the right, or load an example."}
           </div>
         }
       />
@@ -466,113 +497,59 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
 
       <Palette ed={ed} camera={camera} />
 
-      <div class="panel-stack" classList={{ hidden: !!subEditor() }}>
-        <HoverPanel ed={ed} />
-        <SelectionPanel ed={ed} />
-      </div>
-      <div class="bottom-bar" ref={bottomBar}>
-        <Show when={!compact()}>
+      <Show when={!compact()} fallback={<PhoneSheet kit={phone} viewMenu={viewMenu} />}>
+        <div class="panel-stack" classList={{ hidden: !!subEditor() }}>
+          <HoverPanel ed={ed} />
+          <SelectionPanel ed={ed} />
+        </div>
+        <div class="bottom-bar">
           <Counters ed={ed} />
-        </Show>
 
-        {/* On a phone the run controls are icons, all but Run, and the speed is in the view menu. */}
-        <div class="island transport" aria-label="Run">
-          <button
-            class="btn outline"
-            classList={{ icon: compact() }}
-            onClick={() => ed.dispatch({ kind: "run/step-one" })}
-            onPointerEnter={() => !ed.running() && ed.setPreviewMode("next")}
-            onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
-            disabled={!active() || ed.running()}
-            title="Fire one active pair (S)"
-            aria-label={compact() ? "Step" : undefined}
-          >
-            <I.Step />
-            {compact() ? undefined : "Step"}
-          </button>
-          <button
-            class="btn outline"
-            classList={{ icon: compact() }}
-            onClick={() => ed.dispatch({ kind: "run/step-all" })}
-            onPointerEnter={() => !ed.running() && ed.setPreviewMode("all")}
-            onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
-            disabled={!active() || ed.running()}
-            title="Fire every active pair at once (A)"
-            aria-label={compact() ? "Step all" : undefined}
-          >
-            <I.StepAll />
-            {compact() ? undefined : "Step all"}
-          </button>
-          <button
-            class="btn run"
-            classList={{ stop: ed.running() }}
-            onClick={() => ed.dispatch({ kind: "run/toggle" })}
-            disabled={!active() && !ed.running()}
-            title="Keep stepping until nothing can fire (R)"
-          >
-            <Show when={ed.running()} fallback={<I.Play />}>
-              <I.Stop />
-            </Show>
-            {ed.running() ? "Stop" : "Run"}
-          </button>
-          <Show when={ed.canResetExample()}>
-            <Show
-              when={!compact()}
-              fallback={
-                <button class="btn outline icon" onClick={ed.resetExample} title="Reset example: restore its starting net. You can undo this." aria-label="Reset example">
-                  <I.Reset />
-                </button>
-              }
+          <div class="island transport" aria-label="Run">
+            <button
+              class="btn outline"
+              onClick={() => ed.dispatch({ kind: "run/step-one" })}
+              onPointerEnter={() => !ed.running() && ed.setPreviewMode("next")}
+              onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
+              disabled={!active() || ed.running()}
+              title="Fire one active pair (S)"
             >
+              <I.Step />
+              Step
+            </button>
+            <button
+              class="btn outline"
+              onClick={() => ed.dispatch({ kind: "run/step-all" })}
+              onPointerEnter={() => !ed.running() && ed.setPreviewMode("all")}
+              onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
+              disabled={!active() || ed.running()}
+              title="Fire every active pair at once (A)"
+            >
+              <I.StepAll />
+              Step all
+            </button>
+            <button
+              class="btn run"
+              classList={{ stop: ed.running() }}
+              onClick={() => ed.dispatch({ kind: "run/toggle" })}
+              disabled={!active() && !ed.running()}
+              title="Keep stepping until nothing can fire (R)"
+            >
+              <Show when={ed.running()} fallback={<I.Play />}>
+                <I.Stop />
+              </Show>
+              {ed.running() ? "Stop" : "Run"}
+            </button>
+            <Show when={ed.canResetExample()}>
               <button class="btn outline" onClick={ed.resetExample} title="Restore the loaded example to its starting net. You can undo this.">
                 Reset example
               </button>
             </Show>
-          </Show>
-          <Show when={!compact()}>
             <span class="sep" />
             {speed()}
-          </Show>
-        </div>
+          </div>
 
-        <div class="island view-controls">
-          <Show
-            when={!compact()}
-            fallback={
-              <>
-                <button class="btn" onClick={camera.fit} title="Fit the net in view">
-                  <I.Fit />
-                  Fit
-                </button>
-                <span class="sep" />
-                <Menu label={<I.Sliders />} title="Speed, layout and view" class="icon" menuClass="view-menu" bare>
-                  {(close) => (
-                    <>
-                      <div class="menu-row">
-                        <span class="menu-label">Speed</span>
-                        {speed()}
-                      </div>
-                      <div class="menu-row">
-                        <span class="menu-label">Layout</span>
-                        {layout()}
-                      </div>
-                      <hr />
-                      <div class="menu-head">Just for you, in this browser</div>
-                      {wireTypes(close)}
-                      <MenuItem
-                        lead={dark() ? <I.Check /> : <span class="mi-blank" />}
-                        title="Dark theme"
-                        onClick={() => {
-                          toggleTheme();
-                          close();
-                        }}
-                      />
-                    </>
-                  )}
-                </Menu>
-              </>
-            }
-          >
+          <div class="island view-controls">
             {layout()}
             <span class="sep" />
             <button class="btn icon" onClick={() => camera.zoomBy(1 / 1.25)} title="Zoom out">
@@ -597,9 +574,9 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
                 </>
               )}
             </Menu>
-          </Show>
+          </div>
         </div>
-      </div>
+      </Show>
 
       <Show when={held.alt() && active() > 0 && !overlayOpen()}>
         <div class="alt-banner">

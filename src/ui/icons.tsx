@@ -78,3 +78,86 @@ export const Sliders = icon(() =>
     <circle cx="5.8" cy="11" r="1.7" {...line} stroke-width={1.4} />
   </>,
 );
+
+/* The phone's actions, drawn a touch lighter. */
+const thin = { ...line, "stroke-width": 1.4 } as const;
+
+export const Cut = icon(() =>
+  <>
+    <circle cx="4.5" cy="11.5" r="2" {...thin} />
+    <circle cx="11.5" cy="11.5" r="2" {...thin} />
+    <path d="M6 10L12 2.5M10 10L4 2.5" {...thin} />
+  </>,
+);
+export const Duplicate = icon(() =>
+  <>
+    <rect x="2.5" y="2.5" width="8" height="8" rx="1.6" {...thin} />
+    <path d="M13.5 6v6a1.5 1.5 0 01-1.5 1.5H6" {...thin} />
+  </>,
+);
+export const Paste = icon(() =>
+  <>
+    <path d="M5.5 3H4a1.5 1.5 0 00-1.5 1.5v8A1.5 1.5 0 004 14h8a1.5 1.5 0 001.5-1.5v-8A1.5 1.5 0 0012 3h-1.5" {...thin} />
+    <rect x="5.5" y="1.8" width="5" height="2.6" rx="1" {...thin} />
+  </>,
+);
+/** Flip: two arrows, one up and one down. */
+export const Flip = icon(() => <path d="M5 2.5v11M2.5 5L5 2.5 7.5 5M11 13.5v-11M8.5 11l2.5 2.5 2.5-2.5" {...thin} />);
+/** Change agent: two arrows swapping. */
+export const Swap = icon(() => <path d="M2.5 5.5h10M10 3l2.5 2.5L10 8M13.5 10.5h-10M6 8l-2.5 2.5L6 13" {...thin} />);
+/** Select connected: one node joined to two. */
+export const Connected = icon(() =>
+  <>
+    <circle cx="3.5" cy="8" r="1.8" {...thin} />
+    <circle cx="12.5" cy="3.5" r="1.8" {...thin} />
+    <circle cx="12.5" cy="12.5" r="1.8" {...thin} />
+    <path d="M5.1 7.2l5.8-2.9M5.1 8.8l5.8 2.9" {...thin} />
+  </>,
+);
+/** Select a wire's agents: two nodes joined, as a pair. */
+export const Ends = icon(() =>
+  <>
+    <circle cx="3.5" cy="8" r="1.8" {...thin} />
+    <circle cx="12.5" cy="8" r="1.8" {...thin} />
+    <path d="M5.3 8h5.4" {...thin} />
+  </>,
+);
+export const SelectAll = icon(() =>
+  <>
+    <path d="M2.5 5V3.5a1 1 0 011-1H5M11 2.5h1.5a1 1 0 011 1V5M13.5 11v1.5a1 1 0 01-1 1H11M5 13.5H3.5a1 1 0 01-1-1V11" {...thin} />
+    <path d="M7 2.5h2M7 13.5h2M2.5 7v2M13.5 7v2" {...thin} />
+  </>,
+);
+/** Select: a dashed box. */
+export const Select = icon(() => <rect x="2.5" y="2.5" width="11" height="11" rx="2" {...thin} stroke-dasharray="2.2 2" />);
+export const More = icon(() =>
+  <>
+    <circle cx="3.5" cy="8" r="1.2" fill="currentColor" />
+    <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+    <circle cx="12.5" cy="8" r="1.2" fill="currentColor" />
+  </>,
+);
+/** Open in an editor: an arrow out of a box. */
+export const Open = icon(() => <path d="M9.5 2.5h4v4M13.5 2.5L8 8M12 9.5v3a1 1 0 01-1 1H3.5a1 1 0 01-1-1V5a1 1 0 011-1h3" {...thin} />);
+/** Break apart: two boxes coming away from each other. */
+export const Apart = icon(() =>
+  <>
+    <rect x="2" y="2" width="5" height="5" rx="1" {...thin} />
+    <rect x="9" y="9" width="5" height="5" rx="1" {...thin} />
+    <path d="M9 4.5h3.5V7M7 11.5H3.5V9" {...thin} stroke-dasharray="1.6 1.6" />
+  </>,
+);
+/** A rule: a cell of the grid. */
+export const Rule = icon(() =>
+  <>
+    <rect x="2" y="2" width="12" height="12" rx="2" {...thin} />
+    <path d="M2 6h12M6 2v12" {...thin} />
+  </>,
+);
+/** Directions and types: a port with its ways out. */
+export const Types = icon(() =>
+  <>
+    <circle cx="8" cy="8" r="2" {...thin} />
+    <path d="M8 1.8v2.4M8 11.8v2.4M1.8 8h2.4M11.8 8h2.4" {...thin} />
+  </>,
+);

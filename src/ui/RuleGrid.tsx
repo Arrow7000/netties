@@ -64,12 +64,25 @@ export function gridTypes(ed: Editor) {
   return all.map((t, i) => ({ t, i })).sort((x, y) => rank(x.t.id) - rank(y.t.id) || x.i - y.i).map((x) => x.t);
 }
 
-export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) {
+/**
+ * `pick`: a tap on a cell picks it, as the pair pointed at, rather than
+ * opening its rule; a tap on the picked cell lets go. The phone's sheet says
+ * what the picked cell is, under the grid, with a button to open its rule.
+ */
+export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean; pick?: boolean }) {
   const ed = props.ed;
   const m = ed.model;
-  const [hot, setHot] = createSignal<[number, number]>();
+  const [pointed, setHot] = createSignal<[number, number]>();
 
   const types = () => gridTypes(ed);
+  /** The picked cell, as row and column. */
+  const picked = (): [number, number] | undefined => {
+    const h = m.hover();
+    if (!props.pick || h?.kind !== "pair") return undefined;
+    const ids = types().map((t) => t.id);
+    return [ids.indexOf(h.a), ids.indexOf(h.b)];
+  };
+  const hot = () => (props.pick ? picked() : pointed());
 
   const state = cellStates(ed);
 
@@ -85,6 +98,7 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
         "grid-auto-rows": `${cell()}px`,
       }}
       onPointerLeave={() => {
+        if (props.pick) return;
         setHot(undefined);
         if (m.hover()?.kind === "pair") m.setHover(undefined);
       }}
@@ -116,19 +130,23 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean }) 
                 ) : (
                   <button
                     class={`cell ${state(a.id, b.id)}`}
-                    classList={{ hl: !!hot() && (hot()![0] === i() || hot()![1] === j()) }}
+                    classList={{ hl: !!hot() && (hot()![0] === i() || hot()![1] === j()), picked: hot()?.[0] === i() && hot()?.[1] === j() && !!props.pick }}
                     tabIndex={props.thumb || state(a.id, b.id) === "never" ? -1 : 0}
                     aria-label={`${a.name} with ${b.name}`}
                     onPointerEnter={() => {
-                      if (props.thumb) return;
+                      if (props.thumb || props.pick) return;
                       setHot([i(), j()]);
                       m.setHover({ kind: "pair", a: a.id, b: b.id });
                     }}
-                    onFocus={() => !props.thumb && m.setHover({ kind: "pair", a: a.id, b: b.id })}
-                    onBlur={() => m.setHover(undefined)}
+                    onFocus={() => !props.thumb && !props.pick && m.setHover({ kind: "pair", a: a.id, b: b.id })}
+                    onBlur={() => !props.pick && m.setHover(undefined)}
                     onClick={(e) => {
                       if (props.thumb) return;
                       e.stopPropagation();
+                      if (props.pick) {
+                        const p = picked();
+                        return m.setHover(p?.[0] === i() && p?.[1] === j() ? undefined : { kind: "pair", a: a.id, b: b.id });
+                      }
                       if (state(a.id, b.id) === "never" || !canLeave()) return;
                       m.setHover(undefined);
                       ed.openRule(a.id, b.id);

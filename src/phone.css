@@ -1,0 +1,724 @@
+/*
+ * The phone layout's sheet and what goes with it (src/ui/phone): only drawn
+ * while the compact layout shows (src/ui/compact.ts). The last block of
+ * styles.css has the rest of the phone layout.
+ */
+
+/* Chrome is pressed, not read: no selecting its words, and no callout on a long press. */
+.sheet,
+.hold-menu,
+.action-sheet,
+.drag-ghost.lifted {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+@media (max-width: 760px), (max-height: 500px) {
+  .top-left,
+  .top-right,
+  .menu {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
+/* A finger held long enough: a ring that opens out under it. */
+.hold-ripple {
+  position: absolute;
+  z-index: 5;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+  animation: hold-ripple 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes hold-ripple {
+  from {
+    transform: scale(0.35);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+/* A tile carried by a finger is drawn above it, a little bigger. */
+.drag-ghost.lifted {
+  transform: translate(-50%, -50%) scale(1.6);
+}
+
+/* Tiles sized for a finger. The browser keeps the way they scroll; a drag across lifts one out. */
+.app .sheet-tile {
+  flex: none;
+  width: 72px;
+  height: 70px;
+  padding: 7px 2px 6px;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 11px;
+  transition:
+    transform 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.sheet-tile.along-x {
+  touch-action: pan-x;
+}
+
+.sheet-tile.along-y {
+  touch-action: pan-y;
+}
+
+.sheet-tile:active,
+.sheet-tile.held {
+  background: var(--chrome-2);
+  border-color: var(--line-2);
+}
+
+/* Tapped: selected, as the palette's tile being edited looks. */
+.sheet-tile.picked {
+  background: var(--chrome-2);
+  border-color: var(--accent);
+}
+
+.sheet-tile.held {
+  transform: scale(0.94);
+  border-color: var(--accent);
+}
+
+.sheet-tile .tile-name {
+  font-size: 11px;
+}
+
+.sheet-tile.new {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.sheet-tile.new .icon {
+  width: 18px;
+  height: 18px;
+  margin: 8px 0 6px;
+}
+
+/* An action: an icon over its name. */
+.sheet-act {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  height: 54px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--chrome-2);
+  color: var(--text);
+  font: 500 11px var(--ui-font);
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.sheet-act span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sheet-act .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.sheet-act:active:not([aria-disabled="true"]) {
+  background: var(--chrome-3);
+}
+
+.sheet-act.primary {
+  background: var(--text);
+  color: var(--chrome);
+}
+
+.sheet-act.danger {
+  color: var(--stuck);
+}
+
+.sheet-act[aria-disabled="true"] {
+  opacity: 0.4;
+}
+
+.sheet-transport {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Armed by a hold: Step and Step all show what they'd fire, in amber, until tapped again or let go. */
+.sheet-transport .btn.outline[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--active) 22%, var(--chrome));
+  border-color: var(--active);
+}
+
+.sheet-transport .btn.run[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--chrome),
+    0 0 0 4px var(--active);
+}
+
+.types-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 400 12.5px var(--ui-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.types-line > span {
+  flex: 1;
+}
+
+.types-line b {
+  font-weight: 600;
+}
+
+.types-line .icon {
+  color: var(--muted);
+}
+
+/* Held on empty canvas: a small menu above the finger. */
+.hold-menu {
+  position: fixed;
+  z-index: 30;
+  transform: translate(-50%, calc(-100% - 22px));
+  animation: pop-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transform-origin: 50% 100%;
+}
+
+.hold-menu.below {
+  transform: translate(-50%, 22px);
+}
+
+.app .hold-menu .btn,
+.hold-menu .btn {
+  height: 40px;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+
+/* Action sheets: "more", and picking one of several. */
+.action-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+
+.action-sheet-scrim.on {
+  opacity: 1;
+}
+
+.action-sheet {
+  position: fixed;
+  z-index: 71;
+  left: calc(8px + env(safe-area-inset-left));
+  right: calc(8px + env(safe-area-inset-right));
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  max-height: calc(100dvh - 80px);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 6px;
+  border-radius: var(--r-pop);
+  transform: translateY(calc(100% + 20px));
+  transition: transform 0.24s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+
+.action-sheet.on {
+  transform: none;
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .action-sheet {
+    left: 50%;
+    right: auto;
+    width: 420px;
+    margin-left: -210px;
+  }
+}
+
+.action-sheet-title {
+  padding: 8px 10px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.action-sheet-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.action-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: 400 14px var(--ui-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-sheet-item:active:not([aria-disabled="true"]) {
+  background: var(--chrome-2);
+}
+
+.action-sheet-item.danger {
+  color: var(--stuck);
+}
+
+.action-sheet-item[aria-disabled="true"] {
+  color: var(--faint);
+}
+
+.action-sheet-item[aria-disabled="true"] .action-sheet-lead {
+  opacity: 0.45;
+}
+
+.action-sheet-lead {
+  width: 34px;
+  display: flex;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.action-sheet-item.danger .action-sheet-lead {
+  color: inherit;
+}
+
+.action-sheet-lead .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.action-sheet-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.action-sheet-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.app .action-sheet .action-sheet-cancel,
+.action-sheet .action-sheet-cancel {
+  height: 46px;
+  margin-top: 6px;
+  background: var(--chrome-2);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Naming a new component, near the top, clear of the keyboard. */
+.make-dialog {
+  position: fixed;
+  z-index: 72;
+  top: calc(70px + env(safe-area-inset-top));
+  left: calc(8px + env(safe-area-inset-left));
+  right: calc(8px + env(safe-area-inset-right));
+  max-width: 420px;
+  margin: 0 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--r-pop);
+  animation: pop-in 0.16s ease-out;
+}
+
+.make-dialog-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.make-dialog-note {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.make-dialog-row {
+  display: flex;
+  gap: 8px;
+}
+
+.make-dialog-row.end {
+  justify-content: flex-end;
+}
+
+.make-dialog .input {
+  height: 40px;
+  font-size: 16px;
+}
+
+.make-dialog .input.short {
+  width: 96px;
+  flex: none;
+}
+
+.app .make-dialog .btn,
+.make-dialog .btn {
+  height: 40px;
+  padding: 0 16px;
+}
+
+/* The sheet: one along the bottom, several faces. */
+
+.sheet {
+  left: calc(8px + env(safe-area-inset-left));
+  right: calc(8px + env(safe-area-inset-right));
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border-radius: var(--r-pop);
+}
+
+.sheet.side {
+  left: auto;
+  width: 300px;
+  right: calc(8px + env(safe-area-inset-right));
+}
+
+.sheet-handle {
+  touch-action: none;
+  cursor: grab;
+}
+
+/* The grabber's row, and a little above the sheet's edge, takes a finger. */
+.sheet-grab {
+  position: relative;
+  height: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.sheet-grab::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -10px;
+  height: 10px;
+}
+
+.sheet-grab span {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-2);
+}
+
+.sheet-faces {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 6px;
+  transition: height 0.32s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+
+.sheet-faces .seg button {
+  height: 30px;
+  padding: 0 12px;
+}
+
+.sheet-focus-tab {
+  animation: pop-in 0.18s ease-out;
+}
+
+.app .sheet-faces .btn.small {
+  height: 32px;
+  padding: 0 10px;
+}
+
+.sheet.closed .sheet-faces {
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sheet-body {
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  transition: height 0.32s cubic-bezier(0.22, 0.9, 0.24, 1);
+}
+
+.sheet.closed .sheet-body {
+  border-top-color: transparent;
+}
+
+.sheet.dragging .sheet-body,
+.sheet.dragging .sheet-faces {
+  transition: none;
+}
+
+.sheet-body.scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sheet-tiles {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sheet-tiles:not(.wrap) {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+
+.sheet-tiles::-webkit-scrollbar {
+  display: none;
+}
+
+.sheet-tiles.wrap {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  overflow: visible;
+}
+
+.sheet-tiles.wrap .sheet-tile {
+  width: auto;
+}
+
+/* At its peek, the agents and the line under them fill the sheet's first row exactly. */
+.sheet-agents {
+  height: 112px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet.side .sheet-agents {
+  height: auto;
+}
+
+.sheet-agents .sheet-tiles {
+  padding: 8px 10px 4px;
+}
+
+.sheet-agents .sheet-hint {
+  padding: 0 12px;
+}
+
+.sheet.side .sheet-agents .sheet-hint {
+  padding-bottom: 8px;
+}
+
+/* Under the tiles: what they do, or the tile tapped, and its Edit. */
+.sheet-hint {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  line-height: 1.25;
+}
+
+.palette-hint.sheet-hint {
+  margin: 0;
+}
+
+.sheet-hint.picked {
+  gap: 10px;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.sheet-hint-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .sheet-hint .btn.small {
+  height: 30px;
+}
+
+.sheet-section .sheet-hint {
+  margin-top: 4px;
+}
+
+.sheet-section {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.sheet-section .section-head {
+  margin-bottom: 0;
+}
+
+.sheet-section .sheet-tiles {
+  padding: 8px 0 0;
+}
+
+.sheet-section .palette-hint {
+  margin: 2px 0;
+}
+
+.app .sheet-section .btn.small {
+  height: 32px;
+}
+
+.sheet-rules {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sheet-rules-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--muted);
+  min-height: 32px;
+}
+
+.app .sheet-rules .btn.small {
+  height: 32px;
+}
+
+.sheet-rules .rule-grid {
+  align-self: center;
+}
+
+/* The picked cell, ringed as the pointed-at one is on a desktop. */
+.rule-grid .cell.picked {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* What the picked cell is, and its rule's button. */
+.sheet-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--chrome-2);
+  font-size: 12.5px;
+}
+
+.sheet-cell .panel-title {
+  align-self: stretch;
+}
+
+.sheet-cell .btn {
+  margin-top: 8px;
+}
+
+.sheet-focus {
+  padding: 10px 12px 12px;
+  font-size: 12.5px;
+}
+
+/* What the Selection face holds, over what it says about it. */
+.sheet-kind {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.sheet-focus .panel-title {
+  min-height: 20px;
+}
+
+.sheet-acts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  margin: 10px 0 6px;
+}
+
+.sheet.side .sheet-acts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sheet-empty {
+  padding: 14px 12px;
+}
+
+.sheet-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.sheet.closed .sheet-bar {
+  border-top-color: transparent;
+}
+
+.sheet-view {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The view menu opens up from the bar. */
+.sheet-view .menu {
+  bottom: calc(100% + 10px);
+  right: -7px;
+  top: auto;
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .app:has(.sheet.side) .top-right {
+    right: calc(316px + env(safe-area-inset-right));
+  }
+
+  .sheet-view .menu {
+    right: -7px;
+    max-height: calc(100dvh - 90px);
+  }
+}
