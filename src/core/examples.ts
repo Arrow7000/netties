@@ -1,6 +1,7 @@
 import { type End, Net, free, port } from "./net";
 import { arithmetic, combinators, directedCombinators, intensionalTrees, listArithmetic, lists, typingLab } from "./presets";
 import { triageMachine } from "./triageMachine";
+import { fibonacci, listSort, range } from "./showcaseSystems";
 import { System } from "./system";
 
 /**
@@ -346,6 +347,40 @@ export const examples: Example[] = [
       link(net, build(net, sys, second), build(net, sys, t("#", secondLength)));
       link(net, firstLength, build(net, sys, t("+", f("out"), secondAddend)));
       link(net, secondLength, secondAddend);
+      return net;
+    },
+  },
+  {
+    name: "Fibonacci: 6 → 8",
+    about: "One Fib agent, two rules: 0 gives (0, 1); S turns (a, b) into (b, a + b). Keep fib(6) = 8 and erase the next value.",
+    showcase: true,
+    system: fibonacci,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, num(6)), build(net, sys, t("Fib", f("out"), t("ε"))));
+      return net;
+    },
+  },
+  {
+    name: "Sort a list",
+    about: "Turn [3, 1, 2, 0] into one sorted list, [0, 1, 2, 3]. Sort the tail, then insert each head in order.",
+    showcase: true,
+    system: listSort,
+    net: (sys) => {
+      const net = new Net();
+      const list = t("∷", num(3), t("∷", num(1), t("∷", num(2), t("∷", num(0), t("[]")))));
+      link(net, build(net, sys, list), build(net, sys, t("Sort", f("out"))));
+      return net;
+    },
+  },
+  {
+    name: "range(5)",
+    about: "Generate [0, 1, 2, 3, 4]: five numbers starting at 0. Each request produces one item, then Stop closes the source.",
+    showcase: true,
+    system: range,
+    net: (sys) => {
+      const net = new Net();
+      link(net, build(net, sys, num(5)), build(net, sys, t("Take", f("out"), t("From", num(0)))));
       return net;
     },
   },
