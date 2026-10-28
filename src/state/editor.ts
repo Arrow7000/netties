@@ -186,7 +186,7 @@ export function createEditor(initial: Doc | undefined) {
 
   /**
    * Which active pairs to preview without the pointer on them: the next
-   * step while pointing at Step, every pair while pointing at Step all, and
+   * step while pointing at Step, every pair while pointing at Parallel step, and
    * every pair for a moment before each step of a run.
    */
   const [previewMode, setPreviewMode] = createSignal<"next" | "all">();

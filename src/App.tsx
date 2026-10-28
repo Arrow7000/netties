@@ -540,7 +540,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
               onPointerEnter={() => !ed.running() && ed.setPreviewMode("next")}
               onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
               disabled={!active() || ed.running()}
-              title="Fire one active pair (S)"
+              title="Apply the rule to one active pair (S)"
             >
               <I.Step />
               Step
@@ -551,10 +551,10 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
               onPointerEnter={() => !ed.running() && ed.setPreviewMode("all")}
               onPointerLeave={() => !ed.running() && ed.setPreviewMode(undefined)}
               disabled={!active() || ed.running()}
-              title="Fire every active pair at once (A)"
+              title="Apply the rules to every active pair at once (A)"
             >
-              <I.StepAll />
-              Step all
+              <I.ParallelStep />
+              Parallel step
             </button>
             <button
               class="btn run"

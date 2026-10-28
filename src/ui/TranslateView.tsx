@@ -250,7 +250,7 @@ export function TranslateView(props: { ed: Editor }) {
           Step combinators
         </button>
         <button class="btn" onClick={() => stepCombinators(true)} disabled={busy() || !target.activeWires().size}>
-          Step all combinators
+          Parallel step combinators
         </button>
         <Show when={!synced()}>
           <button class="btn" onClick={retranslate}>

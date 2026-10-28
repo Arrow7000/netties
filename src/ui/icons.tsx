@@ -18,13 +18,10 @@ export const Theme = icon(() =>
     <path d="M8 2.5a5.5 5.5 0 010 11z" fill="currentColor" />
   </>,
 );
-export const Step = icon(() =>
-  <>
-    <path d="M4 3.5l6 4.5-6 4.5z" fill="currentColor" />
-    <path d="M12 3.5v9" {...line} stroke-width={1.6} />
-  </>,
-);
-export const StepAll = icon(() => <path d="M2 3.5l5 4.5-5 4.5zM8 3.5l5 4.5-5 4.5z" fill="currentColor" />);
+/** Step: →, one reduction step. */
+export const Step = icon(() => <path d="M2.5 8H13M9.5 4.5L13 8l-3.5 3.5" {...line} />);
+/** Parallel step: ⇉, parallel reduction, every active pair at once. */
+export const ParallelStep = icon(() => <path d="M2.5 4.5H13M10.5 2L13 4.5 10.5 7M2.5 11.5H13M10.5 9l2.5 2.5-2.5 2.5" {...line} />);
 export const Play = icon(() => <path d="M4.5 3l8 5-8 5z" fill="currentColor" />);
 export const Stop = icon(() => <rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" />);
 export const Slow = icon(() =>

@@ -1,7 +1,9 @@
 /**
- * Candidate icons for Step and Step all, side by side in the real bottom
+ * The candidate icons for Step and Step all, side by side in the real bottom
  * bar and phone sheet bar: open /icons.html on the dev server. Each set is
  * drawn the way `src/ui/icons.tsx` draws its icons, with the app's own CSS.
+ * B won (2026-10-28): Step all became Parallel step, with → and ⇉ from
+ * rewriting notation. Kept as a record of what was weighed.
  */
 import { For, type JSX, createSignal } from "solid-js";
 import { render } from "solid-js/web";
@@ -17,10 +19,17 @@ const icon = (body: () => JSX.Element) => () => (
 
 const line = { fill: "none", stroke: "currentColor", "stroke-width": 1.5, "stroke-linecap": "round", "stroke-linejoin": "round" } as const;
 
-/** →: one reduction step. */
-const Arrow = icon(() => <path d="M2.5 8H13M9.5 4.5L13 8l-3.5 3.5" {...line} />);
-/** ⇉: parallel reduction. */
-const Parallel = icon(() => <path d="M2.5 4.5H13M10.5 2L13 4.5 10.5 7M2.5 11.5H13M10.5 9l2.5 2.5-2.5 2.5" {...line} />);
+/** The icons before: ▶| and ▶▶. */
+const OldStep = icon(() =>
+  <>
+    <path d="M4 3.5l6 4.5-6 4.5z" fill="currentColor" />
+    <path d="M12 3.5v9" {...line} stroke-width={1.6} />
+  </>,
+);
+const OldStepAll = icon(() => <path d="M2 3.5l5 4.5-5 4.5zM8 3.5l5 4.5-5 4.5z" fill="currentColor" />);
+/** → and ⇉, as the app now has them. */
+const Arrow = I.Step;
+const Parallel = I.ParallelStep;
 /** ⇶: parallel, three abreast. */
 const Parallel3 = icon(() => <path d="M2.5 3H13M11 1.2L13 3l-2 1.8M2.5 8H13M11 6.2L13 8l-2 1.8M2.5 13H13M11 11.2l2 1.8-2 1.8" {...line} stroke-width={1.4} />);
 /** ↠: reduce all the way, to normal form. */
@@ -53,8 +62,8 @@ interface Set {
 }
 
 const sets: Set[] = [
-  { key: "A", name: "Now", about: "▶| and ▶▶, borrowed from media players.", step: I.Step, all: I.StepAll, run: I.Play, allLabel: "Step all" },
-  { key: "B", name: "Arrow, parallel arrows, play", about: "Rewriting notation: one step, parallel step. Run stays play.", step: Arrow, all: Parallel, run: I.Play, allLabel: "Parallel step" },
+  { key: "A", name: "Before", about: "▶| and ▶▶, borrowed from media players.", step: OldStep, all: OldStepAll, run: I.Play, allLabel: "Step all" },
+  { key: "B", name: "Arrow, parallel arrows, play (picked)", about: "Rewriting notation: one step, parallel step. Run stays play.", step: Arrow, all: Parallel, run: I.Play, allLabel: "Parallel step" },
   { key: "C", name: "Arrow, parallel arrows, two-headed arrow", about: "Notation all the way: Run is the two-headed arrow (→*), reduce to normal form.", step: Arrow, all: Parallel, run: Reduce, allLabel: "Parallel step" },
   { key: "D", name: "Arrow, three parallel arrows, play", about: "Three arrows abreast, to say “all” more than “two”.", step: Arrow, all: Parallel3, run: I.Play, allLabel: "Parallel step" },
   { key: "E", name: "Pair, three pairs, play", about: "The active pair itself, two agents tip to tip; then every pair at once.", step: Pair, all: Pairs, run: I.Play, allLabel: "Parallel step" },

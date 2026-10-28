@@ -163,7 +163,7 @@
   gap: 8px;
 }
 
-/* Armed by a hold: Step and Step all show what they'd fire, in amber, until tapped again or let go. */
+/* Armed by a hold: Step and Parallel step show what they'd fire, in amber, until tapped again or let go. */
 .sheet-transport .btn.outline[aria-pressed="true"] {
   background: color-mix(in srgb, var(--active) 22%, var(--chrome));
   border-color: var(--active);

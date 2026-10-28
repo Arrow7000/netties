@@ -46,7 +46,7 @@ export interface Choice {
 
 const Sym = (props: { s: string }) => <i class="sym">{props.s}</i>;
 
-const RUN_NAME: Record<RunButton, string> = { step: "Step", all: "Step all", run: "Run" };
+const RUN_NAME: Record<RunButton, string> = { step: "Step", all: "Parallel step", run: "Run" };
 
 /**
  * What the Selection face is about and acts on: the main net, through the
@@ -198,7 +198,7 @@ export function createFocus(host: FocusHost) {
         ) : (
           `Fires all ${count(m.activeWires().size, "active pair")} at once.`
         );
-        return { title: f.button === "step" ? "Fire one active pair" : "Fire every active pair at once", lines: [{ text: what }, again] };
+        return { title: f.button === "step" ? "Apply the rule to one active pair" : "Apply the rules to every active pair at once", lines: [{ text: what }, again] };
       }
       case "pair": {
         const p = pairOf(f.wire);

@@ -843,7 +843,7 @@ export function Canvas(props: CanvasProps) {
 
   /**
    * The active pairs being previewed: whatever the editor asks for (pointing
-   * at Step or Step all, or a run about to step), or else the pair under the
+   * at Step or Parallel step, or a run about to step), or else the pair under the
    * pointer while clicking it would fire it.
    */
   const targets = createMemo(

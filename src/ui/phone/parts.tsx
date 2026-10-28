@@ -150,7 +150,7 @@ export function TileHint(props: { kit: Phone; of: "type" | "component" }) {
 }
 
 /**
- * Step, Step all and Run, and Reset example when it applies. A quick tap
+ * Step, Parallel step and Run, and Reset example when it applies. A quick tap
  * fires; a hold arms the button (./transport.ts), and a tap on it then fires.
  */
 export function RunButtons(props: { kit: Phone }) {
@@ -180,11 +180,11 @@ export function RunButtons(props: { kit: Phone }) {
   });
   return (
     <div class="sheet-transport">
-      <button class="btn outline icon" {...press("step")} disabled={!active() || ed.running()} aria-label="Step: fire one active pair. Hold to see which first.">
+      <button class="btn outline icon" {...press("step")} disabled={!active() || ed.running()} aria-label="Step: apply the rule to one active pair. Hold to see which first.">
         <I.Step />
       </button>
-      <button class="btn outline icon" {...press("all")} disabled={!active() || ed.running()} aria-label="Step all: fire every active pair at once. Hold to see them first.">
-        <I.StepAll />
+      <button class="btn outline icon" {...press("all")} disabled={!active() || ed.running()} aria-label="Parallel step: apply the rules to every active pair at once. Hold to see them first.">
+        <I.ParallelStep />
       </button>
       <button class="btn run" classList={{ stop: ed.running() }} {...press("run")} disabled={!active() && !ed.running()}>
         <Show when={ed.running()} fallback={<I.Play />}>

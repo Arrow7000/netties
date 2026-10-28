@@ -369,7 +369,7 @@ export function createPhone(ed: Editor, camera: Camera) {
   onCleanup(() => clearTimeout(runTimer));
   /** The button armed, if any. */
   const armedRun = () => transport().armed;
-  // Step and Step all, armed, show on the canvas what they'd fire.
+  // Step and Parallel step, armed, show on the canvas what they'd fire.
   createEffect(
     on(armedRun, (b, was) => {
       if (b === "step" || b === "all") ed.setPreviewMode(b === "step" ? "next" : "all");

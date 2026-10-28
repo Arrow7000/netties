@@ -1,8 +1,8 @@
 /**
- * The phone's Step, Step all and Run buttons, as a state machine in the
+ * The phone's Step, Parallel step and Run buttons, as a state machine in the
  * canvas's style (src/ui/gesture.ts). A quick tap fires straight away. A
  * hold arms the button instead: it stays pressed, the sheet says what it
- * would do (and Step and Step all show it on the canvas), and a quick tap
+ * would do (and Step and Parallel step show it on the canvas), and a quick tap
  * on it then fires it. A tap anywhere else lets it go. Sliding off a button
  * before letting go does nothing.
  *
