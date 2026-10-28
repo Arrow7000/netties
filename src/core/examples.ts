@@ -2,6 +2,7 @@ import { type End, Net, free, port } from "./net";
 import { arithmetic, combinators, directedCombinators, intensionalTrees, listArithmetic, lists, typingLab } from "./presets";
 import { triageMachine } from "./triageMachine";
 import { fibonacci, listSort, range } from "./showcaseSystems";
+import { differentiation, higherOrderMap, primeSieve } from "./advancedShowcases";
 import { System } from "./system";
 
 /**
@@ -381,6 +382,45 @@ export const examples: Example[] = [
     net: (sys) => {
       const net = new Net();
       link(net, build(net, sys, num(5)), build(net, sys, t("Take", f("out"), t("From", num(0)))));
+      return net;
+    },
+  },
+  {
+    name: "Find the primes up to 7",
+    about: "Sieve [2, 3, …, 7] into [2, 3, 5, 7]. Each surviving head filters its multiples from the rest of the list.",
+    showcase: true,
+    system: primeSieve,
+    net: (sys) => {
+      const net = new Net();
+      const list = [2, 3, 4, 5, 6, 7].reduceRight((tail, value) => t("∷", num(value), tail), t("[]"));
+      link(net, build(net, sys, list), build(net, sys, t("Sieve", f("out"))));
+      return net;
+    },
+  },
+  {
+    name: "Map a function: x² + 1",
+    about: "Map Sq then Plus(1) over [1, 2, 3] to get [2, 5, 10]. The composed function and its captured 1 are copied as data.",
+    showcase: true,
+    system: higherOrderMap,
+    net: (sys) => {
+      const net = new Net();
+      const list = t("∷", num(1), t("∷", num(2), t("∷", num(3), t("[]"))));
+      const fn = t("Then", t("Sq"), t("Plus", num(1)));
+      link(net, build(net, sys, list), build(net, sys, t("Map", f("out"), fn)));
+      return net;
+    },
+  },
+  {
+    name: "Differentiate a formula, then run it",
+    about: "D differentiates (x + 1) × (x + 2) using the product rule. Eval runs the generated formula at x = 2 to get 7.",
+    showcase: true,
+    system: differentiation,
+    net: (sys) => {
+      const net = new Net();
+      const derivative = new Hole();
+      const expression = t("Mul", t("Add", t("X"), t("K", num(1))), t("Add", t("X"), t("K", num(2))));
+      link(net, build(net, sys, expression), build(net, sys, t("D", derivative)));
+      link(net, derivative, build(net, sys, t("Eval", f("out"), num(2))));
       return net;
     },
   },
