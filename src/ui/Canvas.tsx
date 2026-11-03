@@ -858,8 +858,6 @@ export function Canvas(props: CanvasProps) {
     undefined,
     { equals: (a, b) => a === b || (!!a && !!b && a.length === b.length && a.every((w, i) => w === b[i])) },
   );
-  /** Cuts the agents of the step being previewed out of the highlights that run on under them. */
-  const seeThroughMask = `see-through-${createUniqueId()}`;
   const firing = createMemo(() => {
     const ws = targets();
     if (!ws?.length || !props.preview) return undefined;
@@ -961,13 +959,12 @@ export function Canvas(props: CanvasProps) {
                   hidden={carried() === id}
                   highlighted={highlighted().has(id)}
                   fading={!!firing()?.wires.has(id)}
-                  seeThrough={firing() && { agents: firing()!.agents, mask: seeThroughMask }}
+                  seeThrough={firing()?.agents}
                   joining={joining() === id}
                   pre={preselectedWires().has(id)}
                 />
               )}
             </For>
-            <Show when={firing()}>{(f) => <SeeThroughMask ed={ed} id={seeThroughMask} agents={f().agents} system={sys} />}</Show>
             {/* Under the agents, like any wire, so it comes out from under the end it starts from. */}
             <Show when={wireDrag()}>
               {(d) => {
@@ -1461,10 +1458,10 @@ function Wire(props: {
   /** Taken away, or rerouted, by the step being previewed. */
   fading?: boolean;
   /**
-   * Agents drawn see-through, and a mask cutting them out: the highlight
-   * runs on under them all the same, but masked, so it still looks to go under.
+   * Agents drawn see-through: the highlight runs on under them all the same,
+   * but clipped round them, so it still looks to go under.
    */
-  seeThrough?: { agents: ReadonlySet<AgentId>; mask: string };
+  seeThrough?: ReadonlySet<AgentId>;
   /** A loose end's wire that the wire being dragged would join. */
   joining?: boolean;
 }) {
@@ -1473,10 +1470,28 @@ function Wire(props: {
   const d = () => roundedPath(pts(), G.radius);
   const ends = () => (ed.view().net.wires.has(props.id) ? ed.view().net.wire(props.id).ends : []);
   const markD = () => roundedPath(tuckUnder(ed, pts(), ends()), G.radius);
-  const masked = () => {
+  const clipId = `see-through-${createUniqueId()}`;
+  /** The clip round the see-through agents this wire runs into, if it runs into any. */
+  const clip = createMemo(() => {
     const st = props.seeThrough;
-    return st && ends().some((e) => e.kind === "port" && st.agents.has(e.agent)) ? `url(#${st.mask})` : undefined;
-  };
+    if (!st) return undefined;
+    const v = ed.view();
+    const l = ed.layout();
+    const ids = [...new Set(ends().flatMap((e) => (e.kind === "port" && st.has(e.agent) ? [e.agent] : [])))];
+    const at: Pt[] = [];
+    const outlines: ReturnType<typeof agentOutline>[] = [];
+    for (const id of ids) {
+      const p = l.placement.get(id);
+      const a = v.net.agents.get(id);
+      if (!p || !a) continue;
+      at.push(p);
+      outlines.push(agentOutline(p, a.wires.length - 1, !!v.sys.types.get(a.type)?.box));
+    }
+    if (!outlines.length) return undefined;
+    const b = l.routed.bounds;
+    const m = 40;
+    return seeThroughClip({ x0: b.x0 - m, y0: b.y0 - m, x1: b.x1 + m, y1: b.y1 + m }, outlines, at);
+  });
   /** The arrowhead halfway along, pointing from the end that gives to the end that takes. */
   const arrow = () => {
     if (!ed.view().net.wires.has(props.id)) return undefined;
@@ -1523,7 +1538,14 @@ function Wire(props: {
       data-wire={props.id}
     >
       <path class="halo" d={d()} />
-      <path class="mark" d={markD()} mask={masked()} />
+      <Show when={clip()}>
+        {(c) => (
+          <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+            <path d={c()} clip-rule="evenodd" />
+          </clipPath>
+        )}
+      </Show>
+      <path class="mark" d={markD()} clip-path={clip() ? `url(#${clipId})` : undefined} />
       <path class="line" d={d()} />
       <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
       <path class="hit" d={d()} />
@@ -1532,46 +1554,53 @@ function Wire(props: {
 }
 
 /**
- * A mask that hides whatever is drawn under some agents, outline and all, as
- * their own paper would if they weren't see-through.
+ * A clip path, as path data, that keeps everything in `area` except the
+ * insides of some agents, outline and all, as their own paper would hide
+ * them if they weren't see-through: each outline grown by half its stroke,
+ * with rounded corners as the stroke's round joins have.
+ *
+ * A clip, not a mask: phone GPUs draw a mask offscreen, at its full size, for
+ * every wire that uses one, which stalled every frame of zooming while a step
+ * was previewed. A clip made of one path is drawn as it is.
  */
-function SeeThroughMask(props: { ed: NetModel; id: string; agents: ReadonlySet<AgentId>; system: () => System }) {
-  const ed = props.ed;
-  const far = 1e6;
-  return (
-    <mask id={props.id} maskUnits="userSpaceOnUse" x={-far} y={-far} width={2 * far} height={2 * far}>
-      <rect x={-far} y={-far} width={2 * far} height={2 * far} fill="white" />
-      <For each={[...props.agents]}>
-        {(id) => {
-          const p = () => ed.layout().placement.get(id);
-          const a = () => ed.view().net.agents.get(id);
-          const outline = () => {
-            const pos = p();
-            const ag = a();
-            return pos && ag ? agentOutline(pos, ag.wires.length - 1, !!props.system().types.get(ag.type)?.box) : undefined;
-          };
-          return (
-            <Show when={outline()}>
-              {(o) => {
-                const s = o();
-                return s.kind === "circle" ? (
-                  <circle cx={p()!.x} cy={p()!.y} r={s.r} fill="black" stroke="black" stroke-width={STROKE} />
-                ) : (
-                  <polygon
-                    points={s.points.map((q) => `${q.x},${q.y}`).join(" ")}
-                    fill="black"
-                    stroke="black"
-                    stroke-width={STROKE}
-                    stroke-linejoin="round"
-                  />
-                );
-              }}
-            </Show>
-          );
-        }}
-      </For>
-    </mask>
-  );
+function seeThroughClip(area: Box, outlines: ReturnType<typeof agentOutline>[], at: Pt[]): string {
+  const f = (n: number) => +n.toFixed(2);
+  const r = STROKE / 2;
+  let d = `M${f(area.x0)} ${f(area.y0)}H${f(area.x1)}V${f(area.y1)}H${f(area.x0)}Z`;
+  outlines.forEach((o, k) => {
+    if (o.kind === "circle") {
+      const c = at[k]!;
+      const R = o.r + r;
+      d += `M${f(c.x - R)} ${f(c.y)}a${f(R)} ${f(R)} 0 1 0 ${f(2 * R)} 0a${f(R)} ${f(R)} 0 1 0 ${f(-2 * R)} 0Z`;
+      return;
+    }
+    // Put clockwise on screen (y down), so each edge's outward normal is to the left of the way it runs.
+    let pts = o.points;
+    let area2 = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i]!;
+      const b = pts[(i + 1) % pts.length]!;
+      area2 += a.x * b.y - b.x * a.y;
+    }
+    if (area2 < 0) pts = [...pts].reverse();
+    const n = pts.length;
+    const normal = (i: number) => {
+      const a = pts[i]!;
+      const b = pts[(i + 1) % n]!;
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      return { x: (b.y - a.y) / len, y: -(b.x - a.x) / len };
+    };
+    for (let i = 0; i < n; i++) {
+      const v = pts[i]!;
+      const before = normal((i + n - 1) % n);
+      const after = normal(i);
+      const from = { x: v.x + before.x * r, y: v.y + before.y * r };
+      const to = { x: v.x + after.x * r, y: v.y + after.y * r };
+      d += `${i ? "L" : "M"}${f(from.x)} ${f(from.y)}A${f(r)} ${f(r)} 0 0 1 ${f(to.x)} ${f(to.y)}`;
+    }
+    d += "Z";
+  });
+  return d;
 }
 
 function Agent(props: {
