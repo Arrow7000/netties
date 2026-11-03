@@ -8,7 +8,7 @@ import { GRID_FITS, GridLegend, GridSummary, RuleGrid } from "../RuleGrid";
 import { canLeave } from "../subEditor";
 import { type Detent, type DetentMsg, type SheetAt, updateDetent } from "./detent";
 import { createFocus } from "./focus";
-import type { Phone } from "./kit";
+import type { Phone, TileWhat } from "./kit";
 import { Ghost, HoldMenu, MakeDialog, RunButtons, SelectionView, Tile, TileHint, TypesLine, edgeFades, tileList } from "./parts";
 
 type Face = "agents" | "rules" | "focus";
@@ -178,7 +178,10 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
     el.addEventListener("pointercancel", up);
   };
 
-  const tiles = () => tileList(kit);
+  // Kept as they are while only the net changes, or every step of a run would draw every tile afresh.
+  const sameTiles = (a: TileWhat[], b: TileWhat[]) => a.length === b.length && a.every((w, i) => w.kind === b[i]!.kind && w.id === b[i]!.id);
+  const typeTiles = createMemo(() => tileList(kit).types, [], { equals: sameTiles });
+  const componentTiles = createMemo(() => tileList(kit).components, [], { equals: sameTiles });
   const axis = () => (sideways() ? "y" : "x");
   const open = () => detent() === "open" || sideways();
 
@@ -221,7 +224,7 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
               {/* At its peek, the sheet shows this much: the agents, and what to do with them. */}
               <div class="sheet-agents">
                 <div class="sheet-tiles" ref={edgeFades} classList={{ wrap: sideways() }}>
-                  <For each={tiles().types}>{(w) => <Tile kit={kit} what={w} axis={axis()} onLift={onLift} />}</For>
+                  <For each={typeTiles()}>{(w) => <Tile kit={kit} what={w} axis={axis()} onLift={onLift} />}</For>
                   <Show when={sideways()}>
                     <button class="tile sheet-tile new" onClick={() => ed.openAgent("new")}>
                       <I.Plus />
@@ -243,9 +246,9 @@ export function PhoneSheet(props: { kit: Phone; viewMenu: () => JSX.Element }) {
                     From selection
                   </button>
                 </div>
-                <Show when={tiles().components.length} fallback={<p class="palette-hint">Select some agents and make them a component to reuse them.</p>}>
+                <Show when={componentTiles().length} fallback={<p class="palette-hint">Select some agents and make them a component to reuse them.</p>}>
                   <div class="sheet-tiles" ref={edgeFades} classList={{ wrap: sideways() }}>
-                    <For each={tiles().components}>{(w) => <Tile kit={kit} what={w} axis={axis()} onLift={onLift} />}</For>
+                    <For each={componentTiles()}>{(w) => <Tile kit={kit} what={w} axis={axis()} onLift={onLift} />}</For>
                   </div>
                   <TileHint kit={kit} of="component" />
                 </Show>

@@ -348,8 +348,10 @@ export function createPhone(ed: Editor, camera: Camera) {
   const fire = (b: RunButton) => ed.dispatch({ kind: b === "step" ? "run/step-one" : b === "all" ? "run/step-all" : "run/toggle" });
   const sendTransport = (msg: TransportMsg) => {
     const [next, fx] = updateTransport(transport(), msg);
+    // The buzz goes first: arming works out the preview, which can take a moment on a phone.
+    for (const f of fx) if (f.kind === "held") performTransport(f);
     setTransport(next);
-    for (const f of fx) performTransport(f);
+    for (const f of fx) if (f.kind !== "held") performTransport(f);
   };
   const performTransport = (fx: TransportEffect) => {
     switch (fx.kind) {

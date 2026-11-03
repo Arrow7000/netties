@@ -216,10 +216,22 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
 
   // On a phone the canvas is fitted between the top bar, measured, so the room
   // it takes follows rotation and the safe areas, and the sheet at its peek.
+  // The bar is measured when it or the window changes size, not whenever the
+  // canvas asks: it asks every frame of a step's animation, and measuring then
+  // made the browser lay the page out afresh each time.
   let topBar!: HTMLDivElement;
   const [viewport, setViewport] = createSignal(0);
+  const [topEdge, setTopEdge] = createSignal<{ bottom: number; left: number }>();
+  const edgeOf = (r: DOMRect) => ({ bottom: r.bottom, left: r.left });
   onMount(() => {
-    const resized = () => setViewport((n) => n + 1);
+    const measure = () => setTopEdge(edgeOf(topBar.getBoundingClientRect()));
+    measure();
+    const bar = new ResizeObserver(measure);
+    bar.observe(topBar);
+    const resized = () => {
+      measure();
+      setViewport((n) => n + 1);
+    };
     window.addEventListener("resize", resized);
     // Turning the phone refits the net, once the canvas has its new size.
     const turn = matchMedia("(orientation: portrait)");
@@ -229,6 +241,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
     const noPinch = (e: Event) => e.preventDefault();
     document.addEventListener("gesturestart", noPinch);
     onCleanup(() => {
+      bar.disconnect();
       window.removeEventListener("resize", resized);
       turn.removeEventListener("change", turned);
       document.removeEventListener("gesturestart", noPinch);
@@ -237,7 +250,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
   const pad = (): Pad => {
     if (!compact()) return DESKTOP_PAD;
     viewport();
-    const top = topBar.getBoundingClientRect();
+    const top = topEdge() ?? edgeOf(topBar.getBoundingClientRect());
     const sheet = phone.room();
     return { t: top.bottom + 12, r: sheet.r + 8, b: sheet.b + 12, l: top.left + 8 };
   };

@@ -181,8 +181,22 @@ export function createEditor(initial: Doc | undefined) {
     const l = model.layout();
     return { placement: l.placement, routed: l.routed, columns: l.columns };
   };
+  /**
+   * The last plan made. A run previews each step and then fires it, and
+   * planning is the costly part of both, so the step reuses the preview's
+   * plan while the net, the system and the layout are as they were.
+   */
+  let planned: { layout: ReturnType<typeof model.layout>; rev: number; ws: string; plans: Map<WireId, StepPlan> } | undefined;
   /** Where firing these active pairs would put what their rules create. */
-  const plan = (ws: WireId[]): Map<WireId, StepPlan> => planSteps(model.view().net, system, drawn(), ws);
+  const plan = (ws: WireId[]): Map<WireId, StepPlan> => {
+    const layout = model.layout();
+    const r = rev();
+    const key = ws.join(",");
+    if (planned && planned.layout === layout && planned.rev === r && planned.ws === key) return planned.plans;
+    const plans = planSteps(model.view().net, system, drawn(), ws);
+    planned = { layout, rev: r, ws: key, plans };
+    return plans;
+  };
 
   /**
    * Which active pairs to preview without the pointer on them: the next
@@ -510,7 +524,7 @@ export function createEditor(initial: Doc | undefined) {
     speed,
     setSpeed,
     /** What firing these active pairs at once would do, for previewing it. */
-    preview: (ws: WireId[]): StepPreview => previewSteps(model.view().net, system, drawn(), ws),
+    preview: (ws: WireId[]): StepPreview => previewSteps(model.view().net, system, drawn(), ws, plan(ws)),
     previewing,
     setPreviewMode,
     canResetExample,
