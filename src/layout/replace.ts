@@ -157,6 +157,11 @@ function planOne(
       const s: [Pt, Pt] = [pts[i - 1]!, pts[i]!];
       if (near(union([pointBox(s[0]), pointBox(s[1])]))) segments.push(s);
     }
+  // Their extents, flat, since every place tried checks every segment and most are nowhere near it.
+  const segX0 = Float64Array.from(segments, ([p, q]) => Math.min(p.x, q.x));
+  const segX1 = Float64Array.from(segments, ([p, q]) => Math.max(p.x, q.x));
+  const segY0 = Float64Array.from(segments, ([p, q]) => Math.min(p.y, q.y));
+  const segY1 = Float64Array.from(segments, ([p, q]) => Math.max(p.y, q.y));
   // Each aux port of the pair, and the pin of the rule's interface it stands for.
   const ports: [Terminal, string][] = [];
   pair.forEach((id, side) => {
@@ -166,27 +171,59 @@ function planOne(
   const keepClear = pairBoxes.map((bx) => grow(bx, CLEAR));
 
   const steps = Math.min(14, Math.ceil(reach / GRID));
+  const side = 2 * steps + 1;
+  // What a frame costs at each place, whichever way its drawing is turned: how
+  // far off it is, and what it covers. NaN where it would crowd the pair.
+  const placeCost = new Float64Array(side * side);
+  for (let i = -steps; i <= steps; i++) {
+    for (let j = -steps; j <= steps; j++) {
+      const k = (i + steps) * side + (j + steps);
+      const ax = centre.x + i * GRID;
+      const ay = centre.y + j * GRID;
+      const frame = { x0: ax - fw / 2, x1: ax + fw / 2, y0: ay - fh / 2, y1: ay + fh / 2 };
+      if (keepClear.some((c) => overlap(c, frame) > 0)) {
+        placeCost[k] = NaN;
+        continue;
+      }
+      let cost = Math.hypot(ax - centre.x, ay - centre.y);
+      for (const o of obstacles) {
+        const area = overlap(o, frame);
+        if (area > 0) cost += 2000 + area;
+      }
+      for (let n = 0; n < segments.length; n++) {
+        if (segX1[n]! < frame.x0 || segX0[n]! > frame.x1 || segY1[n]! < frame.y0 || segY0[n]! > frame.y1) continue;
+        const [p, q] = segments[n]!;
+        if (segmentHitsBox(p, q, frame)) cost += 150;
+      }
+      placeCost[k] = cost;
+    }
+  }
+  // Each aux port whose pin the rule's drawing has, and where that pin sits from the frame's centre.
+  const links = ports.flatMap(([t, pin]) => {
+    const p = d.pins.get(pin);
+    return p ? [{ t, px: p.x, py: p.y }] : [];
+  });
+  const qx = new Float64Array(links.length);
+  const qy = new Float64Array(links.length);
   const candidates: { cost: number; at: Pt; turned: boolean }[] = [];
   for (const turned of [false, true]) {
     for (let i = -steps; i <= steps; i++) {
       for (let j = -steps; j <= steps; j++) {
+        let cost = placeCost[(i + steps) * side + (j + steps)]!;
+        if (Number.isNaN(cost)) continue;
         const at = { x: centre.x + i * GRID, y: centre.y + j * GRID };
-        const frame = { x0: at.x - fw / 2, x1: at.x + fw / 2, y0: at.y - fh / 2, y1: at.y + fh / 2 };
-        if (keepClear.some((k) => overlap(k, frame) > 0)) continue;
-        let cost = Math.hypot(at.x - centre.x, at.y - centre.y);
-        for (const o of obstacles) {
-          const area = overlap(o, frame);
-          if (area > 0) cost += 2000 + area;
-        }
-        for (const [p, q] of segments) if (segmentHitsBox(p, q, frame)) cost += 150;
         // Short, uncrossed runs from each aux port to where its pin would be.
-        const links = ports.map(([t, pin]) => [t, pinAt(d, pin, at, turned)] as const);
-        for (const [p, q] of links) if (q) cost += 0.5 * Math.hypot(p.x - q.x, p.y - q.y);
+        for (let x = 0; x < links.length; x++) {
+          const l = links[x]!;
+          qx[x] = turned ? at.x - l.px : at.x + l.px;
+          qy[x] = turned ? at.y - l.py : at.y + l.py;
+          cost += 0.5 * Math.hypot(l.t.x - qx[x]!, l.t.y - qy[x]!);
+        }
         for (let x = 0; x < links.length; x++)
           for (let y = x + 1; y < links.length; y++) {
-            const [p1, q1] = links[x]!;
-            const [p2, q2] = links[y]!;
-            if (q1 && q2 && segmentsCross(p1, q1, p2, q2)) cost += 40;
+            const a = links[x]!.t;
+            const c = links[y]!.t;
+            if (segmentsCross(a.x, a.y, qx[x]!, qy[x]!, c.x, c.y, qx[y]!, qy[y]!)) cost += 40;
           }
         candidates.push({ cost, at, turned });
       }
@@ -235,20 +272,13 @@ function routingCost(net: Net, sys: System, drawn: Drawn, plan: StepPlan): numbe
   // A wire running over a loose end that isn't its own makes the end unreadable.
   for (const [name, at] of r.free) {
     const own = tmp.free.get(name);
+    const box = grow(pointBox(at), 6);
     for (const [id, pts] of r.wires) {
       if (id === own) continue;
-      for (let i = 1; i < pts.length; i++) if (segmentHitsBox(pts[i - 1]!, pts[i]!, grow(pointBox(at), 6))) cost += 500;
+      for (let i = 1; i < pts.length; i++) if (segmentHitsBox(pts[i - 1]!, pts[i]!, box)) cost += 500;
     }
   }
   return cost;
-}
-
-function pinAt(d: RuleDrawing, name: string, at: Pt, turned: boolean): Terminal | undefined {
-  const p = d.pins.get(name);
-  if (!p) return undefined;
-  return turned
-    ? { x: at.x - p.x, y: at.y - p.y, dir: p.dir === "up" ? "down" : "up" }
-    : { x: at.x + p.x, y: at.y + p.y, dir: p.dir };
 }
 
 export interface StepPreview {
@@ -270,9 +300,8 @@ export interface StepPreview {
   vanishing: Box[];
 }
 
-/** Preview firing some active pairs (at once, as in a parallel step). */
-export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[]): StepPreview {
-  const plans = planSteps(net, sys, drawn, ws);
+/** Preview firing some active pairs (at once, as in a parallel step), with `plans` already made for them if there are. */
+export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], plans = planSteps(net, sys, drawn, ws)): StepPreview {
   const tmp = net.clone();
   const placement = new Map(drawn.placement);
   const fired: WireId[] = [];
@@ -477,31 +506,26 @@ function overlap(a: Box, b: Box): number {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
-/** Whether a segment passes through a box (Liang–Barsky clipping). */
+/** Whether a segment passes through a box (Liang–Barsky clipping). Called a great many times while planning, so it allocates nothing. */
 function segmentHitsBox(p: Pt, q: Pt, b: Box): boolean {
+  // Most segments are nowhere near: nothing to clip.
+  if (Math.max(p.x, q.x) < b.x0 || Math.min(p.x, q.x) > b.x1 || Math.max(p.y, q.y) < b.y0 || Math.min(p.y, q.y) > b.y1) return false;
   let t0 = 0;
   let t1 = 1;
+  const clip = (num: number, den: number) => {
+    if (den === 0) return num >= 0;
+    const t = num / den;
+    if (den < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    return t0 <= t1;
+  };
   const dx = q.x - p.x;
   const dy = q.y - p.y;
-  for (const [num, den] of [
-    [p.x - b.x0, -dx],
-    [b.x1 - p.x, dx],
-    [p.y - b.y0, -dy],
-    [b.y1 - p.y, dy],
-  ] as const) {
-    if (den === 0) {
-      if (num < 0) return false;
-    } else {
-      const t = num / den;
-      if (den < 0) t0 = Math.max(t0, t);
-      else t1 = Math.min(t1, t);
-      if (t0 > t1) return false;
-    }
-  }
-  return true;
+  return clip(p.x - b.x0, -dx) && clip(b.x1 - p.x, dx) && clip(p.y - b.y0, -dy) && clip(b.y1 - p.y, dy);
 }
 
-function segmentsCross(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
-  const side = (p: Pt, q: Pt, r: Pt) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
-  return side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+/** Whether the segment from (ax, ay) to (bx, by) crosses the one from (cx, cy) to (dx, dy). */
+function segmentsCross(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number): boolean {
+  const side = (px: number, py: number, qx: number, qy: number, rx: number, ry: number) => Math.sign((qx - px) * (ry - py) - (qy - py) * (rx - px));
+  return side(ax, ay, bx, by, cx, cy) * side(ax, ay, bx, by, dx, dy) < 0 && side(cx, cy, dx, dy, ax, ay) * side(cx, cy, dx, dy, bx, by) < 0;
 }

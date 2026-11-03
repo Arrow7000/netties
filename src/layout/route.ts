@@ -128,6 +128,8 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
   }
 
   const agentsByX = new ByX(boxes);
+  /** The agents left to right, so the stretches they block come out in order (see chooseLanes). */
+  const boxesLeftToRight = [...boxes].sort((a, b) => a.x0 - b.x0);
   /** Whether a wire runs through an agent, or too near one other than those at its ends. */
   const hitsAgent = (id: WireId, pts: Pt[]) => {
     const own = net.wire(id).ends.flatMap((e) => (e.kind === "port" ? [e.agent] : []));
@@ -293,6 +295,10 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
 
   /** Lanes for detours still waiting for one, each clear of agents and of the other wires' vertical runs beside it. */
   function chooseLanes(runs: Run[]) {
+    // Kept left to right, as the agents are, so what blocks a lane is all but
+    // sorted already and laneNear's sort has next to nothing to do. On a big
+    // net that sort, once a lane, was most of the time routing took.
+    const byX = [...runs].sort((a, b) => a.x - b.x);
     for (const job of jobs) {
       if (!Number.isNaN(detour.get(job.id) ?? 0)) continue;
       const near = (t: Terminal) => t.y + (t.dir === "up" ? -1 : 1) * G.wireGap;
@@ -310,12 +316,14 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       const blocked: [number, number][] = [];
       // A loose end needs room past it too, for its dot and name: its net's edge can fall among another net's agents.
       const [blo, bhi] = job.kind === "drop" ? [lo, hi + G.freeMargin] : job.kind === "rise" ? [lo - G.freeMargin, hi] : [lo, hi];
-      for (const b of boxes) if (b.y1 > blo + 0.5 && b.y0 < bhi - 0.5) blocked.push([b.x0 - G.wireGap, b.x1 + G.wireGap]);
-      for (const r of runs)
+      for (const b of boxesLeftToRight) if (b.y1 > blo + 0.5 && b.y0 < bhi - 0.5) blocked.push([b.x0 - G.wireGap, b.x1 + G.wireGap]);
+      for (const r of byX)
         if (r.id !== job.id && r.hi > lo + 1 && r.lo < hi - 1) blocked.push([r.x - G.wireGap, r.x + G.wireGap]);
       const x = laneNear(xs, blocked);
       detour.set(job.id, x);
-      runs.push({ id: job.id, x, lo, hi });
+      let at = byX.length;
+      while (at > 0 && byX[at - 1]!.x > x) at--;
+      byX.splice(at, 0, { id: job.id, x, lo, hi });
     }
   }
 
@@ -549,7 +557,8 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
 
 /**
  * The x nearest the given ones (counting each it misses as a bend) outside
- * every blocked interval.
+ * every blocked interval. Each interval is wider than the merging tolerance,
+ * so how intervals starting at the same x are ordered doesn't change the result.
  */
 function laneNear(xs: number[], blocked: [number, number][]): number {
   // Merge the blocked intervals; their ends are then all free.
@@ -803,18 +812,50 @@ function boundsOf(boxes: Box[], wires: Map<WireId, Pt[]>): Box {
   return b;
 }
 
-/** Number of places where two different wires cross, each counted as `weight` says (1 if not given). */
+/**
+ * Number of places where two different wires cross, each counted as `weight` says (1 if not given).
+ *
+ * Layout and previews call this for every arrangement they try, so it only
+ * compares segments whose spans across overlap (a sweep from left to right),
+ * then adds up what crosses in the order a plain pair-by-pair loop would, so
+ * fractional weights sum to exactly the same.
+ */
 export function crossings(wires: Map<WireId, Pt[]>, weight: (a: WireId, b: WireId) => number = () => 1): number {
-  const segs: [WireId, Pt, Pt][] = [];
-  for (const [id, pts] of wires) for (let i = 1; i < pts.length; i++) segs.push([id, pts[i - 1]!, pts[i]!]);
-  let n = 0;
-  for (let i = 0; i < segs.length; i++)
-    for (let j = i + 1; j < segs.length; j++) {
-      const [ia, a0, a1] = segs[i]!;
-      const [ib, b0, b1] = segs[j]!;
-      if (ia !== ib && intersects(a0, a1, b0, b1)) n += weight(ia, ib);
+  const ids: WireId[] = [];
+  const from: Pt[] = [];
+  const to: Pt[] = [];
+  for (const [id, pts] of wires)
+    for (let i = 1; i < pts.length; i++) {
+      ids.push(id);
+      from.push(pts[i - 1]!);
+      to.push(pts[i]!);
     }
-  return n;
+  const n = ids.length;
+  const x0 = new Float64Array(n);
+  const x1 = new Float64Array(n);
+  const y0 = new Float64Array(n);
+  const y1 = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    x0[i] = Math.min(from[i]!.x, to[i]!.x);
+    x1[i] = Math.max(from[i]!.x, to[i]!.x);
+    y0[i] = Math.min(from[i]!.y, to[i]!.y);
+    y1[i] = Math.max(from[i]!.y, to[i]!.y);
+  }
+  const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => x0[a]! - x0[b]!);
+  const crossed: number[] = [];
+  for (let k = 0; k < n; k++) {
+    const i = order[k]!;
+    for (let m = k + 1; m < n; m++) {
+      const j = order[m]!;
+      if (x0[j]! > x1[i]!) break;
+      if (y0[j]! > y1[i]! || y1[j]! < y0[i]! || ids[i] === ids[j]) continue;
+      if (intersects(from[i]!, to[i]!, from[j]!, to[j]!)) crossed.push(Math.min(i, j) * n + Math.max(i, j));
+    }
+  }
+  crossed.sort((a, b) => a - b);
+  let total = 0;
+  for (const c of crossed) total += weight(ids[Math.floor(c / n)]!, ids[c % n]!);
+  return total;
 }
 
 function intersects(p: Pt, p2: Pt, q: Pt, q2: Pt): boolean {
