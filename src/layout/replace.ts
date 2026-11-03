@@ -270,15 +270,56 @@ function routingCost(net: Net, sys: System, drawn: Drawn, plan: StepPlan): numbe
   let cost = crossings(r.wires) * 300 + r.arounds * 400;
   for (const pts of r.wires.values()) cost += pathLength(pts);
   // A wire running over a loose end that isn't its own makes the end unreadable.
-  for (const [name, at] of r.free) {
-    const own = tmp.free.get(name);
-    const box = grow(pointBox(at), 6);
-    for (const [id, pts] of r.wires) {
-      if (id === own) continue;
-      for (let i = 1; i < pts.length; i++) if (segmentHitsBox(pts[i - 1]!, pts[i]!, box)) cost += 500;
-    }
-  }
+  for (let n = wiresOverEnds(tmp, r); n > 0; n--) cost += 500;
   return cost;
+}
+
+/**
+ * How many stretches of wire run over loose ends other than their own, each
+ * end taken as a small box round it. The stretches are filed by where they
+ * are, so each end looks only at those near it: on a big net, checking every
+ * end against every wire was most of the time a preview took.
+ */
+function wiresOverEnds(net: Net, r: Routed): number {
+  const CELL = 64;
+  const cell = (v: number) => Math.floor(v / CELL);
+  const key = (cx: number, cy: number) => cx * 4194304 + cy;
+  const ids: WireId[] = [];
+  const from: Pt[] = [];
+  const to: Pt[] = [];
+  const cells = new Map<number, number[]>();
+  for (const [id, pts] of r.wires)
+    for (let i = 1; i < pts.length; i++) {
+      const k = ids.length;
+      const [p, q] = [pts[i - 1]!, pts[i]!];
+      ids.push(id);
+      from.push(p);
+      to.push(q);
+      for (let cx = cell(Math.min(p.x, q.x)); cx <= cell(Math.max(p.x, q.x)); cx++)
+        for (let cy = cell(Math.min(p.y, q.y)); cy <= cell(Math.max(p.y, q.y)); cy++) {
+          const c = key(cx, cy);
+          const list = cells.get(c);
+          if (list) list.push(k);
+          else cells.set(c, [k]);
+        }
+    }
+  // Which end last looked at each stretch, so one filed under several cells counts once.
+  const seen = new Int32Array(ids.length).fill(-1);
+  let hits = 0;
+  let e = 0;
+  for (const [name, at] of r.free) {
+    const own = net.free.get(name);
+    const box = grow(pointBox(at), 6);
+    for (let cx = cell(box.x0); cx <= cell(box.x1); cx++)
+      for (let cy = cell(box.y0); cy <= cell(box.y1); cy++)
+        for (const k of cells.get(key(cx, cy)) ?? []) {
+          if (seen[k] === e) continue;
+          seen[k] = e;
+          if (ids[k] !== own && segmentHitsBox(from[k]!, to[k]!, box)) hits++;
+        }
+    e++;
+  }
+  return hits;
 }
 
 export interface StepPreview {

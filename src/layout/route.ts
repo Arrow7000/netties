@@ -127,7 +127,7 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     shapes.set(box, { id, outline: agentOutline(p, arity(id)), inner: agentOutline(p, arity(id), 0.5) });
   }
 
-  const agentsByX = new ByX(boxes);
+  const agentsByCell = new ByCell(boxes);
   /** The agents left to right, so the stretches they block come out in order (see chooseLanes). */
   const boxesLeftToRight = [...boxes].sort((a, b) => a.x0 - b.x0);
   /** Whether a wire runs through an agent, or too near one other than those at its ends. */
@@ -135,12 +135,17 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
     const own = net.wire(id).ends.flatMap((e) => (e.kind === "port" ? [e.agent] : []));
     const m = CLEARANCE;
     for (let i = 1; i < pts.length; i++)
-      for (const [a, b] of pieces(pts[i - 1]!, pts[i]!))
-        for (const box of agentsByX.over(Math.min(a.x, b.x) - m, Math.max(a.x, b.x) + m)) {
-          if (Math.max(a.y, b.y) < box.y0 - m || Math.min(a.y, b.y) > box.y1 + m) continue;
+      for (const [a, b] of pieces(pts[i - 1]!, pts[i]!)) {
+        const [x0, x1] = [Math.min(a.x, b.x) - m, Math.max(a.x, b.x) + m];
+        // Looked up with a unit to spare; the tests themselves are exactly as they were.
+        const hit = agentsByCell.some(x0 - 1, x1 + 1, Math.min(a.y, b.y) - m - 1, Math.max(a.y, b.y) + m + 1, (box) => {
+          if (!(box.x1 > x0 && box.x0 < x1)) return false;
+          if (Math.max(a.y, b.y) < box.y0 - m || Math.min(a.y, b.y) > box.y1 + m) return false;
           const s = shapes.get(box)!;
-          if (own.includes(s.id) ? segmentHitsPolygon(a, b, s.inner) : segmentNearPolygon(a, b, s.outline, CLEARANCE)) return true;
-        }
+          return own.includes(s.id) ? segmentHitsPolygon(a, b, s.inner) : segmentNearPolygon(a, b, s.outline, CLEARANCE);
+        });
+        if (hit) return true;
+      }
     return false;
   };
 
@@ -273,9 +278,13 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
         const [lo, hi] = drawn.lanes.get(job.id)!;
         const x = detour.get(job.id)!;
         if (
-          agentsByX
-            .over(x - CLEARANCE, x + CLEARANCE)
-            .some((b) => b.x0 - CLEARANCE < x && b.x1 + CLEARANCE > x && b.y0 < hi - 0.5 && b.y1 > lo + 0.5) ||
+          agentsByCell.some(
+            x - CLEARANCE - 1,
+            x + CLEARANCE + 1,
+            Math.min(lo, hi) - 1,
+            Math.max(lo, hi) + 1,
+            (b) => b.x1 > x - CLEARANCE && b.x0 < x + CLEARANCE && b.x0 - CLEARANCE < x && b.x1 + CLEARANCE > x && b.y0 < hi - 0.5 && b.y1 > lo + 0.5,
+          ) ||
           beside(job.id, (c) => Math.abs(c.x - x) < 0.01 && c.gap < G.wireGap - 0.5 && c.overlap > 1)
         )
           redo.add(job.id);
@@ -296,9 +305,11 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
   /** Lanes for detours still waiting for one, each clear of agents and of the other wires' vertical runs beside it. */
   function chooseLanes(runs: Run[]) {
     // Kept left to right, as the agents are, so what blocks a lane is all but
-    // sorted already and laneNear's sort has next to nothing to do. On a big
+    // sorted already and laneChoice's sort has next to nothing to do. On a big
     // net that sort, once a lane, was most of the time routing took.
     const byX = [...runs].sort((a, b) => a.x - b.x);
+    let widest = 0;
+    for (const b of boxes) widest = Math.max(widest, b.x1 - b.x0);
     for (const job of jobs) {
       if (!Number.isNaN(detour.get(job.id) ?? 0)) continue;
       const near = (t: Terminal) => t.y + (t.dir === "up" ? -1 : 1) * G.wireGap;
@@ -313,17 +324,31 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       const lo = Math.min(...ys, ...was, ...(drawn.lanes.get(job.id) ?? []));
       const hi = Math.max(...ys, ...was, ...(drawn.lanes.get(job.id) ?? []));
       reach.set(job.id, [lo, hi]);
-      const blocked: [number, number][] = [];
       // A loose end needs room past it too, for its dot and name: its net's edge can fall among another net's agents.
       const [blo, bhi] = job.kind === "drop" ? [lo, hi + G.freeMargin] : job.kind === "rise" ? [lo - G.freeMargin, hi] : [lo, hi];
-      for (const b of boxesLeftToRight) if (b.y1 > blo + 0.5 && b.y0 < bhi - 0.5) blocked.push([b.x0 - G.wireGap, b.x1 + G.wireGap]);
-      for (const r of byX)
-        if (r.id !== job.id && r.hi > lo + 1 && r.lo < hi - 1) blocked.push([r.x - G.wireGap, r.x + G.wireGap]);
-      const x = laneNear(xs, blocked);
+      /** What blocks a lane, among the agents and runs that reach across into the stretch from wl to wh (and maybe a few more). */
+      const blockedWithin = (wl: number, wh: number) => {
+        const blocked: [number, number][] = [];
+        const g = G.wireGap;
+        for (let i = firstFrom(boxesLeftToRight, (b) => b.x0, wl - g - widest - 1); i < boxesLeftToRight.length; i++) {
+          const b = boxesLeftToRight[i]!;
+          if (b.x0 - g > wh + 1) break;
+          if (b.y1 > blo + 0.5 && b.y0 < bhi - 0.5) blocked.push([b.x0 - g, b.x1 + g]);
+        }
+        for (let i = firstFrom(byX, (r) => r.x, wl - g - 1); i < byX.length; i++) {
+          const r = byX[i]!;
+          if (r.x - g > wh + 1) break;
+          if (r.id !== job.id && r.hi > lo + 1 && r.lo < hi - 1) blocked.push([r.x - g, r.x + g]);
+        }
+        return blocked;
+      };
+      // The lane is nearly always close by, so look there first. Anything
+      // outside the window would cost at least its width, so a lane found
+      // costing less is the lane looking everywhere would find; otherwise, look everywhere.
+      let [x, cost] = laneChoice(xs, blockedWithin(Math.min(...xs) - LANE_WINDOW, Math.max(...xs) + LANE_WINDOW));
+      if (!(cost < LANE_WINDOW - 1)) [x, cost] = laneChoice(xs, blockedWithin(-Infinity, Infinity));
       detour.set(job.id, x);
-      let at = byX.length;
-      while (at > 0 && byX[at - 1]!.x > x) at--;
-      byX.splice(at, 0, { id: job.id, x, lo, hi });
+      byX.splice(firstFrom(byX, (r) => r.x, x, true), 0, { id: job.id, x, lo, hi });
     }
   }
 
@@ -362,8 +387,8 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
         out(`${job.id}a`, job.leg.t, detour.get(job.id)!, job.kind === "drop" ? Infinity : -Infinity);
     }
     // Cups keep clear of the caps too, so the two never run along each other.
-    const capRuns = settle(caps, agentsByX, -1);
-    settle(cups, agentsByX, +1, capRuns);
+    const capRuns = settle(caps, agentsByCell, -1);
+    settle(cups, agentsByCell, +1, capRuns);
     /** Where the run out from a port settled, if it has one. */
     const outY = (key: string, t: Terminal) => (t.dir === "up" ? caps : cups).get(key)?.y;
 
@@ -555,12 +580,16 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
   return { wires, free, bounds, laneCount: laneUsers.map((u) => u.length), gaps, arounds, direct };
 }
 
+/** How far round a detour's ends chooseLanes looks first for its lane. */
+const LANE_WINDOW = 400;
+
 /**
  * The x nearest the given ones (counting each it misses as a bend) outside
- * every blocked interval. Each interval is wider than the merging tolerance,
- * so how intervals starting at the same x are ordered doesn't change the result.
+ * every blocked interval, and what it costs. Each interval is wider than the
+ * merging tolerance, so how intervals starting at the same x are ordered
+ * doesn't change the result.
  */
-function laneNear(xs: number[], blocked: [number, number][]): number {
+function laneChoice(xs: number[], blocked: [number, number][]): [number, number] {
   // Merge the blocked intervals; their ends are then all free.
   const merged: [number, number][] = [];
   for (const [a, b] of [...blocked].sort((p, q) => p[0] - q[0])) {
@@ -575,7 +604,20 @@ function laneNear(xs: number[], blocked: [number, number][]): number {
     const cost = xs.reduce((s, v) => s + Math.abs(x - v) + (Math.abs(x - v) > 0.5 ? G.layerH / 2 : 0), 0);
     if (cost < bestCost) [best, bestCost] = [x, cost];
   }
-  return best;
+  return [best, bestCost];
+}
+
+/** The first index in a list sorted by `key` whose key is at least `v` (or, `after`, more than `v`). */
+function firstFrom<T>(list: T[], key: (t: T) => number, v: number, after = false): number {
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const k = key(list[mid]!);
+    if (k < v || (after && k === v)) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /** A vertical stretch of a wire. */
@@ -698,83 +740,160 @@ export function reversePath(pts: Pt[]): Pt[] {
  * `dir` is -1 for caps (moving up) and +1 for cups (moving down). `runs`
  * are horizontal runs already placed. Returns the runs as placed.
  */
-function settle(spans: Map<string, Span>, agents: ByX, dir: -1 | 1, runs: Box[] = []): Box[] {
+function settle(spans: Map<string, Span>, agents: ByCell, dir: -1 | 1, runs: Box[] = []): Box[] {
   const placed: Box[] = [];
-  const taken = new ByX(runs);
+  const taken = new ByCell(runs);
   const order = [...spans.values()].sort((a, b) => a.x1 - a.x0 - (b.x1 - b.x0) || dir * (b.from - a.from));
   const pad = G.wireGap * 0.6;
   for (const s of order) {
-    const near = agents.over(s.x0 - pad, s.x1 + pad);
-    const others = taken.over(s.x0 - pad, s.x1 + pad);
-    /** The first height clear of agents by `gap` and of other runs by `runGap`. */
-    const push = (gap: number, runGap: number) => {
-      // Heights measured in the direction the run moves.
-      let at = dir * s.from + Math.max(gap, Math.min(G.radius, (s.x1 - s.x0) / 2));
-      // Each obstacle ahead as the band the run must stay out of, in the order the run meets them.
-      const bands: [number, number][] = [];
-      for (const [list, g] of [[near, gap], [others, runGap]] as const)
-        for (const b of list) {
-          const band: [number, number] = dir < 0 ? [-(b.y1 + g), -(b.y0 - g)] : [b.y0 - g, b.y1 + g];
-          if (band[1] > at) bands.push(band);
-        }
-      bands.sort((p, q) => p[0] - q[0]);
-      for (const [lo, hi] of bands) if (at > lo + 0.01 && at < hi - 0.01) at = hi;
-      return dir * at;
-    };
-    // The nearest agent in front of a leg: going past it would run the leg through it, or too close by.
-    let wall = dir * Infinity;
-    for (const b of near) {
-      const edge = dir < 0 ? b.y1 : b.y0;
-      const ahead = dir * (edge - s.from) > 0.5 && dir * (edge - wall) < 0;
-      if (ahead && (s.legs ?? [s.x0, s.x1]).some((x) => b.x0 - CLEARANCE < x && b.x1 + CLEARANCE > x)) wall = edge;
-    }
-    let y = push(G.wireGap, G.wireGap);
-    // Short of room before it: squeeze in closer to the other runs, or
-    // failing that, take the middle of the widest space left.
-    if (dir * (y - wall) > 0) y = push(G.wireGap / 2, G.wireGap / 2);
-    if (dir * (y - wall) > 0) {
-      // Heights in the direction the run moves: the stretch up to the wall, less the agents in it, cut by the other runs.
-      const [from, to] = [dir * s.from, dir * wall];
-      const inside = near.map((b) => (dir < 0 ? [-b.y1, -b.y0] : [b.y0, b.y1]) as [number, number]);
-      const stops = [from, to, ...inside.flat(), ...others.map((b) => dir * b.y0)]
-        .filter((v) => v >= from && v <= to)
-        .sort((p, q) => p - q);
-      let widest = -1;
-      for (let i = 1; i < stops.length; i++) {
-        const mid = (stops[i]! + stops[i - 1]!) / 2;
-        const room = stops[i]! - stops[i - 1]!;
-        if (room > widest && !inside.some(([lo, hi]) => mid > lo && mid < hi)) [widest, y] = [room, dir * mid];
+    // A run only moves on from where it starts, and stops at the first height
+    // that's clear, so only what's a little way ahead can matter. Look there,
+    // and further only if the run ended up past where was looked.
+    const [x0, x1] = [s.x0 - pad, s.x1 + pad];
+    for (let ahead = SETTLE_AHEAD; ; ahead *= 2) {
+      const [y0, y1] = dir > 0 ? [s.from - G.wireGap - 1, s.from + ahead + G.wireGap + 1] : [s.from - ahead - G.wireGap - 1, s.from + G.wireGap + 1];
+      const everything = agents.within(y0, y1) && taken.within(y0, y1);
+      const { y, reached } = settleAt(s, dir, agents.over(x0, x1, y0, y1), taken.over(x0, x1, y0, y1));
+      if (everything || reached <= dir * s.from + ahead) {
+        s.y = y;
+        break;
       }
     }
-    s.y = y;
-    const run = { x0: s.x0, x1: s.x1, y0: y, y1: y };
+    const run = { x0: s.x0, x1: s.x1, y0: s.y, y1: s.y };
     placed.push(run);
     taken.add(run);
   }
   return placed;
 }
 
-/** Boxes filed by x, to find the ones over a stretch quickly. */
-class ByX {
-  private cells = new Map<number, Box[]>();
+/** How far ahead settle first looks for what's in a run's way. */
+const SETTLE_AHEAD = 4 * G.layerH;
+
+/**
+ * The height a run settles at, given the agents and other runs over it, and
+ * how far (in the direction it moves) the search for a clear height reached.
+ * What's past that, or behind where the run starts, can't change the height:
+ * it only moves on past what it meets, and the nearest agent in front of a
+ * leg (its wall) stays the nearest.
+ */
+function settleAt(s: Span, dir: -1 | 1, near: Box[], others: Box[]): { y: number; reached: number } {
+  let reached = -Infinity;
+  /** The first height clear of agents by `gap` and of other runs by `runGap`. */
+  const push = (gap: number, runGap: number) => {
+    // Heights measured in the direction the run moves.
+    let at = dir * s.from + Math.max(gap, Math.min(G.radius, (s.x1 - s.x0) / 2));
+    // Each obstacle ahead as the band the run must stay out of, in the order the run meets them.
+    const bands: [number, number][] = [];
+    for (const [list, g] of [[near, gap], [others, runGap]] as const)
+      for (const b of list) {
+        const band: [number, number] = dir < 0 ? [-(b.y1 + g), -(b.y0 - g)] : [b.y0 - g, b.y1 + g];
+        if (band[1] > at) bands.push(band);
+      }
+    bands.sort((p, q) => p[0] - q[0]);
+    for (const [lo, hi] of bands) if (at > lo + 0.01 && at < hi - 0.01) at = hi;
+    reached = Math.max(reached, at);
+    return dir * at;
+  };
+  // The nearest agent in front of a leg: going past it would run the leg through it, or too close by.
+  let wall = dir * Infinity;
+  for (const b of near) {
+    const edge = dir < 0 ? b.y1 : b.y0;
+    const ahead = dir * (edge - s.from) > 0.5 && dir * (edge - wall) < 0;
+    if (ahead && (s.legs ?? [s.x0, s.x1]).some((x) => b.x0 - CLEARANCE < x && b.x1 + CLEARANCE > x)) wall = edge;
+  }
+  let y = push(G.wireGap, G.wireGap);
+  // Short of room before it: squeeze in closer to the other runs, or
+  // failing that, take the middle of the widest space left.
+  if (dir * (y - wall) > 0) y = push(G.wireGap / 2, G.wireGap / 2);
+  if (dir * (y - wall) > 0) {
+    // Heights in the direction the run moves: the stretch up to the wall, less the agents in it, cut by the other runs.
+    const [from, to] = [dir * s.from, dir * wall];
+    const inside = near.map((b) => (dir < 0 ? [-b.y1, -b.y0] : [b.y0, b.y1]) as [number, number]);
+    const stops = [from, to, ...inside.flat(), ...others.map((b) => dir * b.y0)]
+      .filter((v) => v >= from && v <= to)
+      .sort((p, q) => p - q);
+    let widest = -1;
+    for (let i = 1; i < stops.length; i++) {
+      const mid = (stops[i]! + stops[i - 1]!) / 2;
+      const room = stops[i]! - stops[i - 1]!;
+      if (room > widest && !inside.some(([lo, hi]) => mid > lo && mid < hi)) [widest, y] = [room, dir * mid];
+    }
+  }
+  return { y, reached };
+}
+
+/**
+ * Boxes filed by where they are, across and down, so what's near a stretch
+ * is found without looking at every box in its column.
+ */
+class ByCell {
+  private cells = new Map<number, number[]>();
+  /** Which question last looked at each box, so one filed under several cells is looked at once. */
+  private seen: number[] = [];
+  private asked = 0;
+  /** How far up and down the boxes reach. */
+  private y0 = Infinity;
+  private y1 = -Infinity;
+  private boxes: Box[] = [];
   constructor(boxes: Box[] = []) {
     for (const b of boxes) this.add(b);
   }
   add(b: Box) {
-    for (let c = Math.floor(b.x0 / BY_X); c <= Math.floor(b.x1 / BY_X); c++) {
-      const list = this.cells.get(c);
-      if (list) list.push(b);
-      else this.cells.set(c, [b]);
-    }
+    const i = this.boxes.length;
+    this.boxes.push(b);
+    this.seen.push(-1);
+    [this.y0, this.y1] = [Math.min(this.y0, b.y0), Math.max(this.y1, b.y1)];
+    for (let cx = cellOf(b.x0); cx <= cellOf(b.x1); cx++)
+      for (let cy = cellOf(b.y0); cy <= cellOf(b.y1); cy++) {
+        const k = cellKey(cx, cy);
+        const list = this.cells.get(k);
+        if (list) list.push(i);
+        else this.cells.set(k, [i]);
+      }
   }
-  /** Boxes reaching strictly into the stretch from x0 to x1. */
-  over(x0: number, x1: number): Box[] {
-    const out = new Set<Box>();
-    for (let c = Math.floor(x0 / BY_X); c <= Math.floor(x1 / BY_X); c++)
-      for (const b of this.cells.get(c) ?? []) if (b.x1 > x0 && b.x0 < x1) out.add(b);
-    return [...out];
+  /** Whether every box lies between the heights y0 and y1. */
+  within(y0: number, y1: number): boolean {
+    return y0 <= this.y0 && y1 >= this.y1;
+  }
+  /** Calls `f` with each box filed near the rectangle (every one touching it, and maybe a few more) until it returns true. */
+  private visit(x0: number, x1: number, y0: number, y1: number, f: (i: number) => boolean | void): boolean {
+    const q = this.asked++;
+    // Past what any box reaches, there are only empty cells.
+    const [from, to] = [Math.max(y0, this.y0), Math.min(y1, this.y1)];
+    for (let cx = cellOf(x0); cx <= cellOf(x1); cx++)
+      for (let cy = cellOf(from); cy <= cellOf(to); cy++)
+        for (const i of this.cells.get(cellKey(cx, cy)) ?? []) {
+          if (this.seen[i] === q) continue;
+          this.seen[i] = q;
+          if (f(i)) return true;
+        }
+    return false;
+  }
+  /** Whether `test` passes for a box; it's asked of every box touching the rectangle, and maybe a few more. */
+  some(x0: number, x1: number, y0: number, y1: number, test: (b: Box) => boolean): boolean {
+    return this.visit(x0, x1, y0, y1, (i) => test(this.boxes[i]!));
+  }
+  /**
+   * The boxes reaching strictly into the stretch from x0 to x1, among those
+   * filed near heights y0 to y1 (all of them, with y0 and y1 round them all),
+   * in the order a lookup by column alone gave them, which settle's ties
+   * depend on: by the first column of the stretch each is filed in, then in
+   * the order they were added.
+   */
+  over(x0: number, x1: number, y0: number, y1: number): Box[] {
+    const found: number[] = [];
+    this.visit(x0, x1, y0, y1, (i) => {
+      const b = this.boxes[i]!;
+      if (b.x1 > x0 && b.x0 < x1) found.push(i);
+    });
+    const col = (i: number) => Math.max(cellOf(this.boxes[i]!.x0), cellOf(x0));
+    return found.sort((a, b) => col(a) - col(b) || a - b).map((i) => this.boxes[i]!);
   }
 }
+const cellOf = (v: number) => Math.floor(v / BY_X);
+/** Two cells can share a key far apart; that only means a few more boxes asked about. */
+const cellKey = (cx: number, cy: number) => cx * 4194304 + cy;
+
 const BY_X = 64;
 
 /** Vertical strips free of agents, including the unbounded strips either side. */
