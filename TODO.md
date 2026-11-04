@@ -143,13 +143,27 @@ Choices made along the way that you haven't confirmed yet:
      that prompts are not one-offs into the ether which either succeed or
      don't, but where you can have a conversation and ask for something like
      'ok now make types required and add another agent type that does xyz'
-     within the context of an existing conversation"). What's built is
-     one-offs: `create()` takes one request, and the proxy allows three user
-     turns in all (`LIMITS.turns`). Three tries should become a cap on automatic
-     fixes per message. The model needs the current document with each message,
-     since it may have been edited by hand. The prompt and checks insist on
-     directions, types and an answer on `out`, which a chat can't. The eval only
-     has compute-an-answer tasks, so it needs follow-up and edit tasks too.
+     within the context of an existing conversation"). Built behind a switch,
+     2026-11-04, on no design round: `VITE_CHAT=on` shows it and `CHAT_MODEL`
+     picks the OpenRouter model behind /api/chat, which is a 404 without it. Both
+     are in the local `.env` and neither is in production. Plain `npm run dev`
+     serves it (`netlify/lib/chatDev.ts`), and `CHAT_MODEL=fake` answers from a
+     script, for free. Logic in `src/create/chat.ts`, the panel in
+     `src/ui/Chat.tsx`. /api/create and its limits are unchanged.
+     - The tries (you, 2026-11-04): "the retry limit should be set per turn, not
+       overall. so when i send a msg the model gets 3 tries to get a net through
+       the checker but after i message it should get 3 more. actually tbh i think
+       this whole 3 try limit should really be a suggestion rather than a hard
+       limit. the user should always be able to interrupt the agent. maybe let's
+       keep it for now just so we can get going but yeah." Per message and
+       interruptible are done; `TRIES` is still a hard limit.
+     - Before it can go live: Netlify's 60 s limit (below), which the dev server
+       doesn't have; a visual pass from you; a phone's real keyboard, which hasn't
+       been tried; holding a reply while a rule with unsaved changes is open,
+       which hasn't been run. The eval only has compute-an-answer tasks, so it
+       needs follow-up and edit tasks too. On the one follow-up tried so far,
+       DeepSeek 1017 took 4 s against 17 s for writing the system it edited, so
+       edits may fit in 60 s where whole systems don't: worth measuring.
    - **Netlify ends the response 60 s in**, even while data is flowing
      (tested on a draft deploy, 2026-11-04). That's about 12k tokens from
      Haiku, which often thinks for far longer on harder requests, so it gets

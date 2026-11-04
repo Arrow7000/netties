@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type CreateEvent, type Deps, LIMITS, handleCreate } from "./create";
+import { handleChat } from "./chat";
+import { CHAT_LIMITS, type CreateEvent, type Deps, LIMITS, checkConversation, handleCreate } from "./create";
 
 /** Counters in memory. */
 function memory() {
@@ -96,6 +97,63 @@ describe("handleCreate", () => {
     for (const b of bad) expect((await handleCreate(post(b), d)).status).toBe(400);
     expect((await handleCreate(new Request("https://x", { method: "POST", body: "{" }), d)).status).toBe(400);
     expect(model.seen).toHaveLength(0);
+  });
+
+  it("has no chat without a model, as in production", async () => {
+    const { mem, model } = deps();
+    const res = await handleChat(ask(), { model: undefined, apiKey: "k", counters: mem.counters, visitor: "v", callModel: model.callModel });
+    expect(res.status).toBe(404);
+    expect(model.seen).toHaveLength(0);
+  });
+
+  it("keeps prod's limit on turns, but lets a chat go on", () => {
+    const long = Array.from({ length: 21 }, (_, i) => (i % 2 ? { role: "assistant", content: [{ type: "text", text: "x" }] } : { role: "user", content: "x" }));
+    expect(checkConversation(long)).toMatch(/at most 3 turns/);
+    expect(checkConversation(long, CHAT_LIMITS)).toBeUndefined();
+    // A chat message can carry the whole document.
+    expect(checkConversation([{ role: "user", content: "x".repeat(50_000) }], CHAT_LIMITS)).toBeUndefined();
+  });
+
+  it("streams thinking, and counts what the provider said a call cost", async () => {
+    const { deps: d, mem } = deps({
+      callModel: () => ({
+        text: (async function* () {
+          yield { thinking: "hmm" };
+          yield "hi";
+        })(),
+        final: Promise.resolve({ content: [{ type: "text", text: "hi", citations: null }], stop: "stop", usage: { input_tokens: 1, output_tokens: 1 }, micros: 777 }),
+      }),
+    });
+    const es = await events(await handleCreate(ask(), d));
+    expect(es[0]).toEqual({ type: "thinking", text: "hmm" });
+    expect(mem.m.get("spend/2026-10-12")).toBe(777);
+  });
+
+  it("stops the model when the visitor goes away, and still counts the cost", async () => {
+    let aborted = false;
+    let finish!: () => void;
+    const held = new Promise<void>((r) => (finish = r));
+    const { deps: d, mem } = deps({
+      callModel: () => ({
+        text: (async function* () {
+          yield "hi";
+          await held;
+        })(),
+        final: held.then(() => ({ content: [], stop: "aborted", usage: { input_tokens: 0, output_tokens: 0 }, micros: 50 })),
+        abort: () => {
+          aborted = true;
+          finish();
+        },
+      }),
+    });
+    const res = await handleCreate(ask(), d);
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    expect(aborted).toBe(true);
+    await held;
+    await new Promise((r) => setTimeout(r));
+    expect(mem.m.get("spend/2026-10-12")).toBe(50);
   });
 
   it("reports refusals, cut-off replies and failures in the stream", async () => {

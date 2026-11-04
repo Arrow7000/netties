@@ -2,7 +2,9 @@ import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } 
 import { createEditor } from "./state/editor";
 import { type Doc, arrival, fromShareHash, loadInitialDoc, SHARE_LOAD_ERROR, sharePushes } from "./state/persist";
 import { Canvas, type Pad, createCamera } from "./ui/Canvas";
-import { compact, fingers } from "./ui/compact";
+import { CHAT_WIDTH, ChatPanel } from "./ui/Chat";
+import { CHAT, createChat } from "./ui/chatStore";
+import { compact, fingers, sideways } from "./ui/compact";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { ExamplesMenu } from "./ui/ExamplesMenu";
 import { FEEDBACK, FeedbackDialog, FeedbackNudge } from "./ui/Feedback";
@@ -42,6 +44,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
   const m = ed.model;
   const camera = createCamera();
   const phone = createPhone(ed, camera);
+  const chat = CHAT ? createChat(ed) : undefined;
 
   const stored = safeGet(THEME_KEY);
   const [theme, setTheme] = createSignal<string | undefined>(stored === "light" || stored === "dark" ? stored : undefined);
@@ -85,6 +88,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
 
   onMount(() => {
     if (props.initialError) ed.setMessage(props.initialError);
+    // Someone else's net, so not the conversation that was about the last one.
+    if (props.fromLink) chat?.reset();
 
     // Going back or forward to another address, or one typed in. Sharing pushes
     // its link without a hashchange, so this never reloads what it just shared.
@@ -108,6 +113,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           if (ed.screen().kind !== "net") ed.dispatch({ kind: "screen/close" });
           try {
             ed.load(doc!, "Loaded the net in the link.");
+            chat?.reset();
             setLinked(ed.fingerprint());
           } catch {
             ed.setMessage(SHARE_LOAD_ERROR);
@@ -145,7 +151,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
 
     // Copy, cut and paste the selection. The clipboard gets the piece twice:
     // as JSON for netties, and in the text format for anywhere else.
-    const editable = (t: EventTarget | null) => !!(t as Element | null)?.closest?.("input, textarea, select, [contenteditable]");
+    const editable = (t: EventTarget | null) => !!(t as Element | null)?.closest?.("input, textarea, select, [contenteditable], .chat");
     const onCopy = (e: ClipboardEvent, cut: boolean) => {
       if (editable(e.target) || overlayOpen() || !e.clipboardData) return;
       const c = ed.copySelection();
@@ -215,6 +221,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
   };
 
   createEffect(on(m.fitTick, () => queueMicrotask(camera.fit), { defer: true }));
+  // The net gets out of the panel's way.
+  if (chat) createEffect(on(chat.open, () => queueMicrotask(camera.fit), { defer: true }));
 
   // On a phone the canvas is fitted between the top bar, measured, so the room
   // it takes follows rotation and the safe areas, and the sheet at its peek.
@@ -250,11 +258,14 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
     });
   });
   const pad = (): Pad => {
-    if (!compact()) return DESKTOP_PAD;
+    if (!compact()) return chat?.open() ? { ...DESKTOP_PAD, l: CHAT_WIDTH + 36 } : DESKTOP_PAD;
     viewport();
     const top = topEdge() ?? edgeOf(topBar.getBoundingClientRect());
     const sheet = phone.room();
-    return { t: top.bottom + 12, r: sheet.r + 8, b: sheet.b + 12, l: top.left + 8 };
+    const room = { t: top.bottom + 12, r: sheet.r + 8, b: sheet.b + 12, l: top.left + 8 };
+    if (!chat?.open()) return room;
+    // The same share of the screen as the panel takes in styles.css.
+    return sideways() ? { ...room, l: innerWidth * 0.5 + 8 } : { ...room, b: innerHeight * 0.58 + 12 };
   };
 
   /** Clicking a pair with no rule opens the rule editor for it. */
@@ -488,7 +499,21 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
             </>
           )}
         </Menu>
-        <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
+        <ExamplesMenu
+          examples={ed.examples}
+          onPick={(ex) => {
+            chat?.reset();
+            ed.loadExample(ex);
+          }}
+        />
+        <Show when={chat}>
+          {(c) => (
+            <button class="btn chat-toggle" classList={{ busy: c().busy() }} aria-pressed={c().open()} onClick={() => c().setOpen(!c().open())} title={c().busy() ? "Chat: a reply is on its way" : "Chat"}>
+              <I.Chat />
+              <Show when={!compact()}>Chat</Show>
+            </button>
+          )}
+        </Show>
         <Show when={!compact()}>
         <span class="sep" />
         <button
@@ -627,6 +652,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           Clicking an active pair now selects its wire instead of firing it
         </div>
       </Show>
+
+      <Show when={chat?.open() && chat}>{(c) => <ChatPanel chat={c()} />}</Show>
 
       <Show when={ed.screen().kind === "types"}>
         <TypesSheet ed={ed} />

@@ -12,8 +12,8 @@ export const TRIES = 3;
 export const feedbackMessage = (feedback: string) => `netties says: ${feedback}\n\nReply with the whole corrected document.`;
 
 /** A content block of the model's reply, kept exactly as it came so it can be sent back. */
-type Block = { type: string; text?: string };
-type Message = { role: "user"; content: string } | { role: "assistant"; content: Block[] };
+export type Block = { type: string; text?: string };
+export type Message = { role: "user"; content: string } | { role: "assistant"; content: Block[] };
 
 export type Progress =
   | { kind: "writing"; attempt: number; text: string }
@@ -76,7 +76,7 @@ export async function create(request: string, opts: CreateOptions = {}): Promise
 }
 
 /** The lines of a streamed body. */
-async function* lines(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+export async function* lines(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
   const reader = body.getReader();
   const dec = new TextDecoder();
   let buf = "";

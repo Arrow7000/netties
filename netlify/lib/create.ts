@@ -21,7 +21,16 @@ const PRICE = { in: 0.1, out: 0.5 };
  */
 export const MAX_TOKENS = 11_000;
 
-export const LIMITS = {
+export interface Limits {
+  callsPerHour: number;
+  dailyMicros: number;
+  turns: number;
+  requestChars: number;
+  feedbackChars: number;
+  bodyBytes: number;
+}
+
+export const LIMITS: Limits = {
   /** Model calls per visitor per hour: ten creates of up to three tries each. */
   callsPerHour: 30,
   /** Spend for everyone per UTC day, in millionths of a dollar. */
@@ -34,6 +43,13 @@ export const LIMITS = {
   /** The whole conversation, as JSON. Thinking blocks come back signed, at 20 KB or more each. */
   bodyBytes: 1_000_000,
 };
+
+/**
+ * The limits for a conversation, on /api/chat. Only the daily budget and the
+ * body size really hold it in: a chat has no natural number of turns, and each
+ * of its messages can carry the whole document.
+ */
+export const CHAT_LIMITS: Limits = { ...LIMITS, callsPerHour: 120, turns: 500, requestChars: 100_000, feedbackChars: 100_000 };
 
 /** Counters that survive between requests. Not atomic; the caps are approximate. */
 export interface Counters {
@@ -48,8 +64,12 @@ export interface Usage {
 
 /** One reply from the model, streamed: text as it comes, then the whole message. */
 export interface ModelCall {
-  text: AsyncIterable<string>;
-  final: Promise<{ content: Anthropic.ContentBlock[]; stop: string | null; usage: Usage }>;
+  /** The reply as it comes; models that show their thinking send that too. */
+  text: AsyncIterable<string | { thinking: string }>;
+  /** `micros` is what the call cost, if the model's provider says; otherwise it's worked out from `usage`. */
+  final: Promise<{ content: Anthropic.ContentBlock[]; stop: string | null; usage: Usage; micros?: number }>;
+  /** Stop paying for a reply nobody is waiting for. `text` then ends and `final` resolves as usual. */
+  abort?(): void;
 }
 
 export interface Deps {
@@ -58,11 +78,13 @@ export interface Deps {
   /** Who's asking, for the per-visitor limit. Hashed before it's stored. */
   visitor: string;
   now: Date;
+  limits?: Limits;
 }
 
 /** Events in the streamed response, one JSON object per line. */
 export type CreateEvent =
   | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
   | { type: "done"; content: Anthropic.ContentBlock[] }
   | { type: "error"; code: "refused" | "cut-off" | "failed"; message: string };
 
@@ -71,25 +93,26 @@ const json = (status: number, code: string, message: string) =>
 
 export async function handleCreate(req: Request, deps: Deps): Promise<Response> {
   if (req.method !== "POST") return json(405, "method", "Use POST.");
+  const limits = deps.limits ?? LIMITS;
   const raw = await req.text();
-  if (raw.length > LIMITS.bodyBytes) return json(413, "too-big", "That conversation is too long.");
+  if (raw.length > limits.bodyBytes) return json(413, "too-big", "That conversation is too long.");
   let messages: Anthropic.MessageParam[];
   try {
     messages = (JSON.parse(raw) as { messages: Anthropic.MessageParam[] }).messages;
   } catch {
     return json(400, "bad-request", "The request isn't valid JSON.");
   }
-  const problem = checkConversation(messages);
+  const problem = checkConversation(messages, limits);
   if (problem) return json(400, "bad-request", problem);
 
   const day = deps.now.toISOString().slice(0, 10);
   const hour = deps.now.toISOString().slice(0, 13);
   const spendKey = `spend/${day}`;
-  if ((await deps.counters.get(spendKey)) >= LIMITS.dailyMicros)
+  if ((await deps.counters.get(spendKey)) >= limits.dailyMicros)
     return json(503, "budget", "netties has used up today's budget for creating. Try again tomorrow.");
   const visitorKey = `visitor/${await sha256(deps.visitor)}/${hour}`;
   const calls = await deps.counters.get(visitorKey);
-  if (calls >= LIMITS.callsPerHour) return json(429, "rate", "That's as many as you can create for now. Try again in an hour.");
+  if (calls >= limits.callsPerHour) return json(429, "rate", "That's as many as you can create for now. Try again in an hour.");
   // Counted before the call, so requests sent all at once still count.
   await deps.counters.set(visitorKey, calls + 1);
 
@@ -97,9 +120,9 @@ export async function handleCreate(req: Request, deps: Deps): Promise<Response> 
   // If the text fails first, nothing else awaits this.
   call.final.catch(() => {});
   const enc = new TextEncoder();
+  let open = true;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      let open = true;
       const send = (e: CreateEvent) => {
         if (!open) return;
         try {
@@ -110,9 +133,9 @@ export async function handleCreate(req: Request, deps: Deps): Promise<Response> 
         }
       };
       try {
-        for await (const t of call.text) send({ type: "text", text: t });
-        const { content, stop, usage } = await call.final;
-        const micros = Math.ceil(usage.input_tokens * PRICE.in + usage.output_tokens * PRICE.out);
+        for await (const t of call.text) send(typeof t === "string" ? { type: "text", text: t } : { type: "thinking", text: t.thinking });
+        const { content, stop, usage, micros: said } = await call.final;
+        const micros = said ?? Math.ceil(usage.input_tokens * PRICE.in + usage.output_tokens * PRICE.out);
         await deps.counters.set(spendKey, (await deps.counters.get(spendKey)) + micros);
         if (stop === "refusal") send({ type: "error", code: "refused", message: "The model declined that request." });
         else if (stop === "max_tokens") send({ type: "error", code: "cut-off", message: "The reply was too long and got cut off." });
@@ -123,22 +146,27 @@ export async function handleCreate(req: Request, deps: Deps): Promise<Response> 
       }
       if (open) controller.close();
     },
+    // The visitor pressed Stop or went away.
+    cancel() {
+      open = false;
+      call.abort?.();
+    },
   });
   return new Response(stream, { headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" } });
 }
 
 /** A conversation the proxy will pass on: user and assistant taking turns, user first and last, within the limits. */
-export function checkConversation(messages: unknown): string | undefined {
+export function checkConversation(messages: unknown, limits: Limits = LIMITS): string | undefined {
   if (!Array.isArray(messages) || messages.length === 0) return "There's no conversation.";
   if (messages.length % 2 === 0) return "The conversation has to end with your turn.";
-  if (messages.length > 2 * LIMITS.turns - 1) return `A create gets at most ${LIMITS.turns} tries.`;
+  if (messages.length > 2 * limits.turns - 1) return `A conversation gets at most ${limits.turns} turns.`;
   for (const [i, m] of messages.entries()) {
     const role = i % 2 === 0 ? "user" : "assistant";
     if (!m || typeof m !== "object" || (m as { role?: unknown }).role !== role) return `Message ${i + 1} should be from the ${role}.`;
     const content = (m as { content?: unknown }).content;
     if (role === "user") {
       if (typeof content !== "string" || !content.trim()) return `Message ${i + 1} should be text.`;
-      const max = i === 0 ? LIMITS.requestChars : LIMITS.feedbackChars;
+      const max = i === 0 ? limits.requestChars : limits.feedbackChars;
       if (content.length > max) return i === 0 ? `Describe it in at most ${max} characters.` : "That feedback is too long.";
     } else if (!Array.isArray(content) || content.some((b) => !b || !["text", "thinking", "redacted_thinking"].includes((b as { type?: string }).type ?? ""))) {
       return `Message ${i + 1} should be a reply from the model, as it was sent.`;

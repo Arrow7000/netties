@@ -3786,3 +3786,231 @@ button.select.open {
   }
 }
 
+/* The chat: a tall panel beside the net (src/ui/Chat.tsx), under the top bar and above the bottom one. */
+
+.chat {
+  position: fixed;
+  z-index: 9;
+  top: 64px;
+  bottom: 72px;
+  left: 12px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  border-radius: var(--r-island);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.app:has(.chat) .panel-stack {
+  left: 384px;
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.chat-head h2 {
+  margin: 0 auto 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.chat-user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 7px 11px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-words p,
+.chat-words ul,
+.chat-words ol {
+  margin: 0 0 8px;
+}
+
+.chat-words > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-words ul,
+.chat-words ol {
+  padding-left: 18px;
+}
+
+.chat-turn code {
+  font: 12px var(--mono);
+}
+
+.chat-turn pre {
+  margin: 6px 0 0;
+  padding: 8px;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  font: 11.5px/1.45 var(--mono);
+  white-space: pre;
+}
+
+.chat-turn summary {
+  cursor: pointer;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-thought > div {
+  margin-top: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  color: var(--muted);
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.chat-status {
+  color: var(--muted);
+}
+
+.chat-status.live {
+  animation: chat-live 1.6s ease-in-out infinite;
+}
+
+@keyframes chat-live {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-status.live {
+    animation: none;
+  }
+}
+
+.chat-status.bad,
+.chat-result.bad > div {
+  color: var(--stuck);
+}
+
+.chat-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.chat-result-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-result-head > span:not(:empty) {
+  flex: 1;
+}
+
+.chat-result-head .icon {
+  flex: none;
+  color: var(--accent);
+}
+
+.chat-note {
+  color: var(--muted);
+}
+
+.chat-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.chat-compose textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  height: auto;
+  max-height: 140px;
+}
+
+.btn.chat-toggle.busy {
+  color: var(--accent);
+}
+
+/* Phones: the lower part of the screen, so the net stays in sight above it; sideways, the left half. */
+@media (max-width: 760px), (max-height: 500px) {
+  .chat {
+    z-index: 11;
+    top: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    bottom: var(--chat-keyboard, 0px);
+    height: min(58dvh, calc(100dvh - var(--chat-keyboard, 0px) - 64px));
+    border-width: 1px 0 0;
+    border-radius: var(--r-island) var(--r-island) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .chat-compose textarea {
+    /* Anything smaller and iOS zooms the page on focus. */
+    font-size: 16px;
+    min-height: 40px;
+  }
+}
+
+@media (max-height: 500px) {
+  .chat {
+    top: 0;
+    bottom: 0;
+    right: auto;
+    width: 50vw;
+    height: auto;
+    border-width: 0 1px 0 0;
+    border-radius: 0;
+  }
+
+  /* No room for the bars beside it: the panel has its own way out. */
+  .app:has(.chat) .top-left,
+  .app:has(.chat) .top-right {
+    display: none;
+  }
+}

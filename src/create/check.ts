@@ -1,6 +1,7 @@
 import type { End, Net } from "../core/net";
 import { type Stats, normalize, redexes } from "../core/reduce";
 import type { System } from "../core/system";
+import { parseProgram } from "../core/programText";
 import { ParseError, parse, print } from "../core/text";
 import { badWires, clashText, missing, portName, ruleClashes } from "../core/types";
 
@@ -52,19 +53,63 @@ export function checkReply(reply: string, before?: (sys: System, net: Net) => st
   const problem = before?.(sys, net);
   if (problem) return { ok: false, stage: "interface", feedback: problem };
 
-  const { normal, stats } = normalize(net, sys, { limit: LIMIT });
-  if (!normal) return { ok: false, stage: "run", feedback: `The net was still running after ${LIMIT} interactions; it probably never stops.` };
-  const stuck = net.activePairs().filter((w) => !redexes(net, sys).includes(w));
-  if (stuck.length) {
-    const pairs = new Set(
-      stuck.map((w) => {
-        const [a, b] = net.wire(w).ends as [Extract<End, { kind: "port" }>, Extract<End, { kind: "port" }>];
-        return `${sys.type(net.agent(a.agent).type).symbol} meets ${sys.type(net.agent(b.agent).type).symbol}`;
-      }),
-    );
-    return { ok: false, stage: "run", feedback: `The net got stuck after ${stats.interactions} interactions: ${[...pairs].join("; ")}, and there's no rule for that pair.\nIt stopped as:\n${netText(sys, net)}` };
-  }
+  const { stats, problem: runProblem } = run(sys, net);
+  if (runProblem) return { ok: false, stage: "run", feedback: runProblem };
   return { ok: true, code, sys, net, stats };
+}
+
+/** Run a net to the end, and say so if it never stops or gets stuck. */
+function run(sys: System, net: Net): { stats: Stats; problem?: string } {
+  const { normal, stats } = normalize(net, sys, { limit: LIMIT });
+  if (!normal) return { stats, problem: `The net was still running after ${LIMIT} interactions; it probably never stops.` };
+  const stuck = net.activePairs().filter((w) => !redexes(net, sys).includes(w));
+  if (!stuck.length) return { stats };
+  const pairs = new Set(
+    stuck.map((w) => {
+      const [a, b] = net.wire(w).ends as [Extract<End, { kind: "port" }>, Extract<End, { kind: "port" }>];
+      return `${sys.type(net.agent(a.agent).type).symbol} meets ${sys.type(net.agent(b.agent).type).symbol}`;
+    }),
+  );
+  return { stats, problem: `The net got stuck after ${stats.interactions} interactions: ${[...pairs].join("; ")}, and there's no rule for that pair.\nIt stopped as:\n${netText(sys, net)}` };
+}
+
+/**
+ * The document in a chat reply, if it has one. A reply can be words alone, and
+ * a code block that isn't a document is only an illustration.
+ */
+export function extractDocument(reply: string): string | undefined {
+  const marked = [...reply.matchAll(/```inet\s*\n([\s\S]*?)```/g)].map((m) => m[1]!);
+  if (marked.length) return marked.at(-1)!;
+  const code = extractCode(reply);
+  return code !== undefined && /^\s*agent /m.test(code) ? code : undefined;
+}
+
+export type DocumentCheck =
+  /** It parses, its types check, and it runs to the end. */
+  | { kind: "fine"; types: number; rules: number; interactions: number }
+  /** It works as a document, but running it got stuck or never stopped, which may or may not be the idea. */
+  | { kind: "concern"; types: number; rules: number; feedback: string }
+  /** It can't go on the canvas. */
+  | { kind: "wrong"; feedback: string };
+
+/**
+ * Checking a document in a chat, which unlike `checkReply` doesn't ask for
+ * anything of its own: not directions, not types, not a finished system.
+ */
+export function checkDocument(code: string): DocumentCheck {
+  let sys: System;
+  let net: Net;
+  try {
+    ({ system: sys, net } = parseProgram(code));
+  } catch (e) {
+    if (e instanceof ParseError) return { kind: "wrong", feedback: `The text didn't parse: ${e.message}.${bracketSlip(code, e.line) ?? ""}` };
+    return { kind: "wrong", feedback: `The text didn't load: ${(e as Error).message}.` };
+  }
+  const types = typeProblems(sys, net);
+  if (types.length) return { kind: "wrong", feedback: `The types don't check:\n- ${types.join("\n- ")}` };
+  const size = { types: sys.types.size, rules: sys.rules.size };
+  const { stats, problem } = run(sys, net);
+  return problem ? { kind: "concern", ...size, feedback: problem } : { kind: "fine", ...size, interactions: stats.interactions };
 }
 
 /**
@@ -110,6 +155,12 @@ function checkTypes(sys: System, net: Net): string[] {
   const out: string[] = [];
   if (sys.typing.dirs !== "required") out.push("Start the document with `directions required`.");
   if (sys.typing.types !== "required") out.push("Start the document with `types required` and the type names.");
+  return [...out, ...typeProblems(sys, net)];
+}
+
+/** Whatever breaks the types the document itself asks for. */
+function typeProblems(sys: System, net: Net): string[] {
+  const out: string[] = [];
   for (const m of missing(sys)) out.push(`${sys.type(m.type).symbol}'s ${portName(m.slot)} needs a ${m.what === "dir" ? "direction (+ or -)" : "type"}.`);
   for (const r of sys.rules.values()) {
     for (const c of ruleClashes(sys, r)) out.push(`In the rule ${sys.type(r.left).symbol} >< ${sys.type(r.right).symbol}: ${clashText(c.clash)}`);
