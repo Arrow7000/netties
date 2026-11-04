@@ -3823,8 +3823,26 @@ button.select.open {
   font-weight: 600;
 }
 
+.chat-log-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.chat-latest {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--chrome);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--shadow);
+}
+
 .chat-log {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -3908,6 +3926,7 @@ button.select.open {
   margin-top: 6px;
   max-height: 200px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   color: var(--muted);
   white-space: pre-wrap;
   font-size: 12px;
@@ -3917,7 +3936,8 @@ button.select.open {
   color: var(--muted);
 }
 
-.chat-status.live {
+.chat-status.live,
+.chat-turn summary.live {
   animation: chat-live 1.6s ease-in-out infinite;
 }
 
@@ -3928,7 +3948,8 @@ button.select.open {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-status.live {
+  .chat-status.live,
+  .chat-turn summary.live {
     animation: none;
   }
 }
@@ -4042,4 +4063,78 @@ button.select.open {
   .app:has(.chat) .top-right {
     display: none;
   }
+}
+
+/* The chat's messages and results */
+
+.chat-said {
+  align-self: flex-end;
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.chat-said .chat-user {
+  max-width: 100%;
+}
+
+.chat-edit {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.chat-said:hover .chat-edit,
+.chat-edit:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .chat-edit {
+    opacity: 1;
+  }
+}
+
+.chat-editing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-editing textarea {
+  height: auto;
+  padding: 7px 10px;
+  resize: none;
+}
+
+.chat-editing p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.chat-editing-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.chat-here {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.chat-again {
+  display: flex;
+  align-self: flex-start;
+  margin-top: 6px;
 }

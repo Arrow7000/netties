@@ -1,5 +1,5 @@
-import { For, Index, type JSX, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
-import type { Try, Turn } from "../create/chat";
+import { For, Index, type JSX, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import type { Try, Turn, TurnEnd } from "../create/chat";
 import { TRIES } from "../create/client";
 import type { Chat, Entry } from "./chatStore";
 import { fingers } from "./compact";
@@ -17,7 +17,48 @@ const linesWritten = (reply: string) => {
   return open ? open[1]!.split("\n").length - 1 : undefined;
 };
 const firstLine = (s: string) => s.split("\n")[0]!;
-const seconds = (ms: number) => `${Math.max(0, Math.round(ms / 1000))} s`;
+const seconds = (ms: number) => `${Math.max(1, Math.round(ms / 1000))}s`;
+
+/**
+ * Keep a scrolling box at its end as what's in it grows. Scrolling up lets go;
+ * scrolling back down to the end takes hold again.
+ */
+function anchored(el: HTMLElement, onChange?: (atEnd: boolean) => void) {
+  let atEnd = true;
+  const set = (v: boolean) => {
+    if (v !== atEnd) onChange?.(v);
+    atEnd = v;
+  };
+  /** Where following last left it: above that, someone has scrolled up, even if the browser hasn't said so yet. */
+  let left = 0;
+  const follow = () => {
+    if (!atEnd) return;
+    if (el.scrollTop < left - 1) return set(false);
+    el.scrollTop = el.scrollHeight;
+    left = el.scrollTop;
+  };
+  const onScroll = () => {
+    set(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
+    if (atEnd) left = el.scrollTop;
+  };
+  el.addEventListener("scroll", onScroll, { passive: true });
+  const changes = new MutationObserver(follow);
+  changes.observe(el, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["open"] });
+  const resizes = new ResizeObserver(follow);
+  resizes.observe(el);
+  onCleanup(() => {
+    el.removeEventListener("scroll", onScroll);
+    changes.disconnect();
+    resizes.disconnect();
+  });
+  return {
+    toEnd() {
+      set(true);
+      el.scrollTop = el.scrollHeight;
+      left = el.scrollTop;
+    },
+  };
+}
 
 function inline(s: string): JSX.Element[] {
   return s.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g).map((p) => (p.startsWith("`") && p.length > 2 ? <code>{p.slice(1, -1)}</code> : p.startsWith("**") && p.length > 4 ? <b>{p.slice(2, -2)}</b> : p));
@@ -46,12 +87,13 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
   const doing = (what: string) => (props.turn.tries.length > 1 ? `Try ${props.n} of ${TRIES}: ${what}` : what[0]!.toUpperCase() + what.slice(1));
   const words = () => wordsOf(props.t.reply);
   const lines = () => (going() ? linesWritten(props.t.reply) : undefined);
+  let trace: ReturnType<typeof anchored> | undefined;
   return (
     <>
       <Show when={props.t.thinking}>
-        <details class="chat-thought">
-          <summary>{thinking() ? `${doing("thinking")}, ${seconds(props.now - props.turn.since)}` : "What it was thinking"}</summary>
-          <div>{props.t.thinking}</div>
+        <details class="chat-thought" onToggle={(e) => e.currentTarget.open && trace?.toEnd()}>
+          <summary classList={{ live: thinking() }}>{thinking() ? `${doing("thinking")}, ${seconds(props.now - (props.t.thoughtFrom ?? props.turn.since))}` : `Thought for ${seconds(props.t.thoughtMs ?? 0)}`}</summary>
+          <div ref={(el) => (trace = anchored(el))}>{props.t.thinking}</div>
         </details>
       </Show>
       <Show when={words()}>
@@ -80,6 +122,120 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
   );
 }
 
+/** A reply's system: whether it's on the canvas now, and the way back to it. */
+function ResultCard(props: { chat: Chat; end: Extract<TurnEnd, { kind: "ready" | "applied" }> }) {
+  const [shown, setShown] = createSignal(false);
+  const here = () => props.chat.onCanvas(props.end);
+  let text!: HTMLPreElement;
+  return (
+    <div class="chat-result">
+      <Show when={here()}>
+        <div class="chat-here">
+          <I.Check />
+          On the canvas
+        </div>
+      </Show>
+      <Show when={props.end.kind === "ready"}>
+        <div class="chat-here">Goes on the canvas when you close what's open</div>
+      </Show>
+      <div>{props.end.summary}.</div>
+      <Show when={props.end.note}>
+        <div class="chat-note">{firstLine(props.end.note!)}</div>
+      </Show>
+      <div class="chat-doc">
+        <details
+          onToggle={(e) => {
+            setShown(e.currentTarget.open);
+            if (e.currentTarget.open) text.scrollIntoView({ block: "nearest" });
+          }}
+        >
+          <summary>{shown() ? "Hide text" : "Show as text"}</summary>
+          <pre ref={text}>{props.end.code}</pre>
+        </details>
+        <Show when={props.end.kind === "applied"}>
+          <button class="btn chat-load" disabled={here()} onClick={() => props.chat.loadDocument(props.end.code)} title={here() ? "This is what's on the canvas" : "Replace what's on the canvas with this. You can undo it."}>
+            Load
+          </button>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+/** What was said, and the way to say something else instead. */
+function UserView(props: { chat: Chat; entry: Extract<Entry, { kind: "user" }>; index: number }) {
+  const [editing, setEditing] = createSignal(false);
+  return (
+    <Show
+      when={editing()}
+      fallback={
+        <div class="chat-said">
+          <div class="chat-user">{props.entry.text}</div>
+          <Show when={props.entry.at}>
+            <button class="chat-edit" onClick={() => setEditing(true)} title="Change this message and send it again">
+              Edit
+            </button>
+          </Show>
+        </div>
+      }
+    >
+      <EditBox
+        text={props.entry.text}
+        onCancel={() => setEditing(false)}
+        onSend={(text) => {
+          setEditing(false);
+          void props.chat.edit(props.index, text);
+        }}
+      />
+    </Show>
+  );
+}
+
+function EditBox(props: { text: string; onCancel: () => void; onSend: (text: string) => void }) {
+  const [text, setText] = createSignal(props.text);
+  let area!: HTMLTextAreaElement;
+  const size = () => {
+    area.style.height = "auto";
+    area.style.height = `${Math.min(area.scrollHeight + 2, 200)}px`;
+  };
+  const send = () => text().trim() && props.onSend(text().trim());
+  closeOnEscape(() => props.onCancel(), true);
+  onMount(() => {
+    size();
+    area.focus();
+    area.setSelectionRange(area.value.length, area.value.length);
+  });
+  return (
+    <div class="chat-editing">
+      <textarea
+        ref={area}
+        class="input"
+        aria-label="Edit your message"
+        value={text()}
+        onInput={(e) => {
+          setText(e.currentTarget.value);
+          size();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && !fingers()) {
+            e.preventDefault();
+            send();
+          }
+        }}
+      />
+      <p class="chat-note">Sending this removes everything after it and puts the net back as it was then.</p>
+      <div class="chat-editing-actions">
+        <button class="btn" onClick={props.onCancel}>
+          Cancel
+        </button>
+        <button class="btn primary" disabled={!text().trim()} onClick={send}>
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** How a turn stands, under what it has said. */
 function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number }) {
   return (
@@ -89,13 +245,23 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
           case "said":
             return null;
           case "stopped":
-            return <div class="chat-status">Stopped. The canvas is as it was.</div>;
+            return <div class="chat-status">{end.by === "message" ? "Interrupted by your next message." : end.by === "reload" ? "Cut off by a reload. The canvas hasn't changed." : "Stopped. The canvas hasn't changed."}</div>;
           case "failed":
-            return <div class="chat-status bad">{end.message}</div>;
+            return (
+              <div class="chat-status bad">
+                {end.message}
+                <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
+                  Try again
+                </button>
+              </div>
+            );
           case "gave-up":
             return (
               <div class="chat-result bad">
-                <div>{TRIES} tries and netties still can't use the document, so the canvas is as it was.</div>
+                <div>Three tries, and none passed the checks, so the canvas hasn't changed.</div>
+                <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
+                  Try again
+                </button>
                 <details>
                   <summary>{firstLine(end.feedback)}</summary>
                   <pre class="chat-message">{end.feedback}</pre>
@@ -107,38 +273,7 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
             );
           case "ready":
           case "applied":
-            return (
-              <div class="chat-result" classList={{ note: !!end.note }}>
-                <div class="chat-result-head">
-                  <Show when={end.kind === "applied" && !end.undone} fallback={<span />}>
-                    <I.Check />
-                  </Show>
-                  <span>{end.kind === "ready" ? "Ready for the canvas once you've closed what's open." : end.undone ? "Undone." : "On the canvas."} {end.summary}.</span>
-                  <Show when={end.kind === "ready"}>
-                    <button class="btn" onClick={() => props.chat.applyHeld(props.index)}>
-                      Apply
-                    </button>
-                  </Show>
-                  <Show when={end.kind === "applied" && props.chat.canUndo(props.index)}>
-                    <button class="btn" onClick={() => props.chat.undo(props.index)}>
-                      {end.kind === "applied" && end.undone ? "Redo" : "Undo"}
-                    </button>
-                  </Show>
-                </div>
-                <Show when={end.note}>
-                  <div class="chat-note">{firstLine(end.note!)}</div>
-                </Show>
-                <div class="chat-doc">
-                  <details>
-                    <summary>Show the document</summary>
-                    <pre>{end.code}</pre>
-                  </details>
-                  <button class="btn chat-load" onClick={() => props.chat.loadDocument(end.code)} title="Replace what's on the canvas with this document. You can undo it.">
-                    Load
-                  </button>
-                </div>
-              </div>
-            );
+            return <ResultCard chat={props.chat} end={end} />;
         }
       }}
     </Show>
@@ -147,7 +282,7 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
 
 function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number }) {
   return (
-    <Show when={props.entry.kind === "turn" ? (props.entry as Extract<Entry, { kind: "turn" }>).turn : undefined} fallback={<div class="chat-user">{(props.entry as Extract<Entry, { kind: "user" }>).text}</div>}>
+    <Show when={props.entry.kind === "turn" ? (props.entry as Extract<Entry, { kind: "turn" }>).turn : undefined} fallback={<UserView chat={props.chat} entry={props.entry as Extract<Entry, { kind: "user" }>} index={props.index} />}>
       {(turn) => (
         <div class="chat-turn">
           <Index each={turn().tries}>{(t, i) => <TryView t={t()} n={i + 1} last={i === turn().tries.length - 1} turn={turn()} now={props.now} />}</Index>
@@ -165,7 +300,8 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
   let area!: HTMLTextAreaElement;
   let panel!: HTMLDivElement;
   const [now, setNow] = createSignal(Date.now());
-  const [stuckToEnd, setStuckToEnd] = createSignal(true);
+  const [atEnd, setAtEnd] = createSignal(true);
+  let following: ReturnType<typeof anchored> | undefined;
 
   closeOnEscape(() => props.onEscape());
 
@@ -178,7 +314,9 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     onCleanup(() => clearInterval(tick));
     if (!fingers()) area.focus();
-    log.scrollTop = log.scrollHeight;
+    following = anchored(log, setAtEnd);
+    following.toEnd();
+    size();
     // A phone's keyboard covers the page rather than shrinking it: stay above it.
     const vv = window.visualViewport;
     if (vv) {
@@ -192,12 +330,6 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
     }
   });
 
-  // Follow the reply as it comes, unless someone has scrolled back to read.
-  createEffect(() => {
-    chat.entries();
-    if (stuckToEnd()) log.scrollTop = log.scrollHeight;
-  });
-
   const size = () => {
     area.style.height = "auto";
     area.style.height = `${Math.min(area.scrollHeight + 2, 140)}px`;
@@ -209,7 +341,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
     chat.setDraft("");
     area.value = "";
     size();
-    setStuckToEnd(true);
+    following?.toEnd();
     void chat.send(text);
   };
 
@@ -237,9 +369,16 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
           <I.Close />
         </button>
       </header>
-      <div class="chat-log" ref={log} onScroll={() => setStuckToEnd(log.scrollHeight - log.scrollTop - log.clientHeight < 40)}>
-        <Show when={chat.entries().length} fallback={<p class="chat-empty">Describe a system, ask for a change to the one on the canvas, or ask how something works.</p>}>
-          <Index each={chat.entries()}>{(e, i) => <EntryView chat={chat} entry={e()} index={i} now={now()} />}</Index>
+      <div class="chat-log-wrap">
+        <div class="chat-log" ref={log}>
+          <Show when={chat.entries().length} fallback={<p class="chat-empty">Describe a system, ask for a change to the one on the canvas, or ask how something works.</p>}>
+            <Index each={chat.entries()}>{(e, i) => <EntryView chat={chat} entry={e()} index={i} now={now()} />}</Index>
+          </Show>
+        </div>
+        <Show when={!atEnd()}>
+          <button class="btn chat-latest" onClick={() => following?.toEnd()} title="Back to the latest">
+            Latest
+          </button>
         </Show>
       </div>
       <form

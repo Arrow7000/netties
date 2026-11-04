@@ -106,7 +106,7 @@ describe("a chat turn", () => {
       },
     });
     const { end, conversation } = await going;
-    expect(end).toEqual({ kind: "stopped" });
+    expect(end).toEqual({ kind: "stopped", by: "stop" });
     expect(conversation.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
     expect(JSON.stringify(conversation.messages[1])).toContain("stopped this reply");
     expect(conversation.seen).toBeUndefined();
@@ -127,6 +127,36 @@ describe("a chat turn", () => {
   });
 });
 
+describe("a reply that was cut short", () => {
+  it("goes back to the model with its reasoning and its words", async () => {
+    const ctrl = new AbortController();
+    const enc = new TextEncoder();
+    const f = (async () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(enc.encode(JSON.stringify({ type: "thinking", text: "First the zero case." }) + "\n"));
+            c.enqueue(enc.encode(JSON.stringify({ type: "text", text: "Here goes" }) + "\n"));
+            ctrl.signal.addEventListener("abort", () => c.error(new DOMException("Aborted", "AbortError")));
+          },
+        }),
+      )) as unknown as typeof fetch;
+    const { end, conversation } = await runTurn(newConversation(), "Double 2.", "", { fetch: f, signal: ctrl.signal, cutBy: () => "message", onMessage: (m) => m.kind === "writing" && ctrl.abort() });
+    expect(end).toEqual({ kind: "stopped", by: "message" });
+    const said = JSON.stringify(conversation.messages[1]);
+    expect(said).toContain("First the zero case.");
+    expect(said).toContain("Here goes");
+    expect(said).toContain("sent another message");
+  });
+
+  it("keeps what had come in when the page was reloaded", () => {
+    let turn = newTurn(1);
+    for (const m of [{ kind: "try" }, { kind: "thinking", text: "Hmm.", at: 2 }] as TurnMsg[]) turn = updateTurn(turn, m);
+    const { conversation } = settle([{ kind: "user", text: "Double 2." }, { kind: "turn", turn }], newConversation());
+    expect(JSON.stringify(conversation.messages[1])).toContain("Hmm.");
+  });
+});
+
 describe("what goes to the model", () => {
   it("carries the document only when it has changed", () => {
     const c: Conversation = { messages: [], seen: "agent Z 0\n" };
@@ -139,9 +169,9 @@ describe("what goes to the model", () => {
 describe("how a turn moves along", () => {
   it("collects what comes in and how it ended", () => {
     let t = newTurn(1000);
-    for (const m of [{ kind: "try" }, { kind: "thinking", text: "a" }, { kind: "thinking", text: "b" }, { kind: "writing", text: "c" }, { kind: "checked", code: "x", problem: "p" }, { kind: "try" }, { kind: "over", end: { kind: "stopped" }, at: 3000 }] as TurnMsg[]) t = updateTurn(t, m);
-    expect(t.tries).toEqual([{ thinking: "ab", reply: "c", code: "x", problem: "p" }, { thinking: "", reply: "" }]);
-    expect(t.phase).toEqual({ kind: "over", end: { kind: "stopped" } });
+    for (const m of [{ kind: "try" }, { kind: "thinking", text: "a", at: 1100 }, { kind: "thinking", text: "b", at: 1500 }, { kind: "writing", text: "c" }, { kind: "checked", code: "x", problem: "p" }, { kind: "try" }, { kind: "over", end: { kind: "stopped", by: "stop" }, at: 3000 }] as TurnMsg[]) t = updateTurn(t, m);
+    expect(t.tries).toEqual([{ thinking: "ab", thoughtFrom: 1100, thoughtMs: 400, reply: "c", code: "x", problem: "p", soft: undefined }, { thinking: "", reply: "" }]);
+    expect(t.phase).toEqual({ kind: "over", end: { kind: "stopped", by: "stop" } });
     expect(t.took).toBe(2000);
   });
 });

@@ -23,22 +23,30 @@ export const newConversation = (): Conversation => ({ messages: [] });
 export interface Try {
   thinking: string;
   reply: string;
+  /** When the thinking began, and how long it went on. */
+  thoughtFrom?: number;
+  thoughtMs?: number;
   /** What netties said about the document in it. */
   problem?: string;
+  /** The problem doesn't rule the document out: the model was asked if it's meant to be like that. */
+  soft?: boolean;
   code?: string;
 }
+
+/** What ended a reply early. */
+export type CutBy = "stop" | "message" | "reload";
 
 export type TurnEnd =
   /** A document for the canvas. `note` is anything about it the visitor should know. */
   | { kind: "ready"; code: string; summary: string; note?: string }
-  /** It's on the canvas. */
-  | { kind: "applied"; code: string; summary: string; note?: string; undone?: boolean }
+  /** It has been on the canvas. `shown` is how it printed there, to tell if it still is. */
+  | { kind: "applied"; code: string; summary: string; note?: string; shown?: string }
   /** Words alone: nothing to put on the canvas. */
   | { kind: "said" }
   /** Every try had something wrong with its document. */
   | { kind: "gave-up"; feedback: string; code?: string }
-  /** The visitor pressed Stop. */
-  | { kind: "stopped" }
+  /** It was cut short before it finished. */
+  | { kind: "stopped"; by: CutBy }
   /** The proxy or the network said no. */
   | { kind: "failed"; code: string; message: string };
 
@@ -55,30 +63,60 @@ export interface Turn {
 
 export type TurnMsg =
   | { kind: "try" }
-  | { kind: "thinking"; text: string }
+  | { kind: "thinking"; text: string; at: number }
   | { kind: "writing"; text: string }
-  | { kind: "checked"; code: string; problem?: string }
+  | { kind: "checked"; code: string; problem?: string; soft?: boolean }
   | { kind: "over"; end: TurnEnd; at: number };
 
+/** Where a message was sent from, to go back there if it's edited. */
+export interface Rewind {
+  messages: number;
+  seen?: string;
+  unsaid?: string;
+  /** The document at the time. */
+  doc: string;
+}
+
 /** What the chat shows: what was said, and what became of it. */
-export type Entry = { kind: "user"; text: string } | { kind: "turn"; turn: Turn };
+export type Entry = { kind: "user"; text: string; at?: Rewind } | { kind: "turn"; turn: Turn };
+
+/** The conversation as it was just before that message. */
+export const rewind = (c: Conversation, at: Rewind): Conversation => ({ messages: c.messages.slice(0, at.messages), seen: at.seen, unsaid: at.unsaid });
+
+/** A document held back is just one that was never put on the canvas, once the chat moves on. */
+export const unhold = (e: Entry): Entry => (e.kind === "turn" && e.turn.phase.kind === "over" && e.turn.phase.end.kind === "ready" ? { ...e, turn: { ...e.turn, phase: { kind: "over", end: { ...e.turn.phase.end, kind: "applied" } } } } : e);
 
 /**
  * A chat as saved, made whole again. A reply that was going when the page went
  * away can't be picked up, but what was asked is kept, for the visitor and the model.
  */
-export function settle(entries: Entry[], c: Conversation): { entries: Entry[]; conversation: Conversation } {
+export function settle(entries: Entry[], c: Conversation, by: CutBy = "reload"): { entries: Entry[]; conversation: Conversation } {
   const last = entries.at(-1);
   const asked = entries.at(-2);
   if (last?.kind !== "turn" || last.turn.phase.kind === "over" || asked?.kind !== "user") return { entries, conversation: c };
+  const cut = last.turn.tries.at(-1);
   return {
-    entries: [...entries.slice(0, -1), { kind: "turn", turn: { ...last.turn, phase: { kind: "over", end: { kind: "stopped" } } } }],
+    entries: [...entries.slice(0, -1), { kind: "turn", turn: { ...last.turn, phase: { kind: "over", end: { kind: "stopped", by } } } }],
     conversation: {
       ...c,
       seen: undefined,
-      messages: [...c.messages, { role: "user", content: asked.text }, { role: "assistant", content: [{ type: "text", text: "(The page was reloaded before this reply finished.)" }] }],
+      messages: [...c.messages, { role: "user", content: asked.text }, { role: "assistant", content: [{ type: "text", text: cutShort(WHY[by], cut?.thinking ?? "", cut?.reply ?? "") }] }],
     },
   };
+}
+
+const WHY: Record<CutBy, string> = {
+  stop: "The visitor stopped this reply before it finished.",
+  message: "The visitor sent another message before this reply finished.",
+  reload: "The page was reloaded before this reply finished.",
+};
+
+/** A reply that never finished, for the history: the reasoning counts as much as the words, so the model can pick up where it left off. */
+export function cutShort(why: string, thinking: string, text: string): string {
+  const parts = [`(${why})`];
+  if (thinking.trim()) parts.push(`My reasoning so far:\n${thinking.trim()}`);
+  if (text.trim()) parts.push(`My reply so far:\n${text.trim()}`);
+  return parts.join("\n\n");
 }
 
 export const newTurn = (since: number): Turn => ({ tries: [], phase: { kind: "waiting" }, since });
@@ -90,11 +128,17 @@ export function updateTurn(t: Turn, msg: TurnMsg): Turn {
     case "try":
       return { ...t, phase: { kind: "waiting" }, tries: [...t.tries, { thinking: "", reply: "" }] };
     case "thinking":
-      return { ...last((x) => ({ ...x, thinking: x.thinking + msg.text })), phase: { kind: "thinking" } };
+      return {
+        ...last((x) => {
+          const from = x.thoughtFrom ?? msg.at;
+          return { ...x, thinking: x.thinking + msg.text, thoughtFrom: from, thoughtMs: msg.at - from };
+        }),
+        phase: { kind: "thinking" },
+      };
     case "writing":
       return { ...last((x) => ({ ...x, reply: x.reply + msg.text })), phase: { kind: "writing" } };
     case "checked":
-      return last((x) => ({ ...x, code: msg.code, problem: msg.problem }));
+      return last((x) => ({ ...x, code: msg.code, problem: msg.problem, soft: msg.soft }));
     case "over":
       return { ...t, phase: { kind: "over", end: msg.end }, took: msg.at - t.since };
   }
@@ -112,15 +156,19 @@ export function userMessage(request: string, doc: string, c: Conversation): stri
 export interface TurnOptions {
   onMessage?: (m: TurnMsg) => void;
   signal?: AbortSignal;
+  /** Why `signal` fired. */
+  cutBy?: () => CutBy;
   endpoint?: string;
   fetch?: typeof fetch;
 }
 
-type Asked = { kind: "reply"; text: string; content: Block[] } | { kind: "failed"; code: string; message: string } | { kind: "stopped"; text: string };
+/** However it ended, what had come in so far. */
+type Asked = { thinking: string; text: string } & ({ kind: "reply"; content: Block[] } | { kind: "failed"; code: string; message: string } | { kind: "stopped" });
 
 /** One call to the model. */
 async function ask(messages: Message[], opts: TurnOptions): Promise<Asked> {
   let text = "";
+  let thinking = "";
   try {
     const res = await (opts.fetch ?? fetch)(opts.endpoint ?? "/api/chat", {
       method: "POST",
@@ -130,24 +178,26 @@ async function ask(messages: Message[], opts: TurnOptions): Promise<Asked> {
     });
     if (!res.ok || !res.body) {
       const err = (await res.json().catch(() => undefined)) as { error?: { code: string; message: string } } | undefined;
-      return { kind: "failed", code: err?.error?.code ?? `http-${res.status}`, message: err?.error?.message ?? "netties couldn't reach the model." };
+      return { kind: "failed", thinking, text, code: err?.error?.code ?? `http-${res.status}`, message: err?.error?.message ?? "netties couldn't reach the model." };
     }
     let content: Block[] | undefined;
     for await (const line of lines(res.body)) {
       const ev = JSON.parse(line) as { type: "text"; text: string } | { type: "thinking"; text: string } | { type: "done"; content: Block[] } | { type: "error"; code: string; message: string };
-      if (ev.type === "thinking") opts.onMessage?.({ kind: "thinking", text: ev.text });
-      else if (ev.type === "text") {
+      if (ev.type === "thinking") {
+        thinking += ev.text;
+        opts.onMessage?.({ kind: "thinking", text: ev.text, at: Date.now() });
+      } else if (ev.type === "text") {
         text += ev.text;
         opts.onMessage?.({ kind: "writing", text: ev.text });
       } else if (ev.type === "done") content = ev.content;
-      else return { kind: "failed", code: ev.code, message: ev.message };
+      else return { kind: "failed", thinking, text, code: ev.code, message: ev.message };
     }
-    if (opts.signal?.aborted) return { kind: "stopped", text };
-    return content ? { kind: "reply", text, content } : { kind: "failed", code: "failed", message: "The reply stopped part way." };
+    if (opts.signal?.aborted) return { kind: "stopped", thinking, text };
+    return content ? { kind: "reply", thinking, text, content } : { kind: "failed", thinking, text, code: "failed", message: "The reply stopped part way." };
   } catch (e) {
-    if (opts.signal?.aborted) return { kind: "stopped", text };
+    if (opts.signal?.aborted) return { kind: "stopped", thinking, text };
     console.error("chat failed", e);
-    return { kind: "failed", code: "failed", message: "netties couldn't reach the model. Check your connection and try again." };
+    return { kind: "failed", thinking, text, code: "failed", message: "netties couldn't reach the model. Check your connection and try again." };
   }
 }
 
@@ -180,12 +230,13 @@ export async function runTurn(c: Conversation, request: string, doc: string, opt
     opts.onMessage?.({ kind: "try" });
     const asked = await ask(messages, opts);
     if (asked.kind === "failed") {
-      messages.push(close(`(That reply didn't arrive: ${asked.message})`));
+      messages.push(close(cutShort(`That reply didn't arrive: ${asked.message}`, asked.thinking, asked.text)));
       return over({ kind: "failed", code: asked.code, message: asked.message });
     }
     if (asked.kind === "stopped") {
-      messages.push(close(asked.text.trim() ? `${asked.text}\n\n(The visitor stopped this reply before it finished.)` : "(The visitor stopped this reply before it finished.)"));
-      return over({ kind: "stopped" });
+      const by = opts.cutBy?.() ?? "stop";
+      messages.push(close(cutShort(WHY[by], asked.thinking, asked.text)));
+      return over({ kind: "stopped", by });
     }
     messages.push({ role: "assistant", content: asked.content });
 
@@ -200,7 +251,7 @@ export async function runTurn(c: Conversation, request: string, doc: string, opt
       opts.onMessage?.({ kind: "checked", code });
       return over({ kind: "ready", code, summary: summarise(check) });
     }
-    opts.onMessage?.({ kind: "checked", code, problem: check.feedback });
+    opts.onMessage?.({ kind: "checked", code, problem: check.feedback, soft: check.kind === "concern" });
     lastProblem = check.feedback;
     if (check.kind === "concern") kept = { code, summary: summarise(check), note: check.feedback };
     if (attempt < TRIES) messages.push({ role: "user", content: check.kind === "concern" ? orSaySo(check.feedback) : fixIt(check.feedback) });
