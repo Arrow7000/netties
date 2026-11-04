@@ -3955,8 +3955,22 @@ button.select.open {
   color: var(--muted);
 }
 
+/* The button stays beside the title, open or closed. */
+.chat-doc {
+  position: relative;
+}
+
+.chat-doc summary {
+  min-height: 28px;
+  line-height: 28px;
+  padding-right: 56px;
+}
+
 .chat-load {
-  margin-top: 6px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 28px;
 }
 
 .chat-compose {

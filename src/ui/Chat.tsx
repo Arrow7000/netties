@@ -128,13 +128,15 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
                 <Show when={end.note}>
                   <div class="chat-note">{firstLine(end.note!)}</div>
                 </Show>
-                <details>
-                  <summary>Show the document</summary>
+                <div class="chat-doc">
+                  <details>
+                    <summary>Show the document</summary>
+                    <pre>{end.code}</pre>
+                  </details>
                   <button class="btn chat-load" onClick={() => props.chat.loadDocument(end.code)} title="Replace what's on the canvas with this document. You can undo it.">
                     Load
                   </button>
-                  <pre>{end.code}</pre>
-                </details>
+                </div>
               </div>
             );
         }
