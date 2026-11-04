@@ -160,8 +160,24 @@ Choices made along the way that you haven't confirmed yet:
      - Chats last (you, 2026-11-04: "chats should always persist"): opening an
        example or a link, or reloading, keeps the conversation; only New chat
        ends it, and it can be brought back until something else is said.
+     - Tabs share the one chat: a tab only saves what's new, follows what others
+       save (a reply going elsewhere shows in lumps every 2 s, with no Stop here),
+       and speaking in one stops a reply going in another. The net is still each
+       tab's own, and the last edit in any tab is what's saved.
+     - Words: the chat prompt names netties' terms and asks for plain English
+       otherwise, labels included. Over 18 tries each on 6 requests, words like
+       "subtrahend" and "addend" went from 23 uses to 0, with nets no worse (10
+       passed against 8). `SYSTEM` for /api/create is untouched.
+     - Reasoning: finished replies' reasoning doesn't go back to the model, only
+       cut-off replies' does, as text. DeepSeek ignores reasoning sent back in a
+       request without tools. Still to test: whether a retry does better for
+       seeing the reasoning of the try that failed.
+     - Thinking to the limit: sorting 3 numbers used all 32,000 tokens in 4 of 6
+       tries, with no net at the end ("The reply was too long and got cut off").
      - A list of past chats (you, 2026-11-04: "i would like a chat history list
-       yes, but... not rn. later.").
+       yes, but... not rn. later."; and, later that day, next after the tab fix).
+       A chat of 10 messages took 693k characters, and localStorage holds about
+       5 million for the whole site, so a list of them likely needs IndexedDB.
      - After the desktop UX: the phone. Tap targets are under the app's 40 px; a
        sideways phone leaves the net about 70 px; Step and Run are behind the panel
        upright, and how to reach them is undecided (you, 2026-11-04: "not sure yet.

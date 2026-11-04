@@ -50,14 +50,32 @@ export function createChat(ed: Editor) {
   let running: { stop: AbortController; done: Promise<void> } | undefined;
 
   // Leaving the page kills the request first. That's not the model's failure, so it isn't recorded as one: what has come in so far is saved instead.
+  // Everything else was saved as it happened. Saving it again could put back an older chat over what another tab has done since.
   let leaving = false;
   const onLeave = () => {
-    if (!leaving) persist();
+    if (running && !leaving) persist(settle(entries(), conversation));
     leaving = true;
   };
   window.addEventListener("beforeunload", onLeave);
   window.addEventListener("pagehide", onLeave);
   window.addEventListener("pageshow", () => (leaving = false));
+
+  /**
+   * Another tab has moved the chat on, and there's only one chat: follow it,
+   * letting go of any reply going on here. Tabs only write when they have
+   * something new, so hearing from another one means just that.
+   */
+  window.addEventListener("storage", (e) => {
+    if (e.key !== KEY) return;
+    running?.stop.abort();
+    running = undefined;
+    setBusy(false);
+    setCleared(undefined);
+    const next = parse(e.newValue);
+    conversation = next?.conversation ?? newConversation();
+    // What hasn't changed stays as it is on the screen, so an open document doesn't close whenever the other tab saves.
+    setEntries((old) => (next?.entries ?? []).map(unhold).map((entry, i) => (JSON.stringify(entry) === JSON.stringify(old[i]) ? old[i]! : entry)));
+  });
   /** What's about to end the reply going on. */
   let cutBy: CutBy = "stop";
 
@@ -67,12 +85,12 @@ export function createChat(ed: Editor) {
   const endAt = (index: number, end: TurnEnd) => updateAt(index, (t) => ({ ...t, phase: { kind: "over", end } }));
 
   /** Save the chat. If it's too big for the browser, the oldest thinking goes first. */
-  const persist = () => {
-    let es = entries();
+  const persist = (chat: Saved = { entries: entries(), conversation }) => {
+    let es = chat.entries;
     const thinks = (e: Entry) => e.kind === "turn" && e.turn.tries.some((t) => t.thinking);
     for (;;) {
       try {
-        return localStorage.setItem(KEY, JSON.stringify({ entries: es, conversation } satisfies Saved));
+        return localStorage.setItem(KEY, JSON.stringify({ entries: es, conversation: chat.conversation } satisfies Saved));
       } catch {
         const oldest = es.findIndex(thinks);
         if (oldest < 0) return;
@@ -141,6 +159,10 @@ export function createChat(ed: Editor) {
 
   const begin = async (text: string) => {
     setCleared(undefined);
+    // A reply going on in another tab ends here: that tab stops when it hears about this.
+    const before = settle(entries(), conversation, "message");
+    conversation = before.conversation;
+    setEntries(before.entries);
     const index = entries().length + 1;
     const at: Rewind = { messages: conversation.messages.length, seen: conversation.seen, unsaid: conversation.unsaid, doc: printed() };
     setEntries((es) => [...es.map(unhold), { kind: "user", text, at }, { kind: "turn", turn: newTurn(Date.now()) }]);
@@ -250,13 +272,19 @@ function wasOpen(): boolean {
   }
 }
 
+function parse(raw: string | null): Saved | undefined {
+  try {
+    return raw ? (JSON.parse(raw) as Saved) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function load(): Saved | undefined {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return undefined;
-    const saved = JSON.parse(raw) as Saved;
+    const saved = parse(localStorage.getItem(KEY));
     // Nothing that was held back goes on the canvas just because the page came back: it may be showing something else by now.
-    return settle(saved.entries.map(unhold), saved.conversation);
+    return saved && settle(saved.entries.map(unhold), saved.conversation);
   } catch {
     return undefined;
   }

@@ -72,6 +72,8 @@ Write what was asked, not something easier. Unless the visitor only asks for som
 /** The system prompt for the chat: the same knowledge, for a conversation about the document on the canvas. */
 export const CHAT_SYSTEM = `You help a visitor build interaction nets in netties, an interaction nets playground, by talking with them. They see the document drawn on a canvas as a net, can edit it by hand, and can run it. They may ask for a new system, ask for a change to the one they have, or ask a question. Many are new to interaction nets, so explain things plainly and briefly.
 
+netties' own words are agent, port, principal port, aux port, wire, loose end, rule and active pair: use those. For anything else, write for someone who doesn't know the field: "the number to subtract", not "subtrahend"; "the total so far", not "accumulator"; "used exactly once", not "linear". That goes for the quoted names and labels in a document too, which they see on the canvas.
+
 # The document
 
 Whenever the document has changed since you last saw it, the visitor's message ends with it in full. Otherwise it's the last document of yours that netties accepted, as it stands.
