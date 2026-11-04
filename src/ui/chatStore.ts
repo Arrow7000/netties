@@ -1,8 +1,9 @@
-import { createEffect, createMemo, createSignal, on } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, on } from "solid-js";
 import { parseProgram, printProgram } from "../core/programText";
-import { type Conversation, type CutBy, type Entry, type Rewind, type Turn, type TurnEnd, type TurnMsg, newConversation, newTurn, rewind, runTurn, settle, unhold, updateTurn } from "../create/chat";
+import { type CutBy, type Entry, type Rewind, type Turn, type TurnEnd, type TurnMsg, newConversation, newTurn, rewind, runTurn, settle, unhold, updateTurn } from "../create/chat";
 import type { Editor } from "../state/editor";
 import { decode } from "../state/persist";
+import { type ChatDb, type Listing, type Saved, openChats, titleOf } from "./chatDb";
 
 /**
  * Whether there's a chat at all: the build's VITE_CHAT is "on" (in .env
@@ -11,27 +12,30 @@ import { decode } from "../state/persist";
  */
 export const CHAT = import.meta.env.VITE_CHAT === "on";
 
-const KEY = "netties:chat";
+/** Which chat this tab is on (sessionStorage), and which one a new tab starts on (localStorage). */
+const CURRENT_KEY = "netties:chat-id";
 const OPEN_KEY = "netties:chat-open";
 /** How often a reply in progress is saved, in case the page goes without warning. */
 const SAVE_EVERY = 2000;
 
 export type { Entry };
 
-interface Saved {
-  entries: Entry[];
-  conversation: Conversation;
-}
+/** What tabs tell each other. Tabs on the same chat follow each other; others just keep their lists up to date. */
+type News = { id: string; listing: Listing; chat: Saved } | { id: string; gone: true };
 
 export type Chat = ReturnType<typeof createChat>;
 
 /**
  * The conversation beside the net: what's been said, and the turn in progress.
- * It lasts until someone asks for a new one, whatever happens to the document.
+ * It lasts until someone moves to another or deletes it, whatever happens to the
+ * document, and moving between chats leaves the canvas as it is.
  */
 export function createChat(ed: Editor) {
-  const saved = load();
-  const [entries, setEntries] = createSignal<Entry[]>(saved?.entries ?? []);
+  const [id, setId] = createSignal<string>(newId());
+  const [entries, setEntries] = createSignal<Entry[]>([]);
+  const [chats, setChats] = createSignal<Listing[]>([]);
+  /** Whether what's saved has been read yet. */
+  const [loaded, setLoaded] = createSignal(false);
   const [open, setOpenNow] = createSignal(wasOpen());
   const setOpen = (v: boolean) => {
     setOpenNow(v);
@@ -43,9 +47,9 @@ export function createChat(ed: Editor) {
   };
   const [busy, setBusy] = createSignal(false);
   const [draft, setDraft] = createSignal("");
-  /** The chat New chat just put away, until something else is said. */
-  const [cleared, setCleared] = createSignal<Saved>();
-  let conversation = saved?.conversation ?? newConversation();
+  let conversation = newConversation();
+  let store: ChatDb | undefined;
+  const news = new BroadcastChannel("netties:chat");
   /** The turn going on, to stop it and to wait until it has. */
   let running: { stop: AbortController; done: Promise<void> } | undefined;
 
@@ -61,21 +65,23 @@ export function createChat(ed: Editor) {
   window.addEventListener("pageshow", () => (leaving = false));
 
   /**
-   * Another tab has moved the chat on, and there's only one chat: follow it,
-   * letting go of any reply going on here. Tabs only write when they have
-   * something new, so hearing from another one means just that.
+   * Another tab has moved this chat on: follow it, letting go of any reply going
+   * on here. Tabs only write when they have something new, so hearing from
+   * another one means just that.
    */
-  window.addEventListener("storage", (e) => {
-    if (e.key !== KEY) return;
+  news.onmessage = ({ data }: MessageEvent<News>) => {
+    const here = data.id === id();
+    setChats((l) => ("gone" in data ? l.filter((c) => c.id !== data.id) : listed(l, data.listing)));
+    if (!here) return;
     running?.stop.abort();
     running = undefined;
     setBusy(false);
-    setCleared(undefined);
-    const next = parse(e.newValue);
-    conversation = next?.conversation ?? newConversation();
+    if ("gone" in data) return fresh();
+    conversation = data.chat.conversation;
     // What hasn't changed stays as it is on the screen, so an open document doesn't close whenever the other tab saves.
-    setEntries((old) => (next?.entries ?? []).map(unhold).map((entry, i) => (JSON.stringify(entry) === JSON.stringify(old[i]) ? old[i]! : entry)));
-  });
+    setEntries((old) => data.chat.entries.map(unhold).map((entry, i) => (JSON.stringify(entry) === JSON.stringify(old[i]) ? old[i]! : entry)));
+  };
+
   /** What's about to end the reply going on. */
   let cutBy: CutBy = "stop";
 
@@ -84,19 +90,63 @@ export function createChat(ed: Editor) {
   const updateAt = (index: number, f: (t: Turn) => Turn) => setEntries((es) => es.map((e, i) => (i === index && e.kind === "turn" ? { ...e, turn: f(e.turn) } : e)));
   const endAt = (index: number, end: TurnEnd) => updateAt(index, (t) => ({ ...t, phase: { kind: "over", end } }));
 
-  /** Save the chat. If it's too big for the browser, the oldest thinking goes first. */
+  let warned = false;
+  /** A browser with no room or no IndexedDB can still chat. It should just say so, once. */
+  const trouble = (e: unknown) => {
+    console.error("couldn't save the chat", e);
+    if (!warned) ed.notify("This browser isn't saving your chats.");
+    warned = true;
+  };
+
+  /** Save the chat, and tell other tabs. The tabs don't wait for the database, since a page on its way out might not see that finish. */
   const persist = (chat: Saved = { entries: entries(), conversation }) => {
-    let es = chat.entries;
-    const thinks = (e: Entry) => e.kind === "turn" && e.turn.tries.some((t) => t.thinking);
-    for (;;) {
-      try {
-        return localStorage.setItem(KEY, JSON.stringify({ entries: es, conversation: chat.conversation } satisfies Saved));
-      } catch {
-        const oldest = es.findIndex(thinks);
-        if (oldest < 0) return;
-        es = es.map((e, i) => (i === oldest && e.kind === "turn" ? { ...e, turn: { ...e.turn, tries: e.turn.tries.map((t) => ({ ...t, thinking: "" })) } } : e));
-      }
+    if (!chat.entries.length) return;
+    const listing: Listing = { id: id(), title: titleOf(chat.entries), updated: Date.now() };
+    setChats((l) => listed(l, listing));
+    store?.write(listing, chat).catch(trouble);
+    news.postMessage({ id: id(), listing, chat } satisfies News);
+  };
+
+  /** Put a chat from storage on the screen. A reply that was going, or a document held back, stays off the canvas: it may be showing something else by now. */
+  const show = (chatId: string, chat: Saved) => {
+    const whole = settle(chat.entries.map(unhold), chat.conversation);
+    conversation = whole.conversation;
+    batch(() => {
+      setId(chatId);
+      setEntries(whole.entries);
+    });
+    remember(chatId);
+  };
+
+  /** An empty chat. It isn't saved or listed until something is said in it. */
+  const fresh = () => {
+    const chatId = newId();
+    conversation = newConversation();
+    batch(() => {
+      setId(chatId);
+      setEntries([]);
+    });
+    remember(chatId);
+  };
+
+  /** Whatever this tab is doing with chats, in order, so that a message waits for the chat it's meant for. */
+  let moving: Promise<unknown> = (async () => {
+    try {
+      store = await openChats();
+      const list = await store.list();
+      setChats(list);
+      const want = sessionItem() ?? localItem() ?? list[0]?.id;
+      const saved = want ? await store.read(want) : undefined;
+      if (want && saved) show(want, saved);
+      else fresh();
+    } catch (e) {
+      trouble(e);
     }
+    setLoaded(true);
+  })();
+  const move = (f: () => Promise<void>) => {
+    moving = moving.then(f).catch(trouble);
+    return moving;
   };
 
   /** Replace what's on the canvas, as a step that can be undone. Returns how many wires didn't fit its types. */
@@ -145,20 +195,21 @@ export function createChat(ed: Editor) {
     running?.stop.abort();
   };
 
-  const interrupt = async () => {
+  /** End the reply going on, if there is one. It gets saved like any other. */
+  const interrupt = async (by: CutBy) => {
     if (!running) return;
-    cutBy = "message";
+    cutBy = by;
     running.stop.abort();
     await running.done;
   };
 
   const send = async (text: string) => {
-    await interrupt();
+    await moving;
+    await interrupt("message");
     return begin(text);
   };
 
   const begin = async (text: string) => {
-    setCleared(undefined);
     // A reply going on in another tab ends here: that tab stops when it hears about this.
     const before = settle(entries(), conversation, "message");
     conversation = before.conversation;
@@ -197,7 +248,8 @@ export function createChat(ed: Editor) {
   /** Say something else at this point instead: what came after it goes, and the net goes back to how it was then. */
   const edit = async (index: number, text: string) => {
     if (ed.screen().kind !== "net") return ed.notify("Close what's open first.");
-    await interrupt();
+    await moving;
+    await interrupt("message");
     const e = entries()[index];
     if (e?.kind !== "user" || !e.at) return;
     setEntries((es) => es.slice(0, index));
@@ -212,7 +264,10 @@ export function createChat(ed: Editor) {
   };
 
   return {
+    id,
     entries,
+    chats,
+    loaded,
     open,
     setOpen,
     busy,
@@ -220,31 +275,31 @@ export function createChat(ed: Editor) {
     setDraft,
     send,
     stop,
-    /** A new conversation, when asked for. */
-    reset() {
-      const before = settle(entries(), conversation, "stop");
-      if (before.entries.length) setCleared(before);
-      stop();
-      running = undefined;
-      setBusy(false);
-      setEntries([]);
-      conversation = newConversation();
-      try {
-        localStorage.removeItem(KEY);
-      } catch {
-        // ignore
-      }
-    },
-    cleared,
-    /** Bring back the chat New chat put away. */
-    restore() {
-      const c = cleared();
-      if (!c) return;
-      setEntries(c.entries.map(unhold));
-      conversation = c.conversation;
-      setCleared(undefined);
-      persist();
-    },
+    /** Start another conversation. This one stays in the list. */
+    newChat: () =>
+      move(async () => {
+        await interrupt("stop");
+        fresh();
+      }),
+    /** Go to a chat from the list. A reply going on here stops, and can be picked up with Continue. The canvas stays as it is. */
+    openChat: (chatId: string) =>
+      move(async () => {
+        if (chatId === id()) return;
+        await interrupt("stop");
+        const saved = await store?.read(chatId);
+        if (saved) show(chatId, saved);
+        else setChats((l) => l.filter((c) => c.id !== chatId));
+      }),
+    /** Delete a chat for good. */
+    deleteChat: (chatId: string) =>
+      move(async () => {
+        const here = chatId === id();
+        if (here) await interrupt("stop");
+        await store?.remove(chatId);
+        setChats((l) => l.filter((c) => c.id !== chatId));
+        news.postMessage({ id: chatId, gone: true } satisfies News);
+        if (here) fresh();
+      }),
     edit,
     /** Ask again what this turn was asked. A message saved before edits existed has nowhere to go back to, so it's simply sent again. */
     retry(index: number) {
@@ -272,20 +327,32 @@ function wasOpen(): boolean {
   }
 }
 
-function parse(raw: string | null): Saved | undefined {
+/** A list with this chat brought up to date, and at the top. */
+const listed = (l: Listing[], c: Listing) => [c, ...l.filter((x) => x.id !== c.id)];
+
+const newId = () => crypto.randomUUID();
+
+function sessionItem(): string | null {
   try {
-    return raw ? (JSON.parse(raw) as Saved) : undefined;
+    return sessionStorage.getItem(CURRENT_KEY);
   } catch {
-    return undefined;
+    return null;
   }
 }
 
-function load(): Saved | undefined {
+function localItem(): string | null {
   try {
-    const saved = parse(localStorage.getItem(KEY));
-    // Nothing that was held back goes on the canvas just because the page came back: it may be showing something else by now.
-    return saved && settle(saved.entries.map(unhold), saved.conversation);
+    return localStorage.getItem(CURRENT_KEY);
   } catch {
-    return undefined;
+    return null;
+  }
+}
+
+function remember(chatId: string) {
+  try {
+    sessionStorage.setItem(CURRENT_KEY, chatId);
+    localStorage.setItem(CURRENT_KEY, chatId);
+  } catch {
+    // It just won't be remembered.
   }
 }

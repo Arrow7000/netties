@@ -1,41 +1,66 @@
+import { IDBFactory } from "fake-indexeddb";
+import "fake-indexeddb/auto";
 import { createRoot } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXAMPLE } from "../create/prompt";
 import { createEditor } from "../state/editor";
+import { printProgram } from "../core/programText";
+import { decode } from "../state/persist";
+import { openChats } from "./chatDb";
 import { type Chat, createChat } from "./chatStore";
 
-const KEY = "netties:chat";
+const OLD_KEY = "netties:chat";
 
-/** Tabs of one browser: storage is shared, and a write is heard by every tab but the one that made it. */
+const storage = (store: Map<string, string>) => ({
+  getItem: (k: string) => store.get(k) ?? null,
+  setItem: (k: string, v: string) => void store.set(k, v),
+  removeItem: (k: string) => void store.delete(k),
+});
+
+/** Tabs of one browser: localStorage and the database are shared, and what a tab announces is heard by the others. */
 function browser() {
-  const store = new Map<string, string>();
-  const tabs: { on: Record<string, ((e?: unknown) => void)[]>; chat: Chat; leave: () => void }[] = [];
-  let writing: unknown;
-  vi.stubGlobal("localStorage", {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem(k: string, v: string) {
-      store.set(k, v);
-      for (const t of tabs) if (t !== writing) t.on.storage?.forEach((f) => f({ key: k, newValue: v }));
+  const local = new Map<string, string>();
+  vi.stubGlobal("localStorage", storage(local));
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  const channels: { onmessage?: (e: { data: unknown }) => void; postMessage(m: unknown): void }[] = [];
+  vi.stubGlobal(
+    "BroadcastChannel",
+    class {
+      onmessage?: (e: { data: unknown }) => void;
+      constructor() {
+        channels.push(this);
+      }
+      postMessage(m: unknown) {
+        const copy = structuredClone(m);
+        for (const c of channels) if (c !== this) setTimeout(() => c.onmessage?.({ data: copy }), 0);
+      }
     },
-    removeItem(k: string) {
-      store.delete(k);
-      for (const t of tabs) if (t !== writing) t.on.storage?.forEach((f) => f({ key: k, newValue: null }));
-    },
-  });
-  /** Everything a tab does happens as that tab. */
-  const as = <T,>(t: unknown, f: () => T): T => {
-    writing = t;
-    return f();
-  };
-  const open = () => {
+  );
+  /** A tab, or a tab reloaded: that keeps its own sessionStorage. */
+  const open = (session = new Map<string, string>()) => {
     const on: Record<string, ((e?: unknown) => void)[]> = {};
     vi.stubGlobal("window", { addEventListener: (k: string, f: (e?: unknown) => void) => (on[k] ??= []).push(f) });
-    const chat = createRoot(() => createChat(createEditor(undefined)));
-    const tab = { on, chat, leave: () => as(tab, () => on.beforeunload?.forEach((f) => f())) };
-    tabs.push(tab);
-    return { ...tab, send: (text: string) => as(tab, () => chat.send(text)), reset: () => as(tab, () => chat.reset()) };
+    vi.stubGlobal("sessionStorage", storage(session));
+    const ed = createEditor(undefined);
+    const chat = createRoot(() => createChat(ed));
+    /** sessionStorage is only used at the moment a tab moves, so stubbing it then is enough. */
+    const as = <T,>(f: () => T): T => {
+      vi.stubGlobal("sessionStorage", storage(session));
+      return f();
+    };
+    return {
+      chat,
+      ed,
+      session,
+      send: (text: string) => as(() => chat.send(text)),
+      newChat: () => as(() => chat.newChat()),
+      openChat: (id: string) => as(() => chat.openChat(id)),
+      deleteChat: (id: string) => as(() => chat.deleteChat(id)),
+      leave: () => on.beforeunload?.forEach((f) => f()),
+      canvas: () => printProgram(decode(ed.toDoc())),
+    };
   };
-  return { store, open };
+  return { local, open };
 }
 
 /** The model, one call at a time, saying what it's told to. */
@@ -62,10 +87,11 @@ function model() {
   return calls;
 }
 
-const settled = () => new Promise((r) => setTimeout(r, 0));
-const saved = (store: Map<string, string>) => JSON.parse(store.get(KEY) ?? "null") as { entries: { kind: string; turn?: { phase: { kind: string; end?: { kind: string; by?: string } } } }[] } | null;
+const settled = () => new Promise((r) => setTimeout(r, 5));
+const ready = (t: { chat: Chat }) => vi.waitFor(() => expect(t.chat.loaded()).toBe(true));
+const reading = async (id: string) => (await openChats()).read(id);
 
-describe("the chat across tabs", () => {
+describe("chats", () => {
   let now = 1_000_000;
   beforeEach(() => {
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
@@ -77,121 +103,357 @@ describe("the chat across tabs", () => {
     vi.restoreAllMocks();
   });
 
-  const chatWithOneReply = async (b: ReturnType<typeof browser>, calls: ReturnType<typeof model>) => {
-    const a = b.open();
-    const going = a.send("hello");
-    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0));
-    calls.at(-1)!.end("Hi there.");
+  type Tab = ReturnType<ReturnType<typeof browser>["open"]>;
+  type Calls = ReturnType<typeof model>;
+  const say = async (t: Tab, calls: Calls, text: string, reply = "Hi there.") => {
+    const before = calls.length;
+    const going = t.send(text);
+    await vi.waitFor(() => expect(calls.length).toBe(before + 1));
+    calls.at(-1)!.end(reply);
     await going;
-    return a;
+    await settled();
   };
 
-  it("a tab with nothing new leaves what's saved alone when it closes", () => {
-    const b = browser();
-    const old = b.open();
-    // Put there behind its back, as when a chat was moved here from another port.
-    b.store.set(KEY, JSON.stringify({ entries: [{ kind: "user", text: "kept" }], conversation: { messages: [] } }));
-    old.leave();
-    expect(saved(b.store)?.entries).toHaveLength(1);
+  describe("the chat from before there was a list", () => {
+    const old = { entries: [{ kind: "user", text: "kept\nand more" }, { kind: "turn", turn: { tries: [], phase: { kind: "over", end: { kind: "said" } }, since: 1 } }], conversation: { messages: [] } };
+
+    it("moves over and carries on, and only once", async () => {
+      const b = browser();
+      b.local.set(OLD_KEY, JSON.stringify(old));
+      const first = b.open();
+      await ready(first);
+      expect(first.chat.entries()).toHaveLength(2);
+      expect(first.chat.chats().map((c) => c.title)).toEqual(["kept"]);
+      expect(b.local.has(OLD_KEY)).toBe(false);
+      const second = b.open();
+      await ready(second);
+      expect(second.chat.chats()).toHaveLength(1);
+      expect(second.chat.id()).toBe(first.chat.id());
+    });
+
+    it("stays where it was if it can't be moved", async () => {
+      const b = browser();
+      b.local.set(OLD_KEY, JSON.stringify(old));
+      vi.stubGlobal("indexedDB", { open: () => { throw new Error("no IndexedDB here"); } });
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const t = b.open();
+      await ready(t);
+      expect(b.local.get(OLD_KEY)).toBe(JSON.stringify(old));
+    });
   });
 
-  it("a tab follows what's said in another, and closing it changes nothing", async () => {
-    const b = browser();
-    const calls = model();
-    const other = b.open();
-    await chatWithOneReply(b, calls);
-    expect(other.chat.entries()).toHaveLength(2);
-    const before = b.store.get(KEY);
-    other.leave();
-    expect(b.store.get(KEY)).toBe(before);
+  describe("the list", () => {
+    it("has a chat from its first message, named after that message, newest first", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      expect(t.chat.chats()).toEqual([]);
+      await say(t, calls, "first chat\nwith two lines");
+      await t.newChat();
+      expect(t.chat.entries()).toEqual([]);
+      expect(t.chat.chats()).toHaveLength(1);
+      now += 1000;
+      await say(t, calls, "second chat");
+      expect(t.chat.chats().map((c) => c.title)).toEqual(["second chat", "first chat"]);
+    });
+
+    it("moving between chats brings back each one's words, and the model's memory of them", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      await say(t, calls, "one");
+      const one = t.chat.id();
+      await t.newChat();
+      await say(t, calls, "two");
+      await t.openChat(one);
+      expect(t.chat.entries()[0]).toMatchObject({ text: "one" });
+      await say(t, calls, "one more");
+      expect(JSON.stringify(calls.at(-1)!.body.messages)).toContain("one");
+      expect(JSON.stringify(calls.at(-1)!.body.messages)).not.toContain("two");
+    });
+
+    it("moving between chats leaves the canvas alone, and the next message shows the model what's there", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      t.chat.setOpen(true);
+      await say(t, calls, "make it", "Here.\n\n```inet\n" + EXAMPLE + "\n```");
+      const made = t.canvas();
+      const reply = t.chat.entries()[1];
+      if (reply?.kind !== "turn" || reply.turn.phase.kind !== "over") throw new Error("expected a finished reply");
+      const end = reply.turn.phase.end;
+      expect(t.chat.onCanvas(end)).toBe(true);
+      const first = t.chat.id();
+
+      await t.newChat();
+      await say(t, calls, "just a question");
+      expect(t.canvas()).toBe(made);
+      t.chat.loadDocument("agent A 0 \"a\"\n");
+      const changed = t.canvas();
+      expect(changed).not.toBe(made);
+
+      await t.openChat(first);
+      expect(t.canvas()).toBe(changed);
+      expect(t.chat.onCanvas(end)).toBe(false);
+      const going = t.send("next");
+      await vi.waitFor(() => expect(JSON.stringify(calls.at(-1)!.body.messages)).toContain("next"));
+      expect(JSON.stringify(calls.at(-1)!.body.messages.at(-1))).toContain("The document as it stands now");
+      calls.at(-1)!.end("Fine.");
+      await going;
+    });
+
+    it("moving away stops a reply and keeps how far it got, and Continue can pick it up", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      void t.send("long one");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.say({ type: "thinking", text: "Going along." });
+      await settled();
+      const first = t.chat.id();
+      await t.newChat();
+      expect(calls[0]!.signal?.aborted).toBe(true);
+      expect(t.chat.busy()).toBe(false);
+      expect(t.chat.entries()).toEqual([]);
+
+      await settled();
+      const saved = await reading(first);
+      expect(saved?.entries.at(-1)).toMatchObject({ turn: { tries: [{ thinking: "Going along." }], phase: { end: { kind: "stopped", by: "stop" } } } });
+
+      await t.openChat(first);
+      const going = t.send("Carry on.");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      expect(JSON.stringify(calls[1]!.body.messages)).toContain("Going along.");
+      calls[1]!.end("Done.");
+      await going;
+    });
+
+    it("a reply held back for an open panel doesn't reach the canvas after moving to another chat", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      const empty = t.canvas();
+      const going = t.send("make it");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const screen = vi.spyOn(t.ed, "screen").mockReturnValue({ kind: "rule" } as never);
+      calls[0]!.end("Here.\n\n```inet\n" + EXAMPLE + "\n```");
+      await going;
+      expect(t.chat.entries()[1]).toMatchObject({ turn: { phase: { end: { kind: "ready" } } } });
+      await t.newChat();
+      screen.mockRestore();
+      await settled();
+      expect(t.canvas()).toBe(empty);
+    });
+
+    it("deleting a chat takes it out of the database and off every tab's list; a tab on it starts empty", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      await say(a, calls, "doomed");
+      const doomed = a.chat.id();
+      const onIt = b.open();
+      await ready(onIt);
+      expect(onIt.chat.id()).toBe(doomed);
+      await a.newChat();
+      await say(a, calls, "safe");
+      const safe = a.chat.id();
+
+      await a.deleteChat(doomed);
+      await settled();
+      expect(await reading(doomed)).toBeUndefined();
+      expect(await reading(safe)).toBeDefined();
+      expect(a.chat.id()).toBe(safe);
+      expect(a.chat.chats().map((c) => c.title)).toEqual(["safe"]);
+      expect(onIt.chat.chats().map((c) => c.title)).toEqual(["safe"]);
+      expect(onIt.chat.entries()).toEqual([]);
+      expect(onIt.chat.id()).not.toBe(doomed);
+    });
+
+    it("deleting the chat you're on, partway through a reply, stops it and doesn't bring the chat back", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      void t.send("doomed");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.say({ type: "thinking", text: "Going along." });
+      await settled();
+      const doomed = t.chat.id();
+      await t.deleteChat(doomed);
+      await settled();
+      expect(calls[0]!.signal?.aborted).toBe(true);
+      expect(t.chat.busy()).toBe(false);
+      expect(t.chat.entries()).toEqual([]);
+      expect(t.chat.chats()).toEqual([]);
+      expect(await reading(doomed)).toBeUndefined();
+    });
   });
 
-  it("New chat in one tab empties the others, for good", async () => {
-    const b = browser();
-    const calls = model();
-    const other = b.open();
-    const a = await chatWithOneReply(b, calls);
-    a.reset();
-    expect(other.chat.entries()).toEqual([]);
-    other.leave();
-    expect(b.store.has(KEY)).toBe(false);
-  });
+  describe("across tabs and reloads", () => {
+    it("a reload stays on this tab's chat; a new tab starts on the one last moved to", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      await say(a, calls, "one");
+      const one = a.chat.id();
+      await a.newChat();
+      await say(a, calls, "two");
+      const two = a.chat.id();
 
-  it("a tab that closes partway through a reply saves it as cut off", async () => {
-    const b = browser();
-    const calls = model();
-    const a = b.open();
-    void a.send("hello");
-    await vi.waitFor(() => expect(calls).toHaveLength(1));
-    calls[0]!.say({ type: "thinking", text: "Let me see." });
-    await settled();
-    a.leave();
-    const end = saved(b.store)?.entries.at(-1)?.turn?.phase;
-    expect(end).toMatchObject({ kind: "over", end: { kind: "stopped", by: "reload" } });
-    expect(b.store.get(KEY)).toContain("Let me see.");
-    expect(b.store.get(KEY)).toContain("My reasoning so far");
-  });
+      const other = b.open();
+      await ready(other);
+      expect(other.chat.id()).toBe(two);
+      await other.openChat(one);
+      expect(a.chat.id()).toBe(two);
 
-  it("another tab sees a reply come in, without disturbing what hasn't changed", async () => {
-    const b = browser();
-    const calls = model();
-    const other = b.open();
-    const a = b.open();
-    void a.send("hello");
-    await vi.waitFor(() => expect(calls).toHaveLength(1));
-    const said = other.chat.entries()[0];
-    now += 5000;
-    calls[0]!.say({ type: "thinking", text: "Let me see." });
-    await settled();
-    const es = other.chat.entries();
-    expect(es[0]).toBe(said);
-    expect(es[1]).toMatchObject({ turn: { tries: [{ thinking: "Let me see." }] } });
-    expect(other.chat.busy()).toBe(false);
-    expect(a.chat.busy()).toBe(true);
-  });
+      const next = b.open();
+      await ready(next);
+      expect(next.chat.id()).toBe(one);
+      const reloaded = b.open(a.session);
+      await ready(reloaded);
+      expect(reloaded.chat.id()).toBe(two);
+    });
 
-  it("speaking in another tab stops a reply going in the first, and the model hears how far it got", async () => {
-    const b = browser();
-    const calls = model();
-    const other = b.open();
-    const a = b.open();
-    void a.send("first");
-    await vi.waitFor(() => expect(calls).toHaveLength(1));
-    now += 5000;
-    calls[0]!.say({ type: "thinking", text: "Going along." });
-    await settled();
+    it("two tabs starting empty don't end up in the same chat", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      const c = b.open();
+      await ready(c);
+      expect(c.chat.id()).not.toBe(a.chat.id());
+      await say(a, calls, "from a");
+      expect(c.chat.entries()).toEqual([]);
+      expect(c.chat.chats().map((x) => x.title)).toEqual(["from a"]);
+    });
 
-    const second = other.send("second");
-    await vi.waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[0]!.signal?.aborted).toBe(true);
-    expect(a.chat.busy()).toBe(false);
-    expect(JSON.stringify(calls[1]!.body.messages)).toContain("Going along.");
+    it("a tab with nothing new leaves what's saved alone when it closes", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      await say(a, calls, "hello");
+      const id = a.chat.id();
+      const old = b.open();
+      await ready(old);
+      const before = await reading(id);
+      now += 1000;
+      await say(a, calls, "again");
+      const after = await reading(id);
+      old.leave();
+      await settled();
+      expect(before?.entries).toHaveLength(2);
+      expect(await reading(id)).toEqual(after);
+    });
 
-    calls[1]!.end("Second reply.");
-    await second;
-    await settled();
-    expect(a.chat.entries()).toHaveLength(4);
-    expect(a.chat.entries()[1]).toMatchObject({ turn: { phase: { end: { kind: "stopped", by: "message" } } } });
-    expect(a.chat.entries()[3]).toMatchObject({ turn: { phase: { kind: "over", end: { kind: "said" } } } });
-    a.leave();
-    other.leave();
-    expect(saved(b.store)?.entries).toHaveLength(4);
-  });
+    it("a tab that closes partway through a reply saves it as cut off", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      void a.send("hello");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.say({ type: "thinking", text: "Let me see." });
+      await settled();
+      a.leave();
+      await settled();
+      const saved = await reading(a.chat.id());
+      expect(saved?.entries.at(-1)).toMatchObject({ turn: { tries: [{ thinking: "Let me see." }], phase: { kind: "over", end: { kind: "stopped", by: "reload" } } } });
+      expect(JSON.stringify(saved?.conversation)).toContain("My reasoning so far");
+    });
 
-  it("a document from another tab isn't put on this tab's canvas, so the next message here shows the model this one", async () => {
-    const b = browser();
-    const calls = model();
-    const other = b.open();
-    const a = b.open();
-    const going = a.send("make it");
-    await vi.waitFor(() => expect(calls).toHaveLength(1));
-    calls[0]!.end("Here.\n\n```inet\n" + EXAMPLE + "\n```");
-    await going;
-    const reply = other.chat.entries()[1];
-    if (reply?.kind !== "turn" || reply.turn.phase.kind !== "over") throw new Error("expected a finished reply");
-    expect(other.chat.onCanvas(reply.turn.phase.end)).toBe(false);
-    void other.send("next");
-    await vi.waitFor(() => expect(calls).toHaveLength(2));
-    expect(JSON.stringify(calls[1]!.body.messages.at(-1))).toMatch(/The document (as it stands now|is empty)/);
+    it("another tab on the chat sees a reply come in, without disturbing what hasn't changed", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      void a.send("hello");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const other = b.open();
+      await ready(other);
+      const said = other.chat.entries()[0];
+      now += 5000;
+      calls[0]!.say({ type: "thinking", text: "Let me see." });
+      await vi.waitFor(() => expect(other.chat.entries()[1]).toMatchObject({ turn: { tries: [{ thinking: "Let me see." }] } }));
+      expect(other.chat.entries()[0]).toBe(said);
+      expect(other.chat.busy()).toBe(false);
+      expect(a.chat.busy()).toBe(true);
+    });
+
+    it("speaking in another tab on the chat stops a reply going in the first, and the model hears how far it got", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      void a.send("first");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const other = b.open();
+      await ready(other);
+      now += 5000;
+      calls[0]!.say({ type: "thinking", text: "Going along." });
+      await vi.waitFor(() => expect(other.chat.entries()[1]).toMatchObject({ turn: { tries: [{ thinking: "Going along." }] } }));
+
+      const second = other.send("second");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      await vi.waitFor(() => expect(calls[0]!.signal?.aborted).toBe(true));
+      expect(a.chat.busy()).toBe(false);
+      expect(JSON.stringify(calls[1]!.body.messages)).toContain("Going along.");
+
+      calls[1]!.end("Second reply.");
+      await second;
+      await vi.waitFor(() => expect(a.chat.entries()[3]).toMatchObject({ turn: { phase: { kind: "over", end: { kind: "said" } } } }));
+      expect(a.chat.entries()[1]).toMatchObject({ turn: { phase: { end: { kind: "stopped", by: "message" } } } });
+      a.leave();
+      other.leave();
+      await settled();
+      expect((await reading(a.chat.id()))?.entries).toHaveLength(4);
+    });
+
+    it("a reply going in a tab on another chat is left alone", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      void a.send("first");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const other = b.open();
+      await ready(other);
+      await other.newChat();
+      const second = other.send("second");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      calls[1]!.end("Second reply.");
+      await second;
+      await settled();
+      expect(calls[0]!.signal?.aborted).toBe(false);
+      expect(a.chat.busy()).toBe(true);
+      expect(a.chat.entries()).toHaveLength(2);
+    });
+
+    it("a document from another tab isn't put on this tab's canvas, so the next message here shows the model this one", async () => {
+      const b = browser();
+      const calls = model();
+      const a = b.open();
+      await ready(a);
+      const going = a.send("make it");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const other = b.open();
+      await ready(other);
+      calls[0]!.end("Here.\n\n```inet\n" + EXAMPLE + "\n```");
+      await going;
+      await settled();
+      const reply = other.chat.entries()[1];
+      if (reply?.kind !== "turn" || reply.turn.phase.kind !== "over") throw new Error("expected a finished reply");
+      expect(other.chat.onCanvas(reply.turn.phase.end)).toBe(false);
+      void other.send("next");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      expect(JSON.stringify(calls[1]!.body.messages.at(-1))).toMatch(/The document (as it stands now|is empty)/);
+    });
   });
 });

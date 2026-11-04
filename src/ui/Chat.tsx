@@ -1,10 +1,12 @@
-import { For, Index, type JSX, Show, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Index, type JSX, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import type { Try, Turn, TurnEnd } from "../create/chat";
 import { TRIES } from "../create/client";
+import { titleOf } from "./chatDb";
 import type { Chat, Entry } from "./chatStore";
 import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
 import * as I from "./icons";
+import { Menu, MenuItem } from "./Menu";
 import { pieces } from "./pieces";
 
 /** Width of the panel on a desktop, which the canvas leaves room for. */
@@ -382,6 +384,69 @@ function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number
   );
 }
 
+/** When a chat was last added to: the time if that's today, otherwise the day. */
+function changedOn(at: number): string {
+  const then = new Date(at);
+  const today = new Date();
+  if (then.toDateString() === today.toDateString()) return then.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return then.toLocaleDateString([], { month: "short", day: "numeric", year: then.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
+/** The chat's name, which opens the list of chats. Going to one changes the conversation and nothing on the canvas. */
+function ChatList(props: { chat: Chat; onPick: () => void }) {
+  const chat = props.chat;
+  /** The chat being asked about, by id since its listing changes if it's being added to in another tab. */
+  const [deleting, setDeleting] = createSignal<string>();
+  return (
+    <Menu class="chat-title" menuClass="chat-list" title="All chats" label={<span>{titleOf(chat.entries()) || "Chat"}</span>}>
+      {(close) => (
+        <For each={chat.chats()} fallback={<div class="menu-head">No chats yet.</div>}>
+          {(c) => (
+            <Show
+              when={deleting() === c.id}
+              fallback={
+                <div class="chat-row" classList={{ current: c.id === chat.id() }}>
+                  <MenuItem
+                    title={c.title}
+                    note={changedOn(c.updated)}
+                    onClick={() => {
+                      close();
+                      void chat.openChat(c.id);
+                      props.onPick();
+                    }}
+                  />
+                  <button class="btn icon" title="Delete this chat" aria-label={`Delete ${c.title}`} onClick={() => setDeleting(c.id)}>
+                    <I.Trash />
+                  </button>
+                </div>
+              }
+            >
+              <div class="chat-row-confirm" role="alertdialog" aria-label="Delete this chat?">
+                <b>Delete "{c.title}"?</b>
+                <p>This can't be undone. What's on the canvas stays.</p>
+                <div class="row">
+                  <button class="btn outline" onClick={() => setDeleting(undefined)}>
+                    Cancel
+                  </button>
+                  <button
+                    class="btn dangerfill"
+                    onClick={() => {
+                      setDeleting(undefined);
+                      void chat.deleteChat(c.id);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </Show>
+          )}
+        </For>
+      )}
+    </Menu>
+  );
+}
+
 /** The chat, beside the net on a desktop and in the lower part of a phone's screen. */
 export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: () => void }) {
   const chat = props.chat;
@@ -419,6 +484,9 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
     }
   });
 
+  // Another chat starts from its latest message, wherever this one was scrolled to.
+  createEffect(on(chat.id, () => following?.toEnd(), { defer: true }));
+
   const size = () => {
     area.style.height = "auto";
     area.style.height = `${Math.min(area.scrollHeight + 2, 140)}px`;
@@ -450,8 +518,8 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
       }}
     >
       <header class="chat-head">
-        <h2>Chat</h2>
-        <button class="btn" onClick={() => (chat.reset(), refocus())} disabled={!chat.entries().length} title="Start a new conversation">
+        <ChatList chat={chat} onPick={refocus} />
+        <button class="btn" onClick={() => (void chat.newChat(), refocus())} disabled={!chat.entries().length} title="Start a new conversation">
           New chat
         </button>
         <button class="btn icon" onClick={() => props.onClose()} title="Close" aria-label="Close">
@@ -460,23 +528,11 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
       </header>
       <div class="chat-log-wrap">
         <div class="chat-log" ref={log}>
-          <Show
-            when={chat.entries().length}
-            fallback={
-              <>
-                <p class="chat-empty">Describe a system, ask for a change to the one on the canvas, or ask how something works.</p>
-                <Show when={chat.cleared()}>
-                  <p class="chat-empty">
-                    Started a new chat.{" "}
-                    <button class="btn chat-restore" onClick={chat.restore}>
-                      Bring the last one back
-                    </button>
-                  </p>
-                </Show>
-              </>
-            }
-          >
-            <Index each={chat.entries()}>{(e, i) => <EntryView chat={chat} entry={e()} index={i} now={now()} />}</Index>
+          {/* Keyed, so what's open or being edited in one chat doesn't carry over to the next. */}
+          <Show when={chat.id()} keyed>
+            <Show when={chat.entries().length} fallback={<Show when={chat.loaded()}><p class="chat-empty">Describe a system, ask for a change to the one on the canvas, or ask how something works.</p></Show>}>
+              <Index each={chat.entries()}>{(e, i) => <EntryView chat={chat} entry={e()} index={i} now={now()} />}</Index>
+            </Show>
           </Show>
         </div>
         <Show when={!atEnd()}>
