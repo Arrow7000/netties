@@ -88,8 +88,6 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
 
   onMount(() => {
     if (props.initialError) ed.setMessage(props.initialError);
-    // Someone else's net, so not the conversation that was about the last one.
-    if (props.fromLink) chat?.reset();
 
     // Going back or forward to another address, or one typed in. Sharing pushes
     // its link without a hashchange, so this never reloads what it just shared.
@@ -113,7 +111,6 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           if (ed.screen().kind !== "net") ed.dispatch({ kind: "screen/close" });
           try {
             ed.load(doc!, "Loaded the net in the link.");
-            chat?.reset();
             setLinked(ed.fingerprint());
           } catch {
             ed.setMessage(SHARE_LOAD_ERROR);
@@ -499,13 +496,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
             </>
           )}
         </Menu>
-        <ExamplesMenu
-          examples={ed.examples}
-          onPick={(ex) => {
-            chat?.reset();
-            ed.loadExample(ex);
-          }}
-        />
+        <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
         <Show when={chat}>
           {(c) => (
             <button class="btn chat-toggle" classList={{ busy: c().busy() }} aria-pressed={c().open()} onClick={() => c().setOpen(!c().open())} title={c().busy() ? "Chat: a reply is on its way" : "Chat"}>

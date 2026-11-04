@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { parseProgram, printProgram } from "../core/programText";
-import { type Conversation, type Turn, type TurnEnd, type TurnMsg, newConversation, newTurn, runTurn, updateTurn } from "../create/chat";
+import { type Conversation, type Entry, type Turn, type TurnEnd, type TurnMsg, newConversation, newTurn, runTurn, settle, updateTurn } from "../create/chat";
 import type { Editor } from "../state/editor";
 import { type Doc, decode } from "../state/persist";
 import { canLeave } from "./subEditor";
@@ -14,7 +14,7 @@ export const CHAT = import.meta.env.VITE_CHAT === "on";
 
 const KEY = "netties:chat";
 
-export type Entry = { kind: "user"; text: string } | { kind: "turn"; turn: Turn };
+export type { Entry };
 
 interface Saved {
   entries: Entry[];
@@ -23,7 +23,10 @@ interface Saved {
 
 export type Chat = ReturnType<typeof createChat>;
 
-/** The conversation beside the net: what's been said, and the turn in progress. */
+/**
+ * The conversation beside the net: what's been said, and the turn in progress.
+ * It lasts until someone asks for a new one, whatever happens to the document.
+ */
 export function createChat(ed: Editor) {
   const saved = load();
   const [entries, setEntries] = createSignal<Entry[]>(saved?.entries ?? []);
@@ -35,6 +38,10 @@ export function createChat(ed: Editor) {
   let running: { stop: AbortController; done: Promise<void> } | undefined;
   /** For each applied turn, the document to swap back in: not kept over a reload, like the undo history. */
   const swaps = new Map<number, Doc>();
+
+  // Leaving the page kills the request first. That's not the model's failure, so it isn't recorded as one: what was saved on sending stands.
+  let leaving = false;
+  window.addEventListener("beforeunload", () => (leaving = true));
 
   const printed = () => printProgram(decode(ed.toDoc()));
 
@@ -74,6 +81,7 @@ export function createChat(ed: Editor) {
     }
     const index = entries().length + 1;
     setEntries((es) => [...es, { kind: "user", text }, { kind: "turn", turn: newTurn(Date.now()) }]);
+    persist();
     const ctrl = new AbortController();
     const onMessage = (m: TurnMsg) => {
       if (running?.stop === ctrl) updateAt(index, (t) => updateTurn(t, m));
@@ -82,7 +90,7 @@ export function createChat(ed: Editor) {
       setBusy(true);
       const { end, conversation: next } = await runTurn(conversation, text, printed(), { onMessage, signal: ctrl.signal });
       // Started over while this was going: it no longer belongs to anything.
-      if (running?.stop !== ctrl) return;
+      if (running?.stop !== ctrl || leaving) return;
       conversation = next;
       onMessage({ kind: "over", end, at: Date.now() });
       if (end.kind === "ready") apply(index, end);
@@ -104,7 +112,7 @@ export function createChat(ed: Editor) {
     setDraft,
     send,
     stop,
-    /** A new conversation, for a new document or when asked. */
+    /** A new conversation, when asked for. */
     reset() {
       stop();
       running = undefined;
@@ -143,7 +151,9 @@ export function createChat(ed: Editor) {
 function load(): Saved | undefined {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as Saved) : undefined;
+    if (!raw) return undefined;
+    const saved = JSON.parse(raw) as Saved;
+    return settle(saved.entries, saved.conversation);
   } catch {
     return undefined;
   }

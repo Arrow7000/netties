@@ -60,6 +60,27 @@ export type TurnMsg =
   | { kind: "checked"; code: string; problem?: string }
   | { kind: "over"; end: TurnEnd; at: number };
 
+/** What the chat shows: what was said, and what became of it. */
+export type Entry = { kind: "user"; text: string } | { kind: "turn"; turn: Turn };
+
+/**
+ * A chat as saved, made whole again. A reply that was going when the page went
+ * away can't be picked up, but what was asked is kept, for the visitor and the model.
+ */
+export function settle(entries: Entry[], c: Conversation): { entries: Entry[]; conversation: Conversation } {
+  const last = entries.at(-1);
+  const asked = entries.at(-2);
+  if (last?.kind !== "turn" || last.turn.phase.kind === "over" || asked?.kind !== "user") return { entries, conversation: c };
+  return {
+    entries: [...entries.slice(0, -1), { kind: "turn", turn: { ...last.turn, phase: { kind: "over", end: { kind: "stopped" } } } }],
+    conversation: {
+      ...c,
+      seen: undefined,
+      messages: [...c.messages, { role: "user", content: asked.text }, { role: "assistant", content: [{ type: "text", text: "(The page was reloaded before this reply finished.)" }] }],
+    },
+  };
+}
+
 export const newTurn = (since: number): Turn => ({ tries: [], phase: { kind: "waiting" }, since });
 
 /** How a turn moves along. */

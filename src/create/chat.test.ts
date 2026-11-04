@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type Deps, CHAT_LIMITS, handleCreate } from "../../netlify/lib/create";
-import { type Conversation, type TurnMsg, newConversation, newTurn, runTurn, updateTurn, userMessage } from "./chat";
+import { type Conversation, type Entry, type TurnMsg, newConversation, newTurn, runTurn, settle, updateTurn, userMessage } from "./chat";
 import { EXAMPLE } from "./prompt";
 
 const doc = (s: string) => "```inet\n" + s + "\n```";
@@ -143,5 +143,22 @@ describe("how a turn moves along", () => {
     expect(t.tries).toEqual([{ thinking: "ab", reply: "c", code: "x", problem: "p" }, { thinking: "", reply: "" }]);
     expect(t.phase).toEqual({ kind: "over", end: { kind: "stopped" } });
     expect(t.took).toBe(2000);
+  });
+});
+
+describe("a chat brought back after a reload", () => {
+  it("keeps a message whose reply never finished, and can go on from it", () => {
+    const c: Conversation = { messages: [], seen: "agent Z 0\n" };
+    const { entries, conversation } = settle([{ kind: "user", text: "Double 2." }, { kind: "turn", turn: newTurn(1) }], c);
+    expect(entries[0]).toEqual({ kind: "user", text: "Double 2." });
+    expect(entries[1]).toMatchObject({ turn: { phase: { kind: "over", end: { kind: "stopped" } } } });
+    expect(conversation.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(conversation.seen).toBeUndefined();
+  });
+
+  it("leaves a finished chat as it was", () => {
+    const entries: Entry[] = [{ kind: "user", text: "Hi." }, { kind: "turn", turn: updateTurn(newTurn(1), { kind: "over", end: { kind: "said" }, at: 2 }) }];
+    const c = newConversation();
+    expect(settle(entries, c)).toEqual({ entries, conversation: c });
   });
 });

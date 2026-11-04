@@ -157,6 +157,9 @@ Choices made along the way that you haven't confirmed yet:
        limit. the user should always be able to interrupt the agent. maybe let's
        keep it for now just so we can get going but yeah." Per message and
        interruptible are done; `TRIES` is still a hard limit.
+     - Chats last (you, 2026-11-04: "chats should always persist"): opening an
+       example or a link, or reloading, keeps the conversation; only New chat
+       ends it, and that still throws the old one away.
      - Before it can go live: Netlify's 60 s limit (below), which the dev server
        doesn't have; a visual pass from you; a phone's real keyboard, which hasn't
        been tried; holding a reply while a rule with unsaved changes is open,
