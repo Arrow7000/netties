@@ -12,6 +12,9 @@ import { decode } from "../state/persist";
 export const CHAT = import.meta.env.VITE_CHAT === "on";
 
 const KEY = "netties:chat";
+const OPEN_KEY = "netties:chat-open";
+/** How often a reply in progress is saved, in case the page goes without warning. */
+const SAVE_EVERY = 2000;
 
 export type { Entry };
 
@@ -29,9 +32,19 @@ export type Chat = ReturnType<typeof createChat>;
 export function createChat(ed: Editor) {
   const saved = load();
   const [entries, setEntries] = createSignal<Entry[]>(saved?.entries ?? []);
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpenNow] = createSignal(wasOpen());
+  const setOpen = (v: boolean) => {
+    setOpenNow(v);
+    try {
+      localStorage.setItem(OPEN_KEY, v ? "1" : "");
+    } catch {
+      // It just won't be remembered.
+    }
+  };
   const [busy, setBusy] = createSignal(false);
   const [draft, setDraft] = createSignal("");
+  /** The chat New chat just put away, until something else is said. */
+  const [cleared, setCleared] = createSignal<Saved>();
   let conversation = saved?.conversation ?? newConversation();
   /** The turn going on, to stop it and to wait until it has. */
   let running: { stop: AbortController; done: Promise<void> } | undefined;
@@ -127,13 +140,20 @@ export function createChat(ed: Editor) {
   };
 
   const begin = async (text: string) => {
+    setCleared(undefined);
     const index = entries().length + 1;
     const at: Rewind = { messages: conversation.messages.length, seen: conversation.seen, unsaid: conversation.unsaid, doc: printed() };
     setEntries((es) => [...es.map(unhold), { kind: "user", text, at }, { kind: "turn", turn: newTurn(Date.now()) }]);
     persist();
     const ctrl = new AbortController();
+    let saved = Date.now();
     const onMessage = (m: TurnMsg) => {
-      if (running?.stop === ctrl) updateAt(index, (t) => updateTurn(t, m));
+      if (running?.stop !== ctrl) return;
+      updateAt(index, (t) => updateTurn(t, m));
+      if (Date.now() - saved > SAVE_EVERY) {
+        saved = Date.now();
+        persist();
+      }
     };
     const go = async () => {
       setBusy(true);
@@ -160,7 +180,12 @@ export function createChat(ed: Editor) {
     if (e?.kind !== "user" || !e.at) return;
     setEntries((es) => es.slice(0, index));
     conversation = rewind(conversation, e.at);
-    if (printed() !== e.at.doc && !put(e.at.doc)) ed.notify("The net is back as it was before that message.", true);
+    try {
+      if (printed() !== e.at.doc && !put(e.at.doc)) ed.notify("The net is back as it was before that message.", true);
+    } catch (err) {
+      console.error("couldn't restore the net", err);
+      ed.notify("Couldn't put the net back as it was, so it's staying as it is.");
+    }
     return begin(text);
   };
 
@@ -175,6 +200,8 @@ export function createChat(ed: Editor) {
     stop,
     /** A new conversation, when asked for. */
     reset() {
+      const before = settle(entries(), conversation, "stop");
+      if (before.entries.length) setCleared(before);
       stop();
       running = undefined;
       setBusy(false);
@@ -186,12 +213,25 @@ export function createChat(ed: Editor) {
         // ignore
       }
     },
+    cleared,
+    /** Bring back the chat New chat put away. */
+    restore() {
+      const c = cleared();
+      if (!c) return;
+      setEntries(c.entries.map(unhold));
+      conversation = c.conversation;
+      setCleared(undefined);
+      persist();
+    },
     edit,
-    /** Ask again what this turn was asked. */
+    /** Ask again what this turn was asked. A message saved before edits existed has nowhere to go back to, so it's simply sent again. */
     retry(index: number) {
       const asked = entries()[index - 1];
-      if (asked?.kind === "user") void edit(index - 1, asked.text);
+      if (asked?.kind !== "user") return;
+      void (asked.at ? edit(index - 1, asked.text) : send(asked.text));
     },
+    /** Pick a reply back up: the history already has how far it got. */
+    carryOn: () => void send("Carry on from where you left off."),
     /** Go back to a document from earlier in the chat. If it isn't what the model last saw, its next message shows it. */
     loadDocument(code: string) {
       if (ed.screen().kind !== "net") return ed.notify("Close what's open first.");
@@ -200,6 +240,14 @@ export function createChat(ed: Editor) {
     /** Whether this reply's document is what's on the canvas now. */
     onCanvas: (end: TurnEnd) => end.kind === "applied" && end.shown !== undefined && end.shown === canvas(),
   };
+}
+
+function wasOpen(): boolean {
+  try {
+    return !!localStorage.getItem(OPEN_KEY);
+  } catch {
+    return false;
+  }
 }
 
 function load(): Saved | undefined {

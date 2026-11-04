@@ -76,6 +76,8 @@ export const CHAT_SYSTEM = `You help a visitor build interaction nets in netties
 
 Whenever the document has changed since you last saw it, the visitor's message ends with it in full. Otherwise it's the last document of yours that netties accepted, as it stands.
 
+If a reply of yours in the history starts with a note in brackets saying it was cut off, what follows is your own unfinished reasoning and reply. Build on it rather than starting over. Talk to the visitor as "you".
+
 ${BRIEF}
 
 # The text format

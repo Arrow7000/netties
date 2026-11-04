@@ -222,8 +222,13 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
   };
 
   createEffect(on(m.fitTick, () => queueMicrotask(camera.fit), { defer: true }));
-  // The net gets out of the panel's way.
-  if (chat) createEffect(on(chat.open, () => queueMicrotask(camera.fit), { defer: true }));
+  /** Open or close the chat. The net gets out of its way, keeping any zoom someone chose. */
+  const setChatOpen = (open: boolean) => {
+    const fitted = compact() || Math.abs(camera.view().k - camera.fitZoom()) < 0.01;
+    chat?.setOpen(open);
+    const room = ((open ? 1 : -1) * (CHAT_WIDTH + 36 - DESKTOP_PAD.l)) / 2;
+    queueMicrotask(() => (fitted ? camera.fit() : camera.setView((v) => ({ ...v, x: v.x + room }))));
+  };
 
   // On a phone the canvas is fitted between the top bar, measured, so the room
   // it takes follows rotation and the safe areas, and the sheet at its peek.
@@ -503,7 +508,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
         <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
         <Show when={chat}>
           {(c) => (
-            <button class="btn chat-toggle" classList={{ busy: c().busy() }} aria-pressed={c().open()} onClick={() => c().setOpen(!c().open())} title={c().busy() ? "Chat: a reply is on its way" : "Chat"}>
+            <button class="btn chat-toggle" classList={{ busy: c().busy() }} aria-pressed={c().open()} onClick={() => setChatOpen(!c().open())} title={c().busy() ? "Chat: a reply is on its way" : "Chat"}>
               <I.Chat />
               <Show when={!compact()}>Chat</Show>
             </button>
@@ -648,7 +653,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
         </div>
       </Show>
 
-      <Show when={chat?.open() && chat}>{(c) => <ChatPanel chat={c()} onEscape={() => (m.selection() ? ed.dispatch({ kind: "selection/clear" }) : c().setOpen(false))} />}</Show>
+      <Show when={chat?.open() && chat}>{(c) => <ChatPanel chat={c()} onEscape={() => (m.selection() ? ed.dispatch({ kind: "selection/clear" }) : setChatOpen(false))} onClose={() => setChatOpen(false)} />}</Show>
 
       <Show when={ed.screen().kind === "types"}>
         <TypesSheet ed={ed} />

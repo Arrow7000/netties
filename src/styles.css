@@ -4021,10 +4021,6 @@ button.select.open {
   max-height: 140px;
 }
 
-.btn.chat-toggle.busy {
-  color: var(--accent);
-}
-
 /* Phones: the lower part of the screen, so the net stays in sight above it; sideways, the left half. */
 @media (max-width: 760px), (max-height: 500px) {
   .chat {
@@ -4137,4 +4133,92 @@ button.select.open {
   display: flex;
   align-self: flex-start;
   margin-top: 6px;
+}
+
+/* The message box: Stop sits inside it, so nothing moves when a reply starts or ends. */
+.chat-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.chat-field textarea {
+  min-height: 32px;
+  padding: 6px 36px 6px 10px;
+  line-height: 1.4;
+}
+
+.btn.chat-stop {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 26px;
+  height: 26px;
+  min-width: 0;
+  padding: 0;
+  color: var(--text);
+  border: 1px solid var(--line-2);
+}
+
+.chat-head .btn + .btn {
+  margin-left: 8px;
+}
+
+.chat-turn code.whole {
+  white-space: nowrap;
+}
+
+.chat-said {
+  position: relative;
+}
+
+.chat-edit {
+  position: absolute;
+  top: 6px;
+  right: 100%;
+}
+
+.chat-restore {
+  display: inline-flex;
+  margin-top: 4px;
+}
+
+.btn.chat-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.btn.chat-toggle.busy {
+  position: relative;
+}
+
+.btn.chat-toggle.busy::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: chat-live 1.6s ease-in-out infinite;
+}
+
+/* The full-screen panels keep to the right of the chat, which then has the whole height. */
+@media (min-width: 761px) and (min-height: 501px) {
+  .app:has(.chat) .rule-editor {
+    left: 384px;
+  }
+
+  .app:has(.chat):has(.rule-editor) .chat {
+    top: 12px;
+    bottom: 12px;
+    z-index: 51;
+  }
+}
+
+/* Where there's no room for the rule panel beside the chat, whichever is being used comes to the front. */
+.app:has(.chat:focus-within) .chat {
+  z-index: 31;
 }

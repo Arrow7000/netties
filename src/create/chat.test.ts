@@ -32,7 +32,7 @@ describe("a chat turn", () => {
   it("hands over a document that checks out, saying how it ran", async () => {
     const { f } = proxy([`Doubles 2.\n\n${doc(EXAMPLE)}`]);
     const { end } = await runTurn(newConversation(), "Double 2.", "", { fetch: f });
-    expect(end).toMatchObject({ kind: "ready", summary: "3 agent types, 2 rules; runs to the end in 3 interactions" });
+    expect(end).toMatchObject({ kind: "ready", summary: "3 kinds of agent, 2 rules; runs to the end in 3 interactions" });
   });
 
   it("gets three tries for each message, not three overall", async () => {

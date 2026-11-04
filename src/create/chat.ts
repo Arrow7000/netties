@@ -204,7 +204,7 @@ async function ask(messages: Message[], opts: TurnOptions): Promise<Asked> {
 const summarise = (c: { types: number; rules: number; interactions?: number }) => {
   const n = (k: number, one: string) => `${k} ${one}${k === 1 ? "" : "s"}`;
   const run = c.interactions === undefined ? "" : `; runs to the end in ${n(c.interactions, "interaction")}`;
-  return `${n(c.types, "agent type")}, ${n(c.rules, "rule")}${run}`;
+  return `${`${c.types} ${c.types === 1 ? "kind" : "kinds"} of agent`}, ${n(c.rules, "rule")}${run}`;
 };
 
 /** The feedback that asks for a fix, and the one that leaves it up to the model. */

@@ -1,4 +1,4 @@
-import { For, Index, type JSX, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Index, type JSX, Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { Try, Turn, TurnEnd } from "../create/chat";
 import { TRIES } from "../create/client";
 import type { Chat, Entry } from "./chatStore";
@@ -60,21 +60,60 @@ function anchored(el: HTMLElement, onChange?: (atEnd: boolean) => void) {
   };
 }
 
-function inline(s: string): JSX.Element[] {
-  return s.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g).map((p) => (p.startsWith("`") && p.length > 2 ? <code>{p.slice(1, -1)}</code> : p.startsWith("**") && p.length > 4 ? <b>{p.slice(2, -2)}</b> : p));
+function inline(s: string): (JSX.Element | string)[] {
+  return s.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\s][^*\n]*\*)/g).map((p) => {
+    if (p.startsWith("`") && p.length > 2) return <code classList={{ whole: p.length < 24 }}>{p.slice(1, -1)}</code>;
+    if (p.startsWith("**") && p.length > 4) return <b>{p.slice(2, -2)}</b>;
+    if (p.startsWith("*") && p.endsWith("*") && p.length > 2) return <em>{p.slice(1, -1)}</em>;
+    return p;
+  });
 }
 
-/** Enough of Markdown for what models write: paragraphs, lists, bold and inline code. */
+type Block = { kind: "p" | "h" | "table"; lines: string[] } | { kind: "ul" | "ol"; lines: string[]; start: number };
+
+/** The blocks of what a model wrote. A list can follow a line straight on, and blank lines don't end one. */
+function blocksOf(text: string): Block[] {
+  const out: Block[] = [];
+  let blank = false;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) {
+      blank = true;
+      continue;
+    }
+    const last = out.at(-1);
+    const item = /^\s*(?:([-*])|(\d+)\.) (.*)$/.exec(line);
+    if (item) {
+      const kind = item[1] ? "ul" : "ol";
+      if (last?.kind === kind) last.lines.push(item[3]!);
+      else out.push({ kind, lines: [item[3]!], start: Number(item[2] ?? 1) });
+    } else if (/^#+ /.test(line)) out.push({ kind: "h", lines: [line.replace(/^#+ /, "")] });
+    else if (line.trimStart().startsWith("|")) {
+      if (last?.kind === "table") last.lines.push(line);
+      else out.push({ kind: "table", lines: [line] });
+    } else if (last?.kind === "p" && !blank) last.lines.push(line);
+    else out.push({ kind: "p", lines: [line] });
+    blank = false;
+  }
+  return out;
+}
+
+/** Enough of Markdown for what models write. */
 function Prose(props: { text: string }) {
-  const blocks = createMemo(() => props.text.split(/\n{2,}/).filter((b) => b.trim()));
   return (
-    <For each={blocks()}>
+    <For each={blocksOf(props.text)}>
       {(b) => {
-        const lines = b.split("\n");
-        if (lines.every((l) => /^\s*[-*] /.test(l))) return <ul>{lines.map((l) => <li>{inline(l.replace(/^\s*[-*] /, ""))}</li>)}</ul>;
-        if (lines.every((l) => /^\s*\d+\. /.test(l))) return <ol>{lines.map((l) => <li>{inline(l.replace(/^\s*\d+\. /, ""))}</li>)}</ol>;
-        if (/^#+ /.test(b)) return <p><b>{b.replace(/^#+ /, "")}</b></p>;
-        return <p>{inline(b)}</p>;
+        switch (b.kind) {
+          case "ul":
+            return <ul>{b.lines.map((l) => <li>{inline(l)}</li>)}</ul>;
+          case "ol":
+            return <ol start={b.start}>{b.lines.map((l) => <li>{inline(l)}</li>)}</ol>;
+          case "h":
+            return <p><b>{inline(b.lines[0]!)}</b></p>;
+          case "table":
+            return <pre>{b.lines.join("\n")}</pre>;
+          case "p":
+            return <p>{inline(b.lines.join("\n"))}</p>;
+        }
       }}
     </For>
   );
@@ -106,10 +145,11 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
           {doing("writing the document")}, {lines()} {lines() === 1 ? "line" : "lines"}
         </div>
       </Show>
-      <Show when={props.t.problem && !(props.last && props.turn.phase.kind === "over")}>
+      {/* Once it's over, the result says what's left to say about the last try and anything that wasn't an outright failure. */}
+      <Show when={props.t.problem && !(props.turn.phase.kind === "over" && (props.last || props.t.soft))}>
         <details class="chat-problem">
           <summary>
-            {props.turn.tries.length > 1 || !props.last ? `Try ${props.n}: ` : ""}
+            {props.t.soft ? "Checking if this is what you want: " : `Try ${props.n} didn't pass: `}
             {firstLine(props.t.problem!)}
           </summary>
           <pre class="chat-message">{props.t.problem}</pre>
@@ -238,6 +278,8 @@ function EditBox(props: { text: string; onCancel: () => void; onSend: (text: str
 
 /** How a turn stands, under what it has said. */
 function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number }) {
+  /** Starting over from further back would throw away what came after, so that's left to Edit. */
+  const latest = () => props.index === props.chat.entries().length - 1;
   return (
     <Show when={props.turn.phase.kind === "over" ? (props.turn.phase as Extract<Turn["phase"], { kind: "over" }>).end : undefined} keyed fallback={<Show when={props.turn.phase.kind === "waiting"}><div class="chat-status live">{props.turn.tries.length > 1 ? `Try ${props.turn.tries.length} of ${TRIES}: asking` : "Asking the model"}, {seconds(props.now - props.turn.since)}</div></Show>}>
       {(end) => {
@@ -245,23 +287,36 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
           case "said":
             return null;
           case "stopped":
-            return <div class="chat-status">{end.by === "message" ? "Interrupted by your next message." : end.by === "reload" ? "Cut off by a reload. The canvas hasn't changed." : "Stopped. The canvas hasn't changed."}</div>;
+            return (
+              <div class="chat-status">
+                {end.by === "message" ? "Interrupted by your next message." : end.by === "reload" ? "Cut off by a reload. The canvas hasn't changed." : "Stopped. The canvas hasn't changed."}
+                <Show when={latest() && end.by !== "message"}>
+                  <button class="btn chat-again" onClick={props.chat.carryOn} title="Ask it to pick up from how far it got, thinking included">
+                    Continue
+                  </button>
+                </Show>
+              </div>
+            );
           case "failed":
             return (
               <div class="chat-status bad">
                 {end.message}
-                <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
-                  Try again
-                </button>
+                <Show when={latest()}>
+                  <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
+                    Try again
+                  </button>
+                </Show>
               </div>
             );
           case "gave-up":
             return (
               <div class="chat-result bad">
                 <div>Three tries, and none passed the checks, so the canvas hasn't changed.</div>
-                <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
-                  Try again
-                </button>
+                <Show when={latest()}>
+                  <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
+                    Try again
+                  </button>
+                </Show>
                 <details>
                   <summary>{firstLine(end.feedback)}</summary>
                   <pre class="chat-message">{end.feedback}</pre>
@@ -294,7 +349,7 @@ function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number
 }
 
 /** The chat, beside the net on a desktop and in the lower part of a phone's screen. */
-export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
+export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: () => void }) {
   const chat = props.chat;
   let log!: HTMLDivElement;
   let area!: HTMLTextAreaElement;
@@ -365,13 +420,28 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
         <button class="btn" onClick={() => (chat.reset(), refocus())} disabled={!chat.entries().length} title="Start a new conversation">
           New chat
         </button>
-        <button class="btn icon" onClick={() => chat.setOpen(false)} title="Close" aria-label="Close">
+        <button class="btn icon" onClick={() => props.onClose()} title="Close" aria-label="Close">
           <I.Close />
         </button>
       </header>
       <div class="chat-log-wrap">
         <div class="chat-log" ref={log}>
-          <Show when={chat.entries().length} fallback={<p class="chat-empty">Describe a system, ask for a change to the one on the canvas, or ask how something works.</p>}>
+          <Show
+            when={chat.entries().length}
+            fallback={
+              <>
+                <p class="chat-empty">Describe a system, ask for a change to the one on the canvas, or ask how something works.</p>
+                <Show when={chat.cleared()}>
+                  <p class="chat-empty">
+                    Started a new chat.{" "}
+                    <button class="btn chat-restore" onClick={chat.restore}>
+                      Bring the last one back
+                    </button>
+                  </p>
+                </Show>
+              </>
+            }
+          >
             <Index each={chat.entries()}>{(e, i) => <EntryView chat={chat} entry={e()} index={i} now={now()} />}</Index>
           </Show>
         </div>
@@ -388,6 +458,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
           submit();
         }}
       >
+        <div class="chat-field">
         <textarea
           ref={area}
           class="input"
@@ -408,10 +479,11 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
           }}
         />
         <Show when={chat.busy()}>
-          <button type="button" class="btn icon" onClick={() => (chat.stop(), refocus())} title="Stop" aria-label="Stop">
+          <button type="button" class="btn icon chat-stop" onClick={() => (chat.stop(), refocus())} title="Stop" aria-label="Stop">
             <I.Stop />
           </button>
         </Show>
+        </div>
         <button type="submit" class="btn icon primary" disabled={!chat.draft().trim()} title={chat.busy() ? "Stop this reply and send" : "Send"} aria-label="Send">
           <I.Send />
         </button>

@@ -430,8 +430,11 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
     if (place) return { ...place, h: Math.min(place.h, innerHeight - place.top - BOTTOM) };
     const pal = document.querySelector(".palette")?.getBoundingClientRect();
     const right = pal ? innerWidth - pal.left + 12 : 260;
-    const w = Math.min(880, innerWidth - right - 24);
-    return { left: Math.max(12, innerWidth - right - w), top: 64, w, h: innerHeight - 64 - BOTTOM };
+    // Beside the chat if it's open, as long as that leaves the panel its smallest size.
+    const chat = document.querySelector(".chat")?.getBoundingClientRect();
+    const from = chat && innerWidth - right - chat.right - 12 >= 560 ? chat.right + 12 : 12;
+    const w = Math.min(880, innerWidth - right - from - 12);
+    return { left: Math.max(from, innerWidth - right - w), top: 64, w, h: innerHeight - 64 - BOTTOM };
   };
   const [box, setBox] = createSignal(frame());
   const remember = () => {
