@@ -1,3 +1,4 @@
+import { readSharePayload, sharePayload } from "./shareFormat";
 import { type ComponentDef, Groups, type GroupsJSON } from "../core/groups";
 import { Net, type NetJSON } from "../core/net";
 import { System, type SystemJSON } from "../core/system";
@@ -49,7 +50,8 @@ export function loadLocal(): Doc | undefined {
   }
 }
 
-// Share links carry the document deflated and base64url-encoded in the hash.
+// Share links carry versioned program text and optional manual placement,
+// deflated and base64url-encoded. Legacy v1 JSON links remain readable.
 
 async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
   const out = new Blob([bytes as BlobPart]).stream().pipeThrough(stream);
@@ -57,7 +59,7 @@ async function pipe(bytes: Uint8Array, stream: CompressionStream | Decompression
 }
 
 export async function toShareHash(doc: Doc): Promise<string> {
-  const packed = await pipe(new TextEncoder().encode(JSON.stringify(doc)), new CompressionStream("deflate-raw"));
+  const packed = await pipe(new TextEncoder().encode(JSON.stringify(sharePayload(doc))), new CompressionStream("deflate-raw"));
   let bin = "";
   packed.forEach((b) => (bin += String.fromCharCode(b)));
   return "#n=" + btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -70,7 +72,10 @@ export async function fromShareHash(hash: string): Promise<Doc | undefined> {
     const bin = atob(m[1]!.replace(/-/g, "+").replace(/_/g, "/"));
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
     const json = await pipe(bytes, new DecompressionStream("deflate-raw"));
-    return JSON.parse(new TextDecoder().decode(json)) as Doc;
+    const payload: unknown = JSON.parse(new TextDecoder().decode(json));
+    if (Array.isArray(payload)) return readSharePayload(payload);
+    if (payload && typeof payload === "object" && "v" in payload && payload.v === 1) return payload as Doc;
+    return undefined;
   } catch {
     return undefined;
   }
@@ -86,7 +91,12 @@ export async function fromShareHash(hash: string): Promise<Doc | undefined> {
 export function arrival(hash: string, doc: Doc | undefined, here: string): "no-net" | "unreadable" | "showing" | "load" {
   if (!hash.startsWith("#n=")) return "no-net";
   if (!doc) return "unreadable";
-  return JSON.stringify(doc) === here ? "showing" : "load";
+  if (JSON.stringify(doc) === here) return "showing";
+  try {
+    return JSON.stringify(sharePayload(doc)) === JSON.stringify(sharePayload(JSON.parse(here) as Doc)) ? "showing" : "load";
+  } catch {
+    return "load";
+  }
 }
 
 /** Whether sharing makes a new history entry: not when the address holds that link already. */

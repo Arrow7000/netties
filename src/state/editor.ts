@@ -3,7 +3,7 @@ import { type Example, examples } from "../core/examples";
 import { type Clip, componentsFor, mergePlan, systemFor } from "../core/clip";
 import { type ComponentDef, type GroupId, Groups, extract, refresh, uses } from "../core/groups";
 import { type AgentId, type AgentType, Net, type WireId } from "../core/net";
-import { print } from "../core/text";
+import { printProgram } from "../core/programText";
 import { type Stats, type StepRecord, emptyStats, interact, isActive, parallelStep } from "../core/reduce";
 import { type Rule, System, type SystemJSON, pairKey } from "../core/system";
 import {
@@ -791,16 +791,17 @@ export function createEditor(initial: Doc | undefined) {
     copySelection(): { clip: Clip; text: string } | undefined {
       const piece = model.copySelection();
       if (!piece) return undefined;
-      const sys = systemFor(system, piece.net);
+      const components = componentsFor(library, piece.groups);
+      const sys = systemFor(system, piece.net, components);
       const clip: Clip = {
         v: 1,
         net: piece.net.toJSON(),
         groups: piece.groups.toJSON(),
         positions: [...piece.positions],
         system: sys.toJSON(),
-        components: componentsFor(library, piece.groups),
+        components,
       };
-      return { clip, text: print(sys, piece.net) };
+      return { clip, text: printProgram({ system: sys, net: piece.net, groups: piece.groups, components: clip.components }) };
     },
 
     /**
@@ -808,12 +809,12 @@ export function createEditor(initial: Doc | undefined) {
      * Agent types and rules it brings are added; ones already here are used
      * as they are. Returns a message when it can't be pasted.
      */
-    paste(src: Clip | { system: System; net: Net }, at: Pt): string | undefined {
+    paste(src: Clip | { system: System; net: Net; groups?: Groups; components?: ComponentDef[] }, at: Pt): string | undefined {
       const from = "v" in src ? System.fromJSON(src.system) : src.system;
       const piece = "v" in src ? Net.fromJSON(src.net) : src.net;
-      const pieceGroups = "v" in src ? Groups.fromJSON(src.groups) : new Groups();
+      const pieceGroups = "v" in src ? Groups.fromJSON(src.groups) : src.groups?.clone() ?? new Groups();
       const rel = new Map("v" in src ? src.positions : []);
-      const components = "v" in src ? src.components : [];
+      const components = "v" in src ? src.components : src.components ?? [];
       if (!piece.agents.size && !piece.wires.size) return "There's nothing to paste.";
       const plan = mergePlan(system, from);
       if ("error" in plan) return plan.error;
@@ -862,15 +863,15 @@ export function createEditor(initial: Doc | undefined) {
     openText: () => dispatch({ kind: "screen/open", screen: { kind: "text" } }),
     closeText: () => dispatch({ kind: "screen/close" }),
     /** Replace everything with a parsed system and net. */
-    loadParsed(sys: System, net: Net) {
+    loadParsed(sys: System, net: Net, components: ComponentDef[] = [], groups = new Groups()) {
       stop();
       setExampleStart(undefined);
       model.checkpoint();
       batch(() => {
         system = sys;
-        library = new Map();
+        library = new Map(components.map(d => [d.id, d]));
         touchSystem();
-        model.setNet(net);
+        model.setNet(net, new Map(), groups);
         model.restoreView("auto", new Map());
         resetRun();
       });

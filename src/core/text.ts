@@ -31,7 +31,7 @@ import { type Level, type PortSpec, typingOn } from "./types";
 
 type Term =
   | { kind: "agent"; name: string; args: Term[]; line: number; col: number }
-  | { kind: "var"; name: string; line: number; col: number };
+  | { kind: "var"; name: string; line: number; col: number; quoted?: boolean };
 type Eq = [Term, Term];
 
 /** A problem in the text, at a line and, when known, a column (both from 1). */
@@ -69,9 +69,15 @@ function tokenize(src: string): Tok[] {
       out.push(tok(c));
       i++;
     } else if (c === '"') {
-      const j = src.indexOf('"', i + 1);
-      if (j < 0) throw new ParseError("this string is never closed with a \"", line, i - lineStart + 1);
-      out.push(tok(src.slice(i, j + 1)));
+      let j = i + 1;
+      while (j < src.length && src[j] !== '"') {
+        if (src[j] === "\\") j++;
+        j++;
+      }
+      if (j >= src.length) throw new ParseError('this string is never closed with a "', line, i - lineStart + 1);
+      const literal = src.slice(i, j + 1);
+      try { JSON.parse(literal); } catch { throw new ParseError("invalid quoted string", line, i - lineStart + 1); }
+      out.push(tok(literal));
       i = j + 1;
     } else {
       let j = i;
@@ -125,7 +131,7 @@ function parsePort({ t: tok, line, col }: Tok): PortSpec {
 
 function printPort(p: PortSpec): string {
   const head = (p.pol === "give" ? "+" : p.pol === "take" ? "-" : "") + (p.type ?? "") || "_";
-  return p.label ? `${head} "${p.label}"` : head;
+  return p.label ? `${head} ${JSON.stringify(p.label)}` : head;
 }
 
 interface Parsed {
@@ -134,6 +140,7 @@ interface Parsed {
   types?: { level: Level; names: string[] };
   rules: { lhs: [Term, Term]; rhs: Eq[]; line: number; description?: string }[];
   net: Eq[];
+  loose: string[];
 }
 
 function parseStatements(src: string): Parsed {
@@ -169,7 +176,7 @@ function parseStatements(src: string): Parsed {
       expect(")");
       return { kind: "agent", name: t.t, args, line: t.line, col: t.col };
     }
-    return { kind: "var", name: t.t, line: t.line, col: t.col };
+    return { kind: "var", name: t.t.startsWith('"') ? JSON.parse(t.t) as string : t.t, line: t.line, col: t.col, ...(t.t.startsWith('"') ? { quoted: true } : {}) };
   };
   const eqs = (): Eq[] => {
     const out: Eq[] = [];
@@ -183,7 +190,7 @@ function parseStatements(src: string): Parsed {
     return out;
   };
 
-  const parsed: Parsed = { decls: [], rules: [], net: [] };
+  const parsed: Parsed = { decls: [], rules: [], net: [], loose: [] };
   while (p < toks.length) {
     const t = peek()!;
     if (t.t === ";") {
@@ -201,6 +208,11 @@ function parseStatements(src: string): Parsed {
       } else parsed.types = { level, names };
       continue;
     }
+    if (t.t === "free" && toks[p + 1]?.t.startsWith('"')) {
+      next();
+      parsed.loose.push(JSON.parse(next().t) as string);
+      continue;
+    }
     if (t.t === "agent") {
       next();
       const sym = next();
@@ -213,13 +225,13 @@ function parseStatements(src: string): Parsed {
       while (peek() && peek()!.line === t.line && peek()!.t !== ";") {
         const x = next();
         if (x.t === "filled") filled = true;
-        else if (x.t.startsWith('"')) name = x.t.slice(1, -1);
+        else if (x.t.startsWith('"')) name = JSON.parse(x.t) as string;
         else if (x.t === "ports") {
           ports = [];
           for (;;) {
             const pt = next();
             const spec = parsePort(pt);
-            if (peek()?.t.startsWith('"') && peek()!.line === t.line) spec.label = next().t.slice(1, -1);
+            if (peek()?.t.startsWith('"') && peek()!.line === t.line) spec.label = JSON.parse(next().t) as string;
             ports.push(spec);
             if (peek()?.t !== "," || peek()!.line !== t.line) break;
             next();
@@ -236,7 +248,7 @@ function parseStatements(src: string): Parsed {
     if (peek()?.t === "><") {
       next();
       const b = term();
-      const description = peek()?.t.startsWith('"') ? next().t.slice(1, -1) : undefined;
+      const description = peek()?.t.startsWith('"') ? JSON.parse(next().t) as string : undefined;
       expect("=>");
       const rhs = peek()?.t === ";" ? [] : eqs();
       expect(";");
@@ -281,7 +293,7 @@ export function parse(src: string): { system: System; net: Net } {
   };
   for (const r of parsed.rules) [...r.lhs, ...r.rhs.flat()].forEach(visitTerm);
   parsed.net.flat().forEach(visitTerm);
-  const isAgent = (t: Term) => t.kind === "agent" || arity.has(t.name) || /^\p{Lu}/u.test(t.name);
+  const isAgent = (t: Term) => t.kind === "agent" || (!t.quoted && (arity.has(t.name) || /^\p{Lu}/u.test(t.name)));
   for (const t of [...parsed.rules.flatMap((r) => [...r.lhs, ...r.rhs.flat()]), ...parsed.net.flat()]) {
     for (const v of allTerms(t)) if (v.kind === "var" && isAgent(v) && !arity.has(v.name)) arity.set(v.name, 0);
   }
@@ -310,12 +322,12 @@ export function parse(src: string): { system: System; net: Net } {
     const plug = (t: Term, at: End) => {
       if (isAgent(t)) return void net.connect(port(make(t), 0), at);
       // In an ordinary net, `_` means an empty port rather than a named loose end.
-      if (mode === "net" && t.name === "_") return;
+      if (mode === "net" && t.name === "_" && t.kind === "var" && !t.quoted) return;
       const other = alias.get(t.name);
       if (other !== undefined) {
         alias.delete(t.name);
         alias.delete(other);
-        return plug({ kind: "var", name: other, line: t.line, col: t.col }, at);
+        return plug({ kind: "var", name: other, line: t.line, col: t.col, quoted: true }, at);
       }
       const e = take(t.name);
       if (e) net.connect(e, at);
@@ -334,6 +346,14 @@ export function parse(src: string): { system: System; net: Net } {
           alias.set(a.name, b.name);
           alias.set(b.name, a.name);
         }
+      }
+    }
+    if (mode === "net") {
+      for (const [a, b] of [...alias]) {
+        if (!alias.has(a)) continue;
+        net.connect(free(a), free(b));
+        alias.delete(a);
+        alias.delete(b);
       }
     }
     if (alias.size) throw new ParseError(`${[...alias.keys()].join(", ")} are only joined to each other`, line);
@@ -375,6 +395,7 @@ export function parse(src: string): { system: System; net: Net } {
   }
   const net = new Net();
   build(net, parsed.net, new Map(), "net", 1);
+  for (const name of parsed.loose) if (!net.free.has(name)) net.free.set(name, NONE);
   return { system: sys, net };
 }
 
@@ -383,7 +404,7 @@ function allTerms(t: Term): Term[] {
 }
 
 /** Write a net as equations, nesting trees as terms. Free ports keep their names. */
-function equations(net: Net, sys: System, names: (e: End) => string | undefined): string[] {
+function equations(net: Net, sys: System, names: (e: End) => string | undefined, onAgent?: (id: AgentId) => void): string[] {
   // Each agent hangs off whatever its principal port is plugged into, unless that makes a loop.
   const parent = new Map<AgentId, End>();
   for (const a of net.agents.values()) {
@@ -416,10 +437,14 @@ function equations(net: Net, sys: System, names: (e: End) => string | undefined)
     const there = names(p);
     if (there) return there;
     let n = wireName.get(w);
-    if (!n) wireName.set(w, (n = `w${++fresh}`));
+    if (!n) {
+      do { n = `w${++fresh}`; } while (net.free.has(n) || [...sys.types.values()].some(t => t.symbol === n));
+      wireName.set(w, n);
+    }
     return n;
   };
   const term = (a: AgentId): string => {
+    onAgent?.(a);
     const ag = net.agent(a);
     const sym = sys.types.get(ag.type)?.symbol ?? ag.type;
     if (ag.wires.length === 1) return sym;
@@ -439,8 +464,9 @@ function equations(net: Net, sys: System, names: (e: End) => string | undefined)
     if (w !== NONE && done.has(w)) continue;
     if (w !== NONE) done.add(w);
     const p = w === NONE ? undefined : net.partner(port(a.id, 0));
-    const other = p?.kind === "port" && p.slot === 0 && !parent.has(p.agent) ? term(p.agent) : nameOf(port(a.id, 0));
-    out.push(`${other} ~ ${term(a.id)}`);
+    if (p?.kind === "port" && p.slot === 0 && !parent.has(p.agent)) {
+      out.push(`${term(a.id)} ~ ${term(p.agent)}`);
+    } else out.push(`${nameOf(port(a.id, 0))} ~ ${term(a.id)}`);
   }
   // Wires joining two free ends directly.
   for (const w of net.wires.values()) {
@@ -455,20 +481,23 @@ export function print(sys: System, net: Net, title?: string): string {
   const lines: string[] = [];
   if (title) lines.push(`-- ${title}`, "");
   const typing = sys.typing;
-  if (typing.dirs !== "off") lines.push(`directions ${typing.dirs}`);
-  if (typing.types !== "off") lines.push(`types ${typing.types}${typing.names.map((n) => " " + n).join("")}`);
+  const specs = [...sys.types.values()].flatMap(t => t.ports ?? []);
+  // Explicit off settings must override the parser's inference from port metadata.
+  if (typing.dirs !== "off" || specs.some(p => p.pol)) lines.push(`directions ${typing.dirs}`);
+  if (typing.types !== "off" || typing.names.length || specs.some(p => p.type)) lines.push(`types ${typing.types}${typing.names.map((n) => " " + n).join("")}`);
   if (typingOn(typing)) lines.push("");
   for (const t of sys.types.values()) {
     const described = t.ports?.some((p) => p.pol || p.type || p.label);
     const ports = described ? ` ports ${t.ports!.map(printPort).join(", ")}` : "";
-    lines.push(`agent ${t.symbol} ${t.arity}${t.filled ? " filled" : ""}${t.name !== t.symbol ? ` "${t.name}"` : ""}${ports}`);
+    lines.push(`agent ${t.symbol} ${t.arity}${t.filled ? " filled" : ""}${t.name !== t.symbol ? ` ${JSON.stringify(t.name)}` : ""}${ports}`);
   }
   lines.push("");
   const sym = (id: string) => sys.types.get(id)?.symbol ?? id;
   for (const r of sys.rules.values()) lines.push(printRule(sys, r, sym));
   lines.push("");
-  const eqs = equations(net, sys, (e) => (e.kind === "free" ? e.name : undefined));
+  const eqs = equations(net, sys, (e) => (e.kind === "free" ? freeName(e.name, sys) : undefined));
   if (eqs.length) lines.push(eqs.join(",\n") + ";");
+  for (const [name, wire] of net.free) if (wire === NONE) lines.push(`free ${JSON.stringify(name)}`);
   return lines.join("\n") + "\n";
 }
 
@@ -485,7 +514,20 @@ function printRule(sys: System, r: Rule, sym: (id: string) => string): string {
   const end = (e: Rule["wires"][number][number]): End =>
     e.kind === "agent" ? port(ids[e.index]!, e.slot) : free(`${e.side === 0 ? "x" : "y"}${e.slot}`);
   for (const [a, b] of r.wires) net.connect(end(a), end(b));
-  const eqs = equations(net, sys, (e) => (e.kind === "free" ? e.name : undefined));
-  const note = r.description ? ` "${r.description.replaceAll('"', "'")}"` : "";
+  const eqs = equations(net, sys, (e) => (e.kind === "free" ? freeName(e.name, sys) : undefined));
+  const note = r.description ? ` ${JSON.stringify(r.description)}` : "";
   return `${side(r.left, xs)} >< ${side(r.right, ys)}${note} =>${eqs.length ? " " + eqs.join(", ") : ""};`;
+}
+
+/** Equations and original agent IDs in lexical (outer term before arguments) order. */
+export function printNet(sys: System, net: Net): { text: string; order: AgentId[] } {
+  const order: AgentId[] = [];
+  const eqs = equations(net, sys, (e) => e.kind === "free" ? freeName(e.name, sys) : undefined, id => order.push(id));
+  const loose = [...net.free].filter(([, w]) => w === NONE).map(([name]) => `free ${JSON.stringify(name)}\n`).join("");
+  return { text: (eqs.length ? eqs.join(",\n") + ";\n" : "") + loose, order };
+}
+
+function freeName(name: string, sys: System): string {
+  return name !== "_" && /^[\p{Ll}\p{N}_][\p{L}\p{N}_'-]*$/u.test(name) && ![...sys.types.values()].some(t => t.symbol === name)
+    ? name : JSON.stringify(name);
 }

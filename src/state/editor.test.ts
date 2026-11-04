@@ -4,6 +4,7 @@ import { type AgentType, port } from "../core/net";
 import { examples } from "../core/examples";
 import { setPortOn, setTypingOn } from "../core/types";
 import { createEditor } from "./editor";
+import { parseProgram } from "../core/programText";
 
 const unary: AgentType = { id: "u", name: "Unary", symbol: "U", arity: 1 };
 
@@ -144,6 +145,35 @@ describe("editor update boundary", () => {
       expect(ed.system.ruleFor("a", "b")).toBeUndefined();
       expect(ed.net.free.size).toBe(2);
       expect(ed.model.historySize()).toEqual({ undo: 1, redo: 0 });
+      dispose();
+    });
+  });
+
+  it("loads and copies component text, including types used only by its definition", () => {
+    createRoot(dispose => {
+      const program = parseProgram(`agent A 0
+agent B 0
+component "c" "C" "component" ports ["p1"]
+p1 ~ B;
+end
+out ~ A;
+instance "c" parent - expanded members [0] ports [["p1",0,0]];
+`);
+      const ed = createEditor(undefined);
+      ed.loadParsed(program.system, program.net, program.components, program.groups);
+      expect(ed.toDoc().components).toHaveLength(1);
+      expect(ed.model.groups.groups.size).toBe(1);
+      ed.model.selectAll();
+      const copied = ed.copySelection()!;
+      const parsed = parseProgram(copied.text);
+      expect(parsed.system.types.has("B")).toBe(true);
+      expect(parsed.components[0]!.net.agents[0]!.type).toBe("B");
+      expect([...parsed.groups.groups.values()][0]!.collapsed).toBe(false);
+      const into = createEditor(undefined);
+      expect(into.paste(parsed, { x: 0, y: 0 })).toBeUndefined();
+      expect(into.toDoc().components).toHaveLength(1);
+      expect(into.model.groups.groups.size).toBe(1);
+      expect(into.net.agents.size).toBe(1);
       dispose();
     });
   });

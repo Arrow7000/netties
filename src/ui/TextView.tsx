@@ -1,12 +1,14 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
-import { ParseError, parse, print } from "../core/text";
+import { ParseError } from "../core/text";
+import { parseProgram, printProgram } from "../core/programText";
+import { decode } from "../state/persist";
 import type { Editor } from "../state/editor";
 import { copyText } from "./clipboard";
 
 /** The system and net as text, in the style of Inpla. Edit and load it back. */
 export function TextView(props: { ed: Editor }) {
   const ed = props.ed;
-  const [text, setText] = createSignal(print(ed.system, ed.net));
+  const [text, setText] = createSignal(printProgram(decode(ed.toDoc())));
   const [error, setError] = createSignal<string>();
   const [note, setNote] = createSignal<string>();
   let fileInput!: HTMLInputElement;
@@ -14,8 +16,8 @@ export function TextView(props: { ed: Editor }) {
 
   const load = () => {
     try {
-      const { system, net } = parse(text());
-      const cut = ed.loadParsed(system, net);
+      const { system, net, components, groups } = parseProgram(text());
+      const cut = ed.loadParsed(system, net, components, groups);
       ed.closeText();
       if (cut) ed.notify(`Loaded. Cut ${cut === 1 ? "1 wire" : `${cut} wires`} that didn't fit the types into loose ends.`, true);
     } catch (e) {
@@ -108,7 +110,7 @@ export function TextView(props: { ed: Editor }) {
       <p class="rule-help" classList={{ "text-error": !!error() }}>
         {error() ??
           note() ??
-          "Rules are A(x, y) >< B(z) => …; nets are equations t ~ u. A name used once in a net is a free port. Loading replaces the current agents, rules and net."}
+          "Rules are A(x, y) >< B(z) => …; nets are equations t ~ u. A name used once in a net is a free port. Components use component … ports […] / end blocks; instance annotations refer to agents by zero-based first appearance. Loading replaces the current program."}
       </p>
     </div>
   );

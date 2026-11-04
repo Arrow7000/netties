@@ -23,7 +23,7 @@ import { held, shortcuts } from "./ui/keys";
 import { freezeState } from "./ui/freeze";
 import { prefs } from "./ui/prefs";
 import { CLIP_TYPE, type Clip } from "./core/clip";
-import { parse } from "./core/text";
+import { parseProgram } from "./core/programText";
 import { typingOn } from "./core/types";
 
 const THEME_KEY = "netties:theme";
@@ -167,7 +167,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
       e.preventDefault();
       let src: Parameters<typeof ed.paste>[0];
       try {
-        src = json ? (JSON.parse(json) as Clip) : parse(text);
+        src = json ? (JSON.parse(json) as Clip) : parseProgram(text);
       } catch (err) {
         ed.notify(`The clipboard doesn't hold a net: ${err instanceof Error ? err.message : String(err)}`);
         return;

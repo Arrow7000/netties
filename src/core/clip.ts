@@ -81,8 +81,8 @@ export function looseName(i: number): string {
 }
 
 /** The agent types a net uses, with every rule among them and whatever those rules create. */
-export function systemFor(sys: System, net: Net): System {
-  const used = new Set([...net.agents.values()].map((a) => a.type));
+export function systemFor(sys: System, net: Net, components: readonly ComponentDef[] = []): System {
+  const used = new Set([...net.agents.values(), ...components.flatMap(d => d.net.agents)].map((a) => a.type));
   for (let grew = true; grew; ) {
     grew = false;
     for (const r of sys.rules.values()) {
