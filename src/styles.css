@@ -3802,6 +3802,7 @@ button.select.open {
   border-radius: var(--r-island);
   box-shadow: var(--shadow);
   overflow: hidden;
+  outline: none;
 }
 
 .app:has(.chat) .panel-stack {
@@ -3855,6 +3856,10 @@ button.select.open {
   gap: 8px;
 }
 
+.chat-words {
+  overflow-wrap: anywhere;
+}
+
 .chat-words p,
 .chat-words ul,
 .chat-words ol {
@@ -3891,6 +3896,12 @@ button.select.open {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A message reads as text; only code scrolls sideways. */
+.chat-turn pre.chat-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .chat-thought > div {

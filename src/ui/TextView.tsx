@@ -51,6 +51,7 @@ export function TextView(props: { ed: Editor }) {
 
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as Element).closest(".chat")) return;
       if (e.key === "Escape") {
         e.stopImmediatePropagation();
         ed.closeText();

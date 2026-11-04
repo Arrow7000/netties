@@ -354,6 +354,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
     onCleanup(() => ro.disconnect());
 
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as Element).closest(".chat")) return;
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
       if ((e.target as Element).closest("input, textarea, select")) {

@@ -30,6 +30,7 @@ export function ComponentEditor(props: { ed: Editor; id: string }) {
 
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as Element).closest(".chat")) return;
       if ((e.target as Element).closest("input, textarea, select")) return;
       e.stopImmediatePropagation();
       const mod = e.metaKey || e.ctrlKey;

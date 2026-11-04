@@ -70,7 +70,7 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
             {props.turn.tries.length > 1 || !props.last ? `Try ${props.n}: ` : ""}
             {firstLine(props.t.problem!)}
           </summary>
-          <pre>{props.t.problem}</pre>
+          <pre class="chat-message">{props.t.problem}</pre>
           <Show when={props.t.code}>
             <pre>{props.t.code}</pre>
           </Show>
@@ -98,7 +98,7 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
                 <div>{TRIES} tries and netties still can't use the document, so the canvas is as it was.</div>
                 <details>
                   <summary>{firstLine(end.feedback)}</summary>
-                  <pre>{end.feedback}</pre>
+                  <pre class="chat-message">{end.feedback}</pre>
                   <Show when={end.code}>
                     <pre>{end.code}</pre>
                   </Show>
@@ -159,7 +159,7 @@ function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number
 }
 
 /** The chat, beside the net on a desktop and in the lower part of a phone's screen. */
-export function ChatPanel(props: { chat: Chat }) {
+export function ChatPanel(props: { chat: Chat; onEscape: () => void }) {
   const chat = props.chat;
   let log!: HTMLDivElement;
   let area!: HTMLTextAreaElement;
@@ -167,7 +167,12 @@ export function ChatPanel(props: { chat: Chat }) {
   const [now, setNow] = createSignal(Date.now());
   const [stuckToEnd, setStuckToEnd] = createSignal(true);
 
-  closeOnEscape(() => chat.setOpen(false));
+  closeOnEscape(() => props.onEscape());
+
+  /** Back to the box after a button, but not on a phone, where that brings up the keyboard. */
+  const refocus = () => {
+    if (!fingers()) area.focus();
+  };
 
   onMount(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
@@ -209,10 +214,23 @@ export function ChatPanel(props: { chat: Chat }) {
   };
 
   return (
-    <div class="chat" ref={panel} role="complementary" aria-label="Chat">
+    <div
+      class="chat"
+      ref={panel}
+      role="complementary"
+      aria-label="Chat"
+      // So a click anywhere in it keeps the keyboard here, not on the canvas.
+      tabindex={-1}
+      onKeyDown={(e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !(e.target as Element).closest("textarea")) {
+          e.preventDefault();
+          getSelection()?.selectAllChildren(log);
+        }
+      }}
+    >
       <header class="chat-head">
         <h2>Chat</h2>
-        <button class="btn" onClick={chat.reset} disabled={!chat.entries().length} title="Start a new conversation">
+        <button class="btn" onClick={() => (chat.reset(), refocus())} disabled={!chat.entries().length} title="Start a new conversation">
           New chat
         </button>
         <button class="btn icon" onClick={() => chat.setOpen(false)} title="Close" aria-label="Close">
@@ -251,7 +269,7 @@ export function ChatPanel(props: { chat: Chat }) {
           }}
         />
         <Show when={chat.busy()}>
-          <button type="button" class="btn icon" onClick={chat.stop} title="Stop" aria-label="Stop">
+          <button type="button" class="btn icon" onClick={() => (chat.stop(), refocus())} title="Stop" aria-label="Stop">
             <I.Stop />
           </button>
         </Show>

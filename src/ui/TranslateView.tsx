@@ -185,6 +185,7 @@ export function TranslateView(props: { ed: Editor }) {
 
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as Element).closest(".chat")) return;
       if ((e.target as Element).closest("input, textarea, select")) return;
       e.stopImmediatePropagation();
       if (e.key === "Escape") ed.closeTranslate();

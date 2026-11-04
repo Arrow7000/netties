@@ -121,8 +121,12 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
     onCleanup(() => window.removeEventListener("hashchange", onHashChange));
 
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as Element).closest("input, textarea, select")) return;
       const mod = e.metaKey || e.ctrlKey;
+      const target = e.target as Element;
+      // Keys in the chat stay there, except that with nothing typed, undo still means the net.
+      if (target.closest(".chat")) {
+        if (!(mod && e.key.toLowerCase() === "z" && !chat?.draft())) return;
+      } else if (target.closest("input, textarea, select")) return;
       // The directions and types sheet edits the system in place, so undo works while it's open.
       const sheetOnly = ed.screen().kind === "types";
       if (overlayOpen() && !(sheetOnly && mod && e.key.toLowerCase() === "z")) return;
@@ -644,7 +648,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
         </div>
       </Show>
 
-      <Show when={chat?.open() && chat}>{(c) => <ChatPanel chat={c()} />}</Show>
+      <Show when={chat?.open() && chat}>{(c) => <ChatPanel chat={c()} onEscape={() => (m.selection() ? ed.dispatch({ kind: "selection/clear" }) : c().setOpen(false))} />}</Show>
 
       <Show when={ed.screen().kind === "types"}>
         <TypesSheet ed={ed} />
