@@ -50,7 +50,7 @@ export function loadLocal(): Doc | undefined {
   }
 }
 
-export const SHARE_LOAD_ERROR = "Couldn't load this shared net.";
+export const SHARE_LOAD_ERROR = "Couldn't load the net from the URL.";
 
 /** Initial visits and refreshes report the same error as hash navigation,
  * while retaining the last local document as a fallback. */
