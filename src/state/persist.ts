@@ -50,8 +50,28 @@ export function loadLocal(): Doc | undefined {
   }
 }
 
-// Share links carry versioned program text and optional manual placement,
-// deflated and base64url-encoded. Legacy v1 JSON links remain readable.
+export const SHARE_LOAD_ERROR = "Couldn't load this shared net.";
+
+/** Initial visits and refreshes report the same error as hash navigation,
+ * while retaining the last local document as a fallback. */
+export async function loadInitialDoc(hash: string): Promise<{ doc?: Doc; fromLink: boolean; error?: string }> {
+  if (hash.startsWith("#n=")) {
+    const linked = await fromShareHash(hash);
+    if (linked) {
+      try {
+        decode(linked);
+        return { doc: linked, fromLink: true };
+      } catch {
+        // A legacy JSON payload may parse but fail to restore as a document.
+      }
+    }
+    return { doc: loadLocal(), fromLink: false, error: SHARE_LOAD_ERROR };
+  }
+  return { doc: loadLocal(), fromLink: false };
+}
+
+// #n=2.<base64url> selects the text format before decompression.
+// Unprefixed links select the original JSON format; neither decoder falls back.
 
 async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
   const out = new Blob([bytes as BlobPart]).stream().pipeThrough(stream);
@@ -62,19 +82,21 @@ export async function toShareHash(doc: Doc): Promise<string> {
   const packed = await pipe(new TextEncoder().encode(JSON.stringify(sharePayload(doc))), new CompressionStream("deflate-raw"));
   let bin = "";
   packed.forEach((b) => (bin += String.fromCharCode(b)));
-  return "#n=" + btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return "#n=2." + btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export async function fromShareHash(hash: string): Promise<Doc | undefined> {
-  const m = /^#n=([A-Za-z0-9_-]+)$/.exec(hash);
+  const m = /^#n=(?:(\d+)\.)?([A-Za-z0-9_-]+)$/.exec(hash);
   if (!m) return undefined;
+  const version = m[1];
+  if (version !== undefined && version !== "2") return undefined;
   try {
-    const bin = atob(m[1]!.replace(/-/g, "+").replace(/_/g, "/"));
+    const bin = atob(m[2]!.replace(/-/g, "+").replace(/_/g, "/"));
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
     const json = await pipe(bytes, new DecompressionStream("deflate-raw"));
     const payload: unknown = JSON.parse(new TextDecoder().decode(json));
-    if (Array.isArray(payload)) return readSharePayload(payload);
-    if (payload && typeof payload === "object" && "v" in payload && payload.v === 1) return payload as Doc;
+    if (version === "2") return readSharePayload(payload);
+    if (payload && !Array.isArray(payload) && typeof payload === "object" && "v" in payload && payload.v === 1) return payload as Doc;
     return undefined;
   } catch {
     return undefined;

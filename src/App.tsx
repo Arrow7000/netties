@@ -1,6 +1,6 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { createEditor } from "./state/editor";
-import { type Doc, arrival, fromShareHash, loadLocal, sharePushes } from "./state/persist";
+import { type Doc, arrival, fromShareHash, loadInitialDoc, SHARE_LOAD_ERROR, sharePushes } from "./state/persist";
 import { Canvas, type Pad, createCamera } from "./ui/Canvas";
 import { compact, fingers } from "./ui/compact";
 import { ComponentEditor } from "./ui/ComponentEditor";
@@ -36,7 +36,7 @@ const SLOW = 0.2;
 /** Room the desktop chrome takes round the canvas: the bars, and the palette on the right. */
 const DESKTOP_PAD: Pad = { t: 72, r: 270, b: 90, l: 48 };
 
-export function App(props: { initial?: Doc; fromLink?: boolean }) {
+export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: string }) {
   const ed = createEditor(props.initial);
   ed.init();
   const m = ed.model;
@@ -84,6 +84,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
   const flash = (b: HTMLElement) => b.animate([{ background: "var(--accent-soft)", color: "var(--accent)" }, {}], { duration: 450, easing: "ease-out" });
 
   onMount(() => {
+    if (props.initialError) ed.setMessage(props.initialError);
+
     // Going back or forward to another address, or one typed in. Sharing pushes
     // its link without a hashchange, so this never reloads what it just shared.
     // (Entries with the same address hold the same net, so popstate adds nothing.)
@@ -97,7 +99,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
         case "no-net":
           return setLinked(undefined);
         case "unreadable":
-          return ed.setMessage("Couldn't load this shared net.");
+          return ed.setMessage(SHARE_LOAD_ERROR);
         case "showing":
           return setLinked(ed.fingerprint());
         case "load":
@@ -108,7 +110,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
             ed.load(doc!, "Loaded the net in the link.");
             setLinked(ed.fingerprint());
           } catch {
-            ed.setMessage("Couldn't load this shared net.");
+            ed.setMessage(SHARE_LOAD_ERROR);
           }
       }
     };
@@ -681,9 +683,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean }) {
 }
 
 /** The document to start with: the one in a share link, or the last session's. */
-export async function initialDoc(): Promise<{ doc?: Doc; fromLink: boolean }> {
-  const linked = await fromShareHash(location.hash);
-  return linked ? { doc: linked, fromLink: true } : { doc: loadLocal(), fromLink: false };
+export function initialDoc() {
+  return loadInitialDoc(location.hash);
 }
 
 function safeGet(k: string): string | null {

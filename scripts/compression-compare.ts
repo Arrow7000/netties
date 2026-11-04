@@ -63,4 +63,4 @@ console.table(methods.map(method => {
 }));
 console.log('All compression/decompression and key-renaming round trips passed. Text rows compare a narrower representation.');
 
-console.log('Actual supplied link payload: legacy', payload.length, 'current', (await toShareHash(doc)).slice(3).length);
+console.log('Actual supplied link payload: legacy', payload.length, 'current', (await toShareHash(doc)).slice("#n=2.".length).length);
