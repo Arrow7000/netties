@@ -58,14 +58,20 @@ export function createChat(ed: Editor) {
     }
   };
 
+  /** Replace what's on the canvas, as a step that can be undone. Returns how many wires didn't fit its types. */
+  const put = (code: string) => {
+    if (ed.screen().kind !== "net") ed.dispatch({ kind: "screen/close" });
+    const { system, net, components, groups } = parseProgram(code);
+    const cut = ed.loadParsed(system, net, components, groups);
+    if (cut) ed.notify(`Cut ${cut === 1 ? "1 wire" : `${cut} wires`} that didn't fit the types into loose ends.`, true);
+    return cut;
+  };
+
   /** Put a document on the canvas. Whatever's open that can be closed is closed first; with unsaved changes open it waits, as "ready", for a click. */
   const apply = (index: number, end: Extract<TurnEnd, { kind: "ready" }>) => {
     if (!canLeave()) return endAt(index, end);
-    if (ed.screen().kind !== "net") ed.dispatch({ kind: "screen/close" });
     const before = ed.toDoc();
-    const { system, net, components, groups } = parseProgram(end.code);
-    const cut = ed.loadParsed(system, net, components, groups);
-    if (cut) ed.notify(`Cut ${cut === 1 ? "1 wire" : `${cut} wires`} that didn't fit the types into loose ends.`, true);
+    const cut = put(end.code);
     swaps.set(index, before);
     // If its last word wasn't this document, or it was changed on the way in, the next message shows it again.
     conversation = { ...conversation, seen: conversation.unsaid || cut ? undefined : printed() };
@@ -133,6 +139,12 @@ export function createChat(ed: Editor) {
         apply(index, e.turn.phase.end);
         persist();
       }
+    },
+    /** Go back to a document from earlier in the chat. If it isn't what the model last saw, its next message shows it. */
+    loadDocument(code: string) {
+      if (!canLeave()) return;
+      const cut = put(code);
+      if (!cut) ed.notify("Loaded that document.", true);
     },
     canUndo: (index: number) => swaps.has(index),
     /** Swap between the document before this turn and the one now on the canvas, as a step that can be undone. */

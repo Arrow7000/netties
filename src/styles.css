@@ -3955,6 +3955,10 @@ button.select.open {
   color: var(--muted);
 }
 
+.chat-load {
+  margin-top: 6px;
+}
+
 .chat-compose {
   display: flex;
   align-items: flex-end;

@@ -160,6 +160,8 @@ Choices made along the way that you haven't confirmed yet:
      - Chats last (you, 2026-11-04: "chats should always persist"): opening an
        example or a link, or reloading, keeps the conversation; only New chat
        ends it, and that still throws the old one away.
+     - A list of past chats, so New chat stops throwing the old one away (you,
+       2026-11-04: "i would like a chat history list yes, but... not rn. later.").
      - Before it can go live: Netlify's 60 s limit (below), which the dev server
        doesn't have; a visual pass from you; a phone's real keyboard, which hasn't
        been tried; holding a reply while a rule with unsaved changes is open,
