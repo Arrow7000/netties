@@ -13,7 +13,13 @@ import type Anthropic from "@anthropic-ai/sdk";
 export const MODEL = "claude-haiku-5-5";
 /** Dollars per million tokens, in and out. */
 const PRICE = { in: 0.1, out: 0.5 };
-export const MAX_TOKENS = 16_000;
+/**
+ * Thinking counts too. Netlify ends an edge function's response after 60
+ * seconds even while data is flowing, which is about 12,000 tokens from Haiku.
+ * Stopping just short of that gets a clean "too long" and counts the cost; past
+ * it the stream just dies, and the call is never added to the day's spend.
+ */
+export const MAX_TOKENS = 11_000;
 
 export const LIMITS = {
   /** Model calls per visitor per hour: ten creates of up to three tries each. */

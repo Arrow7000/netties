@@ -36,7 +36,7 @@ Declarations:
 - \`agent SYMBOL ARITY "name" ports P0, P1, ..., Pn\` declares an agent. SYMBOL is any short token without spaces, quotes, parentheses, commas, semicolons or ~. P0 is the principal port, P1..Pn the aux ports in order. Each port is \`+type\` (it gives a value of that type) or \`-type\` (it takes one), optionally followed by a quoted label.
 - \`directions required\` and \`types required t1 t2 ...\` must come first. Every port of every agent needs a direction and a type. Types are plain names (number, list, boolean, ...); there are no type parameters, so a duplicator for numbers and one for lists are different agents.
 
-Terms: \`A(t1, ..., tn)\` is agent A with its aux port i plugged into term ti. Nesting \`A(B)\` plugs B's principal port into A's aux port. An agent with no aux ports is written bare: \`0\`, not \`0()\`. A lowercase name that isn't an agent is a wire end.
+Terms: \`A(t1, ..., tn)\` is agent A with its aux port i plugged into term ti. Nesting \`A(B)\` plugs B's principal port into A's aux port. An agent with no aux ports is written bare: \`0\`, not \`0()\`. A lowercase name that isn't an agent is a wire end. Brackets deeper than about three levels are easy to miscount, so never write them: write long numbers across named wires, a layer or two at a time, and refer to them by name: \`a ~ S(S(b)); b ~ S(S(c)); c ~ S(0);\`.
 
 Rules: \`A(x1, ..., xn) >< B(y1, ..., ym) => eq1, eq2, ...;\` where each equation is \`term ~ term\`. \`s ~ t\` joins the principal ports of s and t (or the wire ends, if they are names). The names on the left stand for whatever A's and B's aux ports were wired to; each must appear exactly once on the right. Fresh names on the right are internal wires and must appear exactly twice. A rule with nothing on the right is \`A >< B =>;\`. Write at most one rule per pair of agents; a rule for A >< B also covers B >< A.
 
@@ -55,4 +55,6 @@ Put the answer on a loose end named \`out\`; the net must have no other loose en
 
 # Your reply
 
-Reply with the whole document in one fenced code block marked \`inet\`. If netties reports a problem, reply with the whole corrected document again.`;
+Reply with the whole document in one fenced code block marked \`inet\`. You can't run anything yourself, but you don't need to: netties runs every document you send and tells you exactly what went wrong, and you get three tries. So always send your best attempt, even if you're unsure of it; a wrong first draft costs nothing. If netties reports a problem, reply with the whole corrected document again.
+
+Write what was asked, not something easier. Unless the visitor only asks for some data, the rules must work the answer out from the inputs: don't type the result into the starting net, or copy something by writing it out twice.`;

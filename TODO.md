@@ -31,8 +31,6 @@ Choices made along the way that you haven't confirmed yet:
 
 - Run flashes each step's preview for 0.8 of a step's animation time. At
   high speeds that's under 100 ms: check whether it reads, or skip it there.
-- Parse errors gained columns and bracket messages (2026-10-13); the eval
-  (`npx vite-node eval/run.ts`) hasn't been re-run since.
 - Wires to a rule's interface ends (`pin` jobs in `route.ts`) don't detour
   round agents yet.
 - Step previews route a rule's new agents without their columns, though the
@@ -140,9 +138,40 @@ Choices made along the way that you haven't confirmed yet:
    locally with `netlify dev --command "npx vite --port 5299 --strictPort"
    --target-port 5299 --port 8899`).
    The round: brief, clickable prototypes, you pick. "Describe/create"
-   first, "explain this" second. Before relying on the eval to compare
-   models, add harder tasks (fib, map, sorting, two-type systems); add
-   Turnstile if bots show up.
+   first, "explain this" second. Add Turnstile if bots show up.
+   - **A chat, not one-offs** (you, 2026-11-04: "a proper chat interface so
+     that prompts are not one-offs into the ether which either succeed or
+     don't, but where you can have a conversation and ask for something like
+     'ok now make types required and add another agent type that does xyz'
+     within the context of an existing conversation"). What's built is
+     one-offs: `create()` takes one request, and the proxy allows three user
+     turns in all (`LIMITS.turns`). Three tries should become a cap on automatic
+     fixes per message. The model needs the current document with each message,
+     since it may have been edited by hand. The prompt and checks insist on
+     directions, types and an answer on `out`, which a chat can't. The eval only
+     has compute-an-answer tasks, so it needs follow-up and edit tasks too.
+   - **Netlify ends the response 60 s in**, even while data is flowing
+     (tested on a draft deploy, 2026-11-04). That's about 12k tokens from
+     Haiku, which often thinks for far longer on harder requests, so it gets
+     5 to 10 of the 33 hard attempts right in time; Sonnet gets 26, Opus 27
+     (`npx vite-node eval/run.ts -- --live`). Open: which model, or a
+     background function and polling so a reply can take longer (up to 15
+     minutes, included on Free).
+   - Cheaper models, 2026-11-04, routed to OpenRouter's fastest provider (its
+     default favours cheap ones, which can be 10× slower). DeepSeek V4.1 Flash
+     1017 and Particle-1 solve the nine ordinary hard tasks with new inputs
+     (25/25, 27/27) for $0.03 and $0.015 an attempt, against about $0.06 for
+     Sonnet, but think about six times as long: 7 to 10 of 33 hard attempts
+     fit in 60 s, with examples or low effort barely changing that. Neither
+     has a real lambda or a general primes. Particle-1's weights aren't open.
+     Not yet fairly tested: Beam 1.0, whose provider rejects every retry.
+   - A response killed at 60 s never reaches the code that adds the call to
+     the day's spend, so the $1 cap undercounts those. `MAX_TOKENS` stops
+     Haiku just short of it, but a slower model would need a lower cap.
+   - The prompt has to say netties checks each draft and that there are three
+     tries. Without that, or if told it may decline, Haiku says it can't run
+     netties and gives up, even on tasks it can do. If `create()` gets no code
+     after every try, it should show the visitor what the model said.
 
 ## Research
 

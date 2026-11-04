@@ -5,7 +5,7 @@ import { type Stage as CheckStage, checkReply, netText } from "../src/create/che
 import type { Answer } from "./tasks";
 
 /** How far a reply got: the site's own checks, then reading the answer. */
-export type Stage = CheckStage | "readback" | "wrong" | "ok";
+export type Stage = CheckStage | "readback" | "wrong" | "not-computed" | "not-asked" | "ok";
 
 export interface Grade {
   stage: Stage;
@@ -14,7 +14,28 @@ export interface Grade {
   feedback?: string;
   /** What `out` read back as, when it could be read. */
   got?: string;
+  /** Interactions it took, when it ran. */
+  interactions?: number;
+  /** The document's agents and rules, to compare across a conversation. */
+  rules?: string;
 }
+
+/** What else a right answer needs, so that typing the answer in doesn't pass. */
+export interface Demands {
+  /** Fewer interactions than this means the net didn't really compute the answer. */
+  minInteractions?: number;
+  /** Agents the task asks for: each must match some agent's symbol or name. */
+  needs?: { what: string; agent: RegExp }[];
+}
+
+/** A document's agents and rules, whatever its starting net. */
+const rulesOf = (code: string): string =>
+  code
+    .split("\n")
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l) => l.startsWith("agent ") || l.includes("><"))
+    .sort()
+    .join("\n");
 
 /** The answer goes on a loose end named out, and there are no others. */
 function oneOut(_sys: System, net: Net): string | undefined {
@@ -26,19 +47,27 @@ function oneOut(_sys: System, net: Net): string | undefined {
 }
 
 /** Grade a reply against the expected answer. */
-export function grade(reply: string, answer: Answer): Grade {
+export function grade(reply: string, answer: Answer, demands: Demands = {}): Grade {
   const c = checkReply(reply, oneOut);
   if (!c.ok) return { stage: c.stage, ok: false, feedback: c.feedback };
-  const { sys, net, stats } = c;
+  const { sys, net, stats, code } = c;
+  const ran = { interactions: stats.interactions, rules: rulesOf(code) };
   const read = readBack(sys, net, answer.kind);
-  if ("error" in read) return { stage: "readback", ok: false, feedback: `The net finished after ${stats.interactions} interactions, but the result can't be read: ${read.error}\nIt finished as:\n${netText(sys, net)}` };
-  if (read.text === show(answer)) return { stage: "ok", ok: true, got: read.text };
-  return {
-    stage: "wrong",
-    ok: false,
-    got: read.text,
-    feedback: `The net finished after ${stats.interactions} interactions, and out reads as ${read.text}. That isn't the answer to the task.\nIt finished as:\n${netText(sys, net)}`,
-  };
+  if ("error" in read) return { ...ran, stage: "readback", ok: false, feedback: `The net finished after ${stats.interactions} interactions, but the result can't be read: ${read.error}\nIt finished as:\n${netText(sys, net)}` };
+  if (read.text !== show(answer))
+    return {
+      ...ran,
+      stage: "wrong",
+      ok: false,
+      got: read.text,
+      feedback: `The net finished after ${stats.interactions} interactions, and out reads as ${read.text}. That isn't the answer to the task.\nIt finished as:\n${netText(sys, net)}`,
+    };
+  const agents = code.split("\n").filter((l) => /^\s*agent /.test(l));
+  const missing = (demands.needs ?? []).filter((n) => !agents.some((a) => n.agent.test(a))).map((n) => n.what);
+  if (missing.length) return { ...ran, stage: "not-asked", ok: false, got: read.text, feedback: `The answer is right, but the document has no agent for: ${missing.join(", ")}. The task asks for those.` };
+  if (stats.interactions < (demands.minInteractions ?? 0))
+    return { ...ran, stage: "not-computed", ok: false, got: read.text, feedback: `The answer is right, but the net took only ${stats.interactions} interactions, so it mostly starts out holding the answer. Write rules that work it out from the inputs.` };
+  return { ...ran, stage: "ok", ok: true, got: read.text };
 }
 
 const show = (a: Answer): string =>

@@ -31,6 +31,48 @@ describe("grade", () => {
     expect(g.feedback).not.toContain("5");
   });
 
+  it("doesn't pass an answer that was only typed in", () => {
+    const literal = NUMBERS + "out ~ S(S(S(S(S(0)))));";
+    expect(grade(block(literal), N(5))).toMatchObject({ stage: "ok", interactions: 0 });
+    const g = grade(block(literal), N(5), { minInteractions: 1 });
+    expect(g.stage).toBe("not-computed");
+    expect(g.feedback).toContain("0 interactions");
+  });
+
+  it("insists on the agents a task asks for", () => {
+    const needs = [{ what: "abstraction", agent: /lam/i }];
+    expect(grade(block(NUMBERS + "+(out, S(S(0))) ~ S(S(S(0)));"), N(5), { needs })).toMatchObject({ stage: "not-asked" });
+    const withLam = NUMBERS.replace("agent 0 0", 'agent Lam 0 "abstraction" ports +number\nagent 0 0');
+    expect(grade(block(withLam + "+(out, S(S(0))) ~ S(S(S(0)));"), N(5), { needs })).toMatchObject({ stage: "ok" });
+  });
+
+  it("gives the same rules for documents that only differ in their starting net", () => {
+    const a = grade(block(NUMBERS + "+(out, S(S(0))) ~ S(S(S(0)));"), N(5));
+    const b = grade(block(NUMBERS + "+(out, S(0)) ~ S(0);"), N(2));
+    expect(a.rules).toBeTruthy();
+    expect(a.rules).toBe(b.rules);
+  });
+
+  it("finds where a bracket too many really is", () => {
+    const list = `directions required
+types required number list
+agent 0 0 "zero" ports +number
+agent S 1 "successor" ports +number, -number
+agent N 0 "nil" ports +list
+agent C 2 "cons" ports +list, -number, -list
+out ~ C(S(0), C(S(S(S(0)))), N));`;
+    const g = grade(block(list), { kind: "list", value: [1, 3] });
+    expect(g.stage).toBe("parse");
+    expect(g.feedback).toContain('one ")" too many');
+    expect(g.feedback).toContain("closes with 1 term, but C takes 2");
+    expect(g.feedback).toContain('S(S(S(0)))), has 3 "(" and 4 ")"');
+  });
+
+  it("takes a long number across named wires, as the bracket advice says", () => {
+    const flat = NUMBERS + "a ~ S(S(b));\nb ~ S(S(c));\nc ~ S(0);\nout ~ a;";
+    expect(grade(block(flat), N(5))).toMatchObject({ stage: "ok" });
+  });
+
   it("reports parse errors with the line", () => {
     const g = grade(block(NUMBERS + "+(out, S(0) ~ 0;"), N(1));
     expect(g.stage).toBe("parse");

@@ -33,14 +33,14 @@ export function extractCode(reply: string): string | undefined {
  */
 export function checkReply(reply: string, before?: (sys: System, net: Net) => string | undefined): Checked {
   const code = extractCode(reply);
-  if (code === undefined) return { ok: false, stage: "no-code", feedback: "I couldn't find a fenced code block in your reply." };
+  if (code === undefined) return { ok: false, stage: "no-code", feedback: "I couldn't find a fenced code block in your reply. Send your best attempt at what was asked, not something easier: netties will tell you what's wrong with it." };
 
   let sys: System;
   let net: Net;
   try {
     ({ system: sys, net } = parse(code));
   } catch (e) {
-    if (e instanceof ParseError) return { ok: false, stage: "parse", feedback: `The text didn't parse: ${e.message}.` };
+    if (e instanceof ParseError) return { ok: false, stage: "parse", feedback: `The text didn't parse: ${e.message}.${bracketSlip(code, e.line) ?? ""}` };
     return { ok: false, stage: "parse", feedback: `The text didn't load: ${(e as Error).message}.` };
   }
 
@@ -65,6 +65,45 @@ export function checkReply(reply: string, before?: (sys: System, net: Net) => st
     return { ok: false, stage: "run", feedback: `The net got stuck after ${stats.interactions} interactions: ${[...pairs].join("; ")}, and there's no rule for that pair.\nIt stopped as:\n${netText(sys, net)}` };
   }
   return { ok: true, code, sys, net, stats };
+}
+
+/**
+ * Where a bracket error on a line really began. A ")" too many is only noticed
+ * at the end of the line, long after the slip, so look for the first agent that
+ * closes with the wrong number of terms, and count the brackets of what it holds.
+ */
+export function bracketSlip(code: string, lineNo: number): string | undefined {
+  const lines = code.split("\n");
+  const line = lines[lineNo - 1];
+  if (line === undefined) return undefined;
+  const arity = new Map<string, number>();
+  for (const l of lines) {
+    const m = /^\s*agent\s+(\S+)\s+(\d+)/.exec(l);
+    if (m) arity.set(m[1]!, Number(m[2]));
+  }
+  const open: { name: string; at: number; terms: number }[] = [];
+  for (const m of line.matchAll(/[(),]|[^\s(),;~]+/g)) {
+    const t = m[0];
+    if (t === "(") open.push({ name: line.slice(0, m.index).trimEnd().split(/[\s(),;~]/).at(-1) ?? "", at: m.index, terms: 1 });
+    else if (t === ",") {
+      if (open.length) open.at(-1)!.terms++;
+    } else if (t === ")") {
+      const top = open.pop();
+      if (!top) return undefined;
+      const want = arity.get(top.name);
+      if (want === undefined || want === top.terms) continue;
+      // The term that was being written when the agent closed.
+      const held = line.slice(top.at + 1, m.index + 1);
+      const inner = held.slice(held.lastIndexOf(",") < 0 ? 0 : held.lastIndexOf(",") + 1).trim();
+      const count = (c: string) => inner.split(c).length - 1;
+      return (
+        `\nThe slip is earlier than that: ${top.name}( at column ${top.at + 1} closes with ${top.terms} term${top.terms === 1 ? "" : "s"}, but ${top.name} takes ${want}. ` +
+        `The part ending there, ${inner}, has ${count("(")} "(" and ${count(")")} ")".\n` +
+        "Deep brackets are easy to miscount. Don't try to count them again: write long numbers across named wires instead, a layer or two at a time, as in a ~ S(S(b)); b ~ S(S(c)); c ~ S(0);"
+      );
+    }
+  }
+  return undefined;
 }
 
 function checkTypes(sys: System, net: Net): string[] {
