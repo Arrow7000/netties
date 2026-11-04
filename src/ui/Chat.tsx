@@ -5,6 +5,7 @@ import type { Chat, Entry } from "./chatStore";
 import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
 import * as I from "./icons";
+import { pieces } from "./pieces";
 
 /** Width of the panel on a desktop, which the canvas leaves room for. */
 export const CHAT_WIDTH = 360;
@@ -29,33 +30,51 @@ function anchored(el: HTMLElement, onChange?: (atEnd: boolean) => void) {
     if (v !== atEnd) onChange?.(v);
     atEnd = v;
   };
-  /** Where following last left it: above that, someone has scrolled up, even if the browser hasn't said so yet. */
-  let left = 0;
-  const follow = () => {
-    if (!atEnd) return;
-    if (el.scrollTop < left - 1) return set(false);
+  /** Where it was when last looked at, and how far down it could go then. */
+  let top = 0;
+  let max = 0;
+  /**
+   * What matters is which way it moved, not how far it is from the end: more
+   * may have come in since it was last at the end. Going up without the content
+   * shrinking is someone scrolling; going down to where the end was takes hold again.
+   */
+  const look = () => {
+    const now = el.scrollTop;
+    const can = el.scrollHeight - el.clientHeight;
+    if (now < top - 1 && can >= max) set(false);
+    else if (now > top && now >= Math.min(max, can) - 24) set(true);
+    top = now;
+    max = can;
+  };
+  const toBottom = () => {
     el.scrollTop = el.scrollHeight;
-    left = el.scrollTop;
+    top = el.scrollTop;
+    max = el.scrollHeight - el.clientHeight;
   };
-  const onScroll = () => {
-    set(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
-    if (atEnd) left = el.scrollTop;
+  // Reading the height makes the browser lay out what has changed, so it's done once a frame however many tokens came in.
+  let frame = 0;
+  const soon = () => {
+    frame ||= requestAnimationFrame(() => {
+      frame = 0;
+      look();
+      if (atEnd) toBottom();
+    });
   };
-  el.addEventListener("scroll", onScroll, { passive: true });
-  const changes = new MutationObserver(follow);
+  el.addEventListener("scroll", look, { passive: true });
+  const changes = new MutationObserver(soon);
   changes.observe(el, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["open"] });
-  const resizes = new ResizeObserver(follow);
+  const resizes = new ResizeObserver(soon);
   resizes.observe(el);
   onCleanup(() => {
-    el.removeEventListener("scroll", onScroll);
+    cancelAnimationFrame(frame);
+    el.removeEventListener("scroll", look);
     changes.disconnect();
     resizes.disconnect();
   });
   return {
     toEnd() {
       set(true);
-      el.scrollTop = el.scrollHeight;
-      left = el.scrollTop;
+      toBottom();
     },
   };
 }
@@ -99,8 +118,21 @@ function blocksOf(text: string): Block[] {
 
 /** Enough of Markdown for what models write. */
 function Prose(props: { text: string }) {
+  // Blocks that haven't changed stay the same objects, so For leaves them on the page and only the one being written is rebuilt.
+  let kept = new Map<string, Block>();
+  const blocks = () => {
+    const next = new Map<string, Block>();
+    const out = blocksOf(props.text).map((b) => {
+      const key = JSON.stringify(b);
+      const same = kept.get(key) ?? next.get(key) ?? b;
+      next.set(key, same);
+      return same;
+    });
+    kept = next;
+    return out;
+  };
   return (
-    <For each={blocksOf(props.text)}>
+    <For each={blocks()}>
       {(b) => {
         switch (b.kind) {
           case "ul":
@@ -132,7 +164,9 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
       <Show when={props.t.thinking}>
         <details class="chat-thought" onToggle={(e) => e.currentTarget.open && trace?.toEnd()}>
           <summary classList={{ live: thinking() }}>{thinking() ? `${doing("thinking")}, ${seconds(props.now - (props.t.thoughtFrom ?? props.turn.since))}` : `Thought for ${seconds(props.t.thoughtMs ?? 0)}`}</summary>
-          <div ref={(el) => (trace = anchored(el))}>{props.t.thinking}</div>
+          <div ref={(el) => (trace = anchored(el))}>
+            <Index each={pieces(props.t.thinking)}>{(p) => <div>{p()}</div>}</Index>
+          </div>
         </details>
       </Show>
       <Show when={words()}>
