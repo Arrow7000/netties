@@ -39,6 +39,14 @@ export const Expand = icon(() => <path d="M9.5 2.5h4v4M13.5 2.5L9 7M6.5 13.5h-4v
 export const Chat = icon(() => <path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7l-3 2.5V11A1 1 0 0 1 3 10z" {...line} />);
 export const Send = icon(() => <path d="M8 13V3.5M4 7.5l4-4 4 4" {...line} />);
 export const Close = icon(() => <path d="M4 4l8 8M12 4l-8 8" {...line} />);
+/** Put out of the way, to come back to: a bar along the bottom, unlike Minus, which is zooming out. */
+export const Minimise = icon(() => <path d="M3.5 12.5h9" {...line} />);
+export const Gear = icon(() =>
+  <>
+    <path d="M12.78 8.44L14.24 9.41L13.41 11.41L11.69 11.07L11.07 11.69L11.41 13.41L9.41 14.24L8.44 12.78L7.56 12.78L6.59 14.24L4.59 13.41L4.93 11.69L4.31 11.07L2.59 11.41L1.76 9.41L3.22 8.44L3.22 7.56L1.76 6.59L2.59 4.59L4.31 4.93L4.93 4.31L4.59 2.59L6.59 1.76L7.56 3.22L8.44 3.22L9.41 1.76L11.41 2.59L11.07 4.31L11.69 4.93L13.41 4.59L14.24 6.59L12.78 7.56z" {...line} stroke-width={1.2} />
+    <circle cx="8" cy="8" r="1.9" {...line} stroke-width={1.2} />
+  </>,
+);
 export const Component = icon(() =>
   <>
     <rect x="2.5" y="3.5" width="11" height="9" rx="2" {...line} stroke-width={1.3} stroke-dasharray="2 1.5" />

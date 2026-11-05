@@ -4324,8 +4324,12 @@ button.select.open {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 6px 0;
-  border-top: 1px solid var(--line);
+  padding: 0 6px 4px;
+}
+
+.chat-settings {
+  flex: none;
+  margin-left: auto;
 }
 
 .chat-model .menu-wrap {
@@ -4359,7 +4363,7 @@ button.select.open {
   left: 0;
 }
 
-.chat-model .menu-wrap:last-child .menu {
+.chat-model .menu-wrap + .menu-wrap .menu {
   left: auto;
   right: 0;
   min-width: 150px;
@@ -4380,6 +4384,15 @@ button.select.open {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+
+/* Whose models these are stays in sight, all the way down a long list. */
+.model-scroll .menu-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  max-width: none;
+  background: var(--chrome);
 }
 
 .model-scroll .mi-text > span {
@@ -4404,6 +4417,7 @@ button.select.open {
 }
 
 .model-form {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -4411,8 +4425,15 @@ button.select.open {
   outline: none;
 }
 
+.model-close {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+
 .model-form h2 {
   margin: 0;
+  padding-right: 28px;
   font-size: 14px;
   font-weight: 600;
 }

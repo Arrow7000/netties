@@ -4,6 +4,7 @@ import type { Chat, Waiting } from "./chatStore";
 import { copyText } from "./clipboard";
 import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
+import * as I from "./icons";
 import { Menu, MenuItem } from "./Menu";
 import { nameHint, nameOf, presetsHere } from "./modelSettings";
 
@@ -202,6 +203,11 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
         save();
       }}
     >
+      <Show when={props.chat.settings()}>
+        <button type="button" class="btn icon model-close" onClick={() => props.chat.closeSettings()} title="Close, without saving" aria-label="Close">
+          <I.Close />
+        </button>
+      </Show>
       {(() => {
         const w = why();
         if (w?.kind === "waiting") {
@@ -220,7 +226,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
             </>
           );
         }
-        if (!props.first) return <h2>Model</h2>;
+        if (!props.first) return <h2>Providers and keys</h2>;
         return (
           <>
             <h2>Choose a model to chat with</h2>
@@ -327,7 +333,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
         <Show when={saved()?.key}>
           <button
             type="button"
-            class="btn"
+            class="btn danger"
             title={`Forget the key kept for ${nameOf(provider())}, keeping the rest. Your chats stay.`}
             onClick={() => {
               models.forgetKey(provider());
@@ -341,7 +347,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
         <Show when={saved() && !preset()?.needsKey}>
           <button
             type="button"
-            class="btn"
+            class="btn danger"
             title={`Remove ${nameOf(provider())} and all that's kept for it, so it's no longer in the model menu. Your chats stay.`}
             onClick={() => {
               models.remove(provider());
@@ -358,7 +364,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
 }
 
 /** What each provider that's set up has to offer, as it comes in. */
-function ProviderModels(props: { chat: Chat; provider: string; query: string; heading: boolean; onPick: () => void }) {
+function ProviderModels(props: { chat: Chat; provider: string; query: string; onPick: () => void }) {
   const [listing, setListing] = createSignal<Listing>({ kind: "loading" });
   props.chat.models.models(props.provider).then(
     (models) => setListing({ kind: "loaded", models }),
@@ -378,9 +384,7 @@ function ProviderModels(props: { chat: Chat; provider: string; query: string; he
   };
   return (
     <>
-      <Show when={props.heading}>
-        <div class="menu-head">{nameOf(props.provider)}</div>
-      </Show>
+      <div class="menu-head">{nameOf(props.provider)}</div>
       <Show when={listing().kind === "loading"}>
         <div class="model-note">Asking what it has…</div>
       </Show>
@@ -429,14 +433,18 @@ export function ModelPicker(props: { chat: Chat }) {
             if (!fingers()) box.focus();
           });
           const typed = () => query().trim();
-          const providers = () => chat.models.ready();
+          /** The one this chat is on comes first, so that's what's at the top of the list. */
+          const providers = () => {
+            const on = chat.choice()?.provider;
+            return [...chat.models.ready()].sort((a, b) => Number(b === on) - Number(a === on));
+          };
           /** A name that isn't on any list can still be used, on the provider this chat is on. */
           const typedOn = () => (chat.usable() ? chat.choice()!.provider : providers()[0]);
           return (
             <>
               <input ref={box} class="input" aria-label="Search models" placeholder={typedOn() ? `Search, or type ${nameHint(typedOn()!)}` : "Search, or type a model's name"} spellcheck={false} autocomplete="off" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
               <div class="model-scroll">
-                <For each={providers()}>{(id) => <ProviderModels chat={chat} provider={id} query={query()} heading={providers().length > 1} onPick={close} />}</For>
+                <For each={providers()}>{(id) => <ProviderModels chat={chat} provider={id} query={query()} onPick={close} />}</For>
                 <Show when={typed() && typedOn()}>
                   <MenuItem
                     title={`Use "${typed()}"`}

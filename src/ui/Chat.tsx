@@ -626,8 +626,8 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
         <button class="btn" onClick={() => (void chat.newChat(), refocus())} disabled={!chat.entries().length} title="Start a new conversation">
           New chat
         </button>
-        <button class="btn icon" onClick={() => props.onClose()} title="Close" aria-label="Close">
-          <I.Close />
+        <button class="btn icon" onClick={() => props.onClose()} title="Minimise. A reply that's coming keeps coming." aria-label="Minimise">
+          <I.Minimise />
         </button>
       </header>
       <Show when={setting()}>
@@ -650,10 +650,6 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
             Latest
           </button>
         </Show>
-      </div>
-      <div class="chat-model" style={{ display: setting() ? "none" : undefined }}>
-        <ModelPicker chat={chat} />
-        <EffortPicker chat={chat} />
       </div>
       <form
         class="chat-compose"
@@ -693,6 +689,13 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
           <I.Send />
         </button>
       </form>
+      <div class="chat-model" style={{ display: setting() ? "none" : undefined }}>
+        <ModelPicker chat={chat} />
+        <EffortPicker chat={chat} />
+        <button class="btn icon chat-settings" onClick={() => chat.openSettings()} title="Providers and keys" aria-label="Providers and keys">
+          <I.Gear />
+        </button>
+      </div>
     </div>
   );
 }
