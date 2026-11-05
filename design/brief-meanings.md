@@ -62,8 +62,9 @@ each rule firing is one line of working, and copying leaves the line unchanged.
 ## What I measured
 
 - **Guessed readings, all 25 examples, 802 drawings**: folding shows 52% of the
-  agents overall, from none on plain combinators to 31% on primes. The final answer
-  held at every step of every example. 90 tests in `src/dev/reading.test.ts`.
+  agents overall: 31% on primes, and no change on plain combinators, which have
+  nothing to fold. The final answer held at every step checked, the first 80 of
+  each example. 90 tests in `src/dev/reading.test.ts`.
 - **Can the chat's model write these?** `scripts/reading-eval.ts`, DeepSeek V4.1
   Flash 1017, 14 systems, 2 runs each: **27 of 28 passed, 25 on the first try**,
   $0.48 in all. Three of the systems had every name stripped out, so it had only
