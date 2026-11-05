@@ -94,9 +94,10 @@ export function createModelSettings() {
     ready: () => Object.keys(stored().providers).filter((id) => connection(id)),
     defaults: () => stored().default,
     usable: (c: Choice | undefined): c is Choice => !!c && !!c.model && !!connection(c.provider),
-    /** Keep what was filled in for a provider, and make this the choice for new chats. */
-    save(id: string, entry: ProviderEntry, effort: Effort) {
-      write({ providers: { ...stored().providers, [id]: entry }, default: { provider: id, model: entry.model ?? "", effort } });
+    /** Keep what was filled in for a provider, and make this the choice for new chats unless told it's only being put right. */
+    save(id: string, entry: ProviderEntry, effort: Effort, asDefault = true) {
+      const had = stored().default;
+      write({ ...stored(), providers: { ...stored().providers, [id]: entry }, default: asDefault || !had ? { provider: id, model: entry.model ?? "", effort } : { ...had, effort } });
     },
     /** Forget a provider, key and all. What was said with it stays. */
     forget(id: string) {

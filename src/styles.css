@@ -4413,6 +4413,12 @@ button.select.open {
   color: var(--muted);
 }
 
+.model-form .model-why {
+  color: var(--stuck);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .model-form label {
   display: flex;
   flex-direction: column;

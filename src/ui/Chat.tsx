@@ -359,14 +359,20 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
                 {end.message}
                 <Show when={latest()}>
                   <div class="chat-actions">
+                    {/* Going again with a key that was turned down won't help, so changing it comes first. */}
+                    <Show when={end.code === "key"}>
+                      <button class="btn chat-again" onClick={() => props.chat.fixSettings(props.index)}>
+                        Change the key
+                      </button>
+                    </Show>
                     <Show when={canResume(props.turn)}>
                       <ResumeButton chat={props.chat} />
                     </Show>
                     <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
                       Try again
                     </button>
-                    <Show when={SETTINGS_CAN_FIX.includes(end.code)}>
-                      <button class="btn chat-again" onClick={props.chat.openSettings}>
+                    <Show when={end.code !== "key" && SETTINGS_CAN_FIX.includes(end.code)}>
+                      <button class="btn chat-again" onClick={() => props.chat.fixSettings(props.index)}>
                         Check settings
                       </button>
                     </Show>

@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { CUSTOM, EFFORTS, type Effort, type ModelInfo, type Wire, isLocalAddress, listModels, normalizeUrl } from "../create/provider";
-import type { Chat } from "./chatStore";
+import type { Chat, Waiting } from "./chatStore";
 import { fingers } from "./compact";
 import { Menu, MenuItem } from "./Menu";
 import { nameOf, presetsHere } from "./modelSettings";
@@ -15,6 +15,13 @@ const matching = (models: ModelInfo[], query: string) => {
 };
 const MOST_SHOWN = 100;
 
+/** What the form says when something's waiting for it, so that Save going ahead with it is no surprise. */
+const WAITING: Record<Waiting, { head: string; note: string; button: string }> = {
+  send: { head: "Choose a model to send your message", note: "Your message goes as soon as you save. Cancel keeps it in the box.", button: "Save and send" },
+  resume: { head: "Choose a model to carry on with", note: "The reply picks up from where it got to as soon as you save.", button: "Save and resume" },
+  retry: { head: "Choose a model to try again with", note: "The reply starts over as soon as you save.", button: "Save and try again" },
+};
+
 /**
  * Choosing a provider, its key and a model. The key stays in this browser. The
  * list of models comes from the provider itself as soon as there's enough to ask it with, which also shows whether the key works.
@@ -22,11 +29,14 @@ const MOST_SHOWN = 100;
 export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
   const models = props.chat.models;
   const here = presetsHere();
+  const why = () => props.chat.settings();
   /**
    * The chat's provider, when it's the chat that needs setting up. Asked for from
    * the menu, it's the default's, or Save would move the default to wherever this chat happens to be.
    */
-  const start = (props.chat.settings() ? models.defaults()?.provider : undefined) ?? props.chat.choice()?.provider ?? here[0]!.id;
+  const onChat = props.chat.choice()?.provider;
+  const onDefault = models.defaults()?.provider;
+  const start = (why()?.kind === "asked" ? onDefault : onChat) ?? onDefault ?? here[0]!.id;
   const [provider, setProvider] = createSignal(start);
   const saved = () => models.entry(provider());
   const preset = () => here.find((p) => p.id === provider());
@@ -46,9 +56,12 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
     setUrl(e?.url ?? (preset()?.local ? preset()!.url : ""));
     setWire(e?.wire ?? "openai");
     setKey(e?.key ?? "");
-    // What new chats really use, which a pick in a chat doesn't change.
+    setModel(filled());
+  };
+  /** What new chats really use, which a pick in a chat doesn't change, or else what was last saved for this provider. */
+  const filled = () => {
     const d = models.defaults();
-    setModel(d?.provider === provider() ? d.model : (e?.model ?? ""));
+    return d?.provider === provider() ? d.model : (saved()?.model ?? "");
   };
   load();
 
@@ -82,10 +95,30 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
     return l.kind === "loaded" ? matching(l.models, model()).slice(0, MOST_SHOWN) : [];
   };
 
+  /** Whether saving only puts a failed chat's key or address right: the same provider, and the model field left alone. Then it's on the model it was on, and new chats are too. */
+  const keepsChat = () => {
+    const w = why();
+    return w?.kind === "fixing" && w.code !== "model" && props.chat.choice()?.provider === provider() && model().trim() === filled();
+  };
+
+  /** What the chat being put right is on, if that isn't what's in the model field. */
+  const chatOnOther = () => (why()?.kind === "fixing" && props.chat.choice()?.model !== model().trim() ? props.chat.choice()?.model : undefined);
+
   const save = () => {
     if (!canSave()) return;
-    models.save(provider(), entry(), effort());
-    props.chat.closeSettings(true);
+    const keep = keepsChat();
+    models.save(provider(), entry(), effort(), !keep);
+    props.chat.closeSettings(true, keep);
+  };
+
+  /** Save takes a chat that's waiting along with it, so a field only about new chats would mislead. */
+  const modelLabel = () => (why()?.kind === "waiting" ? "Model for this chat and new chats" : "Model for new chats");
+
+  const saveLabel = () => {
+    const w = why();
+    if (w?.kind === "waiting") return WAITING[w.action].button;
+    if (w?.kind === "fixing") return w.action === "resume" ? "Save and resume" : "Save and try again";
+    return "Save";
   };
 
   return (
@@ -96,10 +129,32 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
         save();
       }}
     >
-      <Show when={props.first} fallback={<h2>Model</h2>}>
-        <h2>Choose a model to chat with</h2>
-        <p>The chat runs on your own provider and API key, or on a model on your own computer.</p>
-      </Show>
+      {(() => {
+        const w = why();
+        if (w?.kind === "waiting") {
+          return (
+            <>
+              <h2>{WAITING[w.action].head}</h2>
+              <p>{WAITING[w.action].note}</p>
+            </>
+          );
+        }
+        if (w?.kind === "fixing") {
+          return (
+            <>
+              <h2>{w.code === "key" ? "Change the key" : "Check the settings"}</h2>
+              <p class="model-why">{w.message}</p>
+            </>
+          );
+        }
+        if (!props.first) return <h2>Model</h2>;
+        return (
+          <>
+            <h2>Choose a model to chat with</h2>
+            <p>The chat runs on your own provider and API key, or on a model on your own computer.</p>
+          </>
+        );
+      })()}
       <label>
         Provider
         <select
@@ -149,14 +204,17 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
         </span>
       </label>
       <label>
-        Model for new chats
-        <input class="input" aria-label="Model for new chats" spellcheck={false} autocomplete="off" placeholder={listing().kind === "loaded" ? "Search, or type a model's name" : "The model's name"} value={model()} onInput={(e) => setModel(e.currentTarget.value)} />
+        {modelLabel()}
+        <input class="input" aria-label={modelLabel()} spellcheck={false} autocomplete="off" placeholder={listing().kind === "loaded" ? "Search, or type a model's name" : "The model's name"} value={model()} onInput={(e) => setModel(e.currentTarget.value)} />
         <Show when={listing().kind === "loading"}>
           <span class="hint">Asking {nameOf(provider())} what it has…</span>
         </Show>
         <Show when={listing().kind === "failed" ? (listing() as { message: string }).message : undefined}>{(m) => <span class="hint bad">{m()}</span>}</Show>
         <Show when={listing().kind === "loaded" && !(listing() as { models: ModelInfo[] }).models.length}>
           <span class="hint">{nameOf(provider())} didn't list any models{local() ? ". If you haven't downloaded one yet, do that first" : ""}. You can still type a name here.</span>
+        </Show>
+        <Show when={chatOnOther()}>
+          {(m) => <span class="hint">{keepsChat() ? `Saving keeps this chat on ${m()}. Change the model here to move it.` : `This chat moves to ${model().trim() || "this model"} when you save.`}</span>}
         </Show>
         <Show when={choices().length && !choices().some((m) => m.id === model())}>
           <div class="model-choices" role="listbox" aria-label="Models">
@@ -172,7 +230,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
       </label>
       <div class="model-actions">
         <button type="submit" class="btn primary" disabled={!canSave()}>
-          Save
+          {saveLabel()}
         </button>
         <Show when={props.chat.settings()}>
           <button type="button" class="btn" onClick={() => props.chat.closeSettings()}>

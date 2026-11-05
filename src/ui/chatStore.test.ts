@@ -852,6 +852,59 @@ describe("chats", () => {
       expect(t.chat.choice()).toMatchObject({ model: "fresh" });
     });
 
+    describe("put right from a failed reply", () => {
+      /** A chat whose reply was refused. */
+      const refused = async (b: ReturnType<typeof browser>, calls: ReturnType<typeof model>) => {
+        const t = b.open();
+        await ready(t);
+        const real = fetch;
+        vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { message: "The key was turned down." } }), { status: 401 }));
+        await t.send("Double 2.");
+        vi.stubGlobal("fetch", real);
+        expect(calls).toHaveLength(0);
+        return t;
+      };
+
+      it("says why it's there, and goes again after saving, on what was saved", async () => {
+        const b = browser();
+        const calls = model();
+        const t = await refused(b, calls);
+        t.chat.fixSettings(1);
+        expect(t.chat.settings()).toMatchObject({ kind: "fixing", code: "key", message: expect.stringContaining("The key was turned down."), action: "retry" });
+        t.chat.models.save("custom", { url: "https://other.test/v1", model: "better" }, "default");
+        t.chat.closeSettings(true);
+        expect(t.chat.choice()).toMatchObject({ provider: "custom", model: "better" });
+        await vi.waitFor(() => expect(calls).toHaveLength(1));
+      });
+
+      it("stays on the chat's own model when it only keeps a new key, and leaves the default alone", async () => {
+        const b = browser();
+        const calls = model();
+        const t = await refused(b, calls);
+        t.chat.setModel("custom", "picked");
+        t.chat.fixSettings(1);
+        t.chat.models.save("custom", { url: "https://model.test/v1", key: "new", model: "m" }, "default", false);
+        t.chat.closeSettings(true, true);
+        expect(t.chat.choice()).toMatchObject({ model: "picked" });
+        expect(t.chat.models.defaults()).toMatchObject({ model: "m" });
+        await vi.waitFor(() => expect(calls).toHaveLength(1));
+      });
+
+      it("does nothing on Cancel, and lets go on moving to another chat", async () => {
+        const b = browser();
+        const calls = model();
+        const t = await refused(b, calls);
+        t.chat.fixSettings(1);
+        t.chat.closeSettings();
+        expect(t.chat.settings()).toBeUndefined();
+        t.chat.fixSettings(1);
+        await t.chat.newChat();
+        await settled();
+        expect(t.chat.settings()).toBeUndefined();
+        expect(calls).toHaveLength(0);
+      });
+    });
+
     it("a new chat with nothing set up can't start, and starts going by the settings", async () => {
       const b = browser();
       noModel(b);

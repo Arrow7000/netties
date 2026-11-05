@@ -152,8 +152,13 @@ export function canResume(turn: Turn): boolean {
   const end = turn.phase.end;
   if (end.kind === "stopped") return end.by !== "message";
   if (end.kind !== "failed" || !["cut-off", "dropped", "unreachable", "failed"].includes(end.code)) return false;
-  const last = turn.tries.at(-1);
-  return !!last && !!(last.thinking.trim() || last.reply.trim());
+  // A resume that failed before saying anything still has what came before it to go on.
+  for (let i = turn.tries.length - 1; i >= 0; i--) {
+    const t = turn.tries[i]!;
+    if (t.thinking.trim() || t.reply.trim()) return true;
+    if (!t.resumed) return false;
+  }
+  return false;
 }
 
 /** Which try this is, not counting calls that only asked to see examples. A resumed reply starts the count again. */

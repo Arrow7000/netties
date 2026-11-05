@@ -209,6 +209,8 @@ describe("resuming a reply", () => {
     expect(canResume(over(withWords(), { kind: "failed", code: "key", message: "" }))).toBe(false);
     expect(canResume(over(updateTurn(newTurn(1), { kind: "try" }), { kind: "failed", code: "dropped", message: "" }))).toBe(false);
     expect(canResume(over(withWords(), { kind: "said" }))).toBe(false);
+    // A resume that failed before it said anything still has what came before it.
+    expect(canResume(over(updateTurn(withWords(), { kind: "try", resumed: true }), { kind: "failed", code: "unreachable", message: "" }))).toBe(true);
     expect(canResume(withWords())).toBe(false);
   });
 

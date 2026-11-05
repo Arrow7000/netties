@@ -22,6 +22,18 @@ const SAVE_EVERY = 2000;
 
 export type { Entry };
 
+/** What can be held up for want of a model. */
+export type Waiting = "send" | "resume" | "retry";
+
+/** Why the settings are on the screen. */
+export type SettingsWhy =
+  /** Asked for from the menu. */
+  | { kind: "asked" }
+  /** Something needs a model, and goes ahead once there is one. */
+  | { kind: "waiting"; action: Waiting; then: () => void }
+  /** A reply failed in a way the settings might put right, and goes again after them. */
+  | { kind: "fixing"; code: string; message: string; action: "resume" | "retry"; then: () => void };
+
 /** What tabs tell each other. Tabs on the same chat follow each other; others just keep their lists up to date. */
 type News = { id: string; listing: Listing; chat: Saved } | { id: string; gone: true } | { id: string; title: string };
 
@@ -74,12 +86,12 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     }
   };
   const [draft, setDraft] = createSignal("");
-  /** The settings on the screen, and what to carry on with after them if they were asked for by something that needs a model. */
-  const [settings, setSettings] = createSignal<{ then?: () => void } | undefined>();
+  /** The settings on the screen, and why. */
+  const [settings, setSettings] = createSignal<SettingsWhy | undefined>();
   const chosen = (t: Thread) => t.choice() ?? models.defaults();
   const usable = () => models.usable(chosen(current()));
   /** Do this if there's a model to do it with, and otherwise ask for one first. Reading what's been said never needs one. */
-  const withModel = (f: () => void) => (usable() ? f() : setSettings({ then: f }));
+  const withModel = (f: () => void, action: Waiting = "send") => (usable() ? f() : setSettings({ kind: "waiting", action, then: f }));
   let store: ChatDb | undefined;
   const news = new BroadcastChannel("netties:chat");
   /** The chats with a reply going on in this tab. */
@@ -354,6 +366,17 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     return run(t, index, RESUME, true);
   };
 
+  // What was waiting belongs to the chat it was asked for in, so going to another one lets go of it.
+  createEffect(
+    on(
+      id,
+      () => {
+        if (settings()?.kind !== "asked") setSettings(undefined);
+      },
+      { defer: true },
+    ),
+  );
+
   /** Say something else at this point instead: what came after it goes, and the net goes back to how it was then. */
   const edit = async (index: number, text: string) => {
     if (ed.screen().kind !== "net") return ed.notify("Close what's open first.");
@@ -371,6 +394,13 @@ export function createChat(ed: Editor, models = createModelSettings()) {
       ed.notify("Couldn't put the net back as it was, so it's staying as it is.");
     }
     return begin(t, text);
+  };
+
+  /** Ask again what this turn was asked. A message saved before edits existed has nowhere to go back to, so it's simply sent again. */
+  const retry = (index: number) => {
+    const asked = entries()[index - 1];
+    if (asked?.kind !== "user") return;
+    withModel(() => void (asked.at ? edit(index - 1, asked.text) : send(asked.text)), "retry");
   };
 
   return {
@@ -403,16 +433,42 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     },
     /** The settings on the screen. */
     settings,
-    openSettings: () => setSettings({}),
-    /** Leave the settings. Having saved them, a chat that needed a model takes the new choice, and whatever was waiting for it goes ahead. */
-    closeSettings(saved = false) {
-      const then = settings()?.then;
+    openSettings: () => setSettings({ kind: "asked" }),
+    /** The settings, to put right what stopped this turn. Once saved, it goes again by itself: from where it got to if there's anything to go on, otherwise from the start. */
+    fixSettings(index: number) {
+      const t = current();
+      const e = t.entries()[index];
+      if (e?.kind !== "turn" || e.turn.phase.kind !== "over" || e.turn.phase.end.kind !== "failed") return;
+      const { code, message } = e.turn.phase.end;
+      const action = canResume(e.turn) ? "resume" : "retry";
+      setSettings({
+        kind: "fixing",
+        code,
+        message,
+        action,
+        then: () => {
+          // Another tab may have moved the chat on by now.
+          if (t !== current() || index !== t.entries().length - 1) return;
+          if (action === "resume") withModel(() => void resume(), "resume");
+          else retry(index);
+        },
+      });
+    },
+    /**
+     * Leave the settings. Having saved them, a chat that needed a model or was
+     * being put right takes the new choice, and whatever was waiting goes ahead.
+     * `keepChoice` is for a chat that only needed its key or address changed, which stays on its model.
+     */
+    closeSettings(saved = false, keepChoice = false) {
+      const why = settings();
       setSettings(undefined);
       if (!saved) return;
       const t = current();
       const made = models.defaults();
-      if (made && (then || !models.usable(chosen(t)))) t.setChoice(made);
-      then?.();
+      if (made && why?.kind === "fixing") {
+        if (!keepChoice) choose(t, { ...made, effort: t.choice()?.effort ?? made.effort });
+      } else if (made && (why?.kind === "waiting" || !models.usable(chosen(t)))) t.setChoice(made);
+      if (why?.kind !== "asked") why?.then();
     },
     withModel,
     send,
@@ -450,13 +506,8 @@ export function createChat(ed: Editor, models = createModelSettings()) {
         if (t === current()) fresh();
       }),
     edit,
-    /** Ask again what this turn was asked. A message saved before edits existed has nowhere to go back to, so it's simply sent again. */
-    retry(index: number) {
-      const asked = entries()[index - 1];
-      if (asked?.kind !== "user") return;
-      withModel(() => void (asked.at ? edit(index - 1, asked.text) : send(asked.text)));
-    },
-    resume: () => withModel(() => void resume()),
+    retry,
+    resume: () => withModel(() => void resume(), "resume"),
     /** Go back to a document from earlier in the chat. If it isn't what the model last saw, its next message shows it. */
     loadDocument(code: string) {
       if (ed.screen().kind !== "net") return ed.notify("Close what's open first.");
