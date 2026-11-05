@@ -280,6 +280,11 @@ Choices made along the way that you haven't confirmed yet:
 - Extensions: native numbers, labelled duplicators, references, amb.
 - Polymorphic port types (a duplicator for any one type).
 - TikZ export.
+- Skip to the end of a run: a button that works out the result without drawing
+  the steps, for very big computations (you, 2026-11-05: "especially for very
+  big computations where the user is only interested in the results. like e.g.
+  to just run a test that their computation gets the right results"). Should be
+  cheap, since most of a run's time goes on drawing. Just pencilled in.
 
 ## Your lists, as written
 
