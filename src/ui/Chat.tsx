@@ -1,5 +1,5 @@
 import { For, Index, type JSX, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
-import { type ModelTag, type Try, type Turn, type TurnEnd, triesSoFar } from "../create/chat";
+import { type ModelTag, type Try, type Turn, type TurnEnd, canResume, triesSoFar } from "../create/chat";
 import { TRIES } from "../create/client";
 import type { Chat, Entry } from "./chatStore";
 import { fingers } from "./compact";
@@ -322,6 +322,14 @@ function EditBox(props: { text: string; onCancel: () => void; onSend: (text: str
 /** What's wrong that the settings might put right. */
 const SETTINGS_CAN_FIX = ["key", "model", "unreachable", "blocked"];
 
+function ResumeButton(props: { chat: Chat }) {
+  return (
+    <button class="btn chat-again" onClick={props.chat.resume} title="Have it pick up from how far it got, thinking included">
+      Resume
+    </button>
+  );
+}
+
 /** A model and how hard it was asked to think, as a few words. */
 const tagText = (b: ModelTag) => `${nameOf(b.provider)}: ${b.model}${b.effort === "default" ? "" : `, reasoning ${b.effort}`}`;
 const sameTag = (a: ModelTag | undefined, b: ModelTag | undefined) => a?.provider === b?.provider && a?.model === b?.model && a?.effort === b?.effort;
@@ -340,10 +348,8 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
             return (
               <div class="chat-status">
                 {end.by === "message" ? "Interrupted by your next message." : end.by === "reload" ? "Cut off by a reload. The canvas hasn't changed." : "Stopped. The canvas hasn't changed."}
-                <Show when={latest() && end.by !== "message"}>
-                  <button class="btn chat-again" onClick={props.chat.carryOn} title="Ask it to pick up from how far it got, thinking included">
-                    Continue
-                  </button>
+                <Show when={latest() && canResume(props.turn)}>
+                  <ResumeButton chat={props.chat} />
                 </Show>
               </div>
             );
@@ -353,6 +359,9 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
                 {end.message}
                 <Show when={latest()}>
                   <div class="chat-actions">
+                    <Show when={canResume(props.turn)}>
+                      <ResumeButton chat={props.chat} />
+                    </Show>
                     <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
                       Try again
                     </button>

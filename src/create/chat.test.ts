@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Asker, type Conversation, type Entry, type TurnMsg, askTitle, cleanTitle, newConversation, newTurn, plain, runTurn, settle, triesSoFar, updateTurn, userMessage } from "./chat";
+import { type Asker, type Conversation, type Entry, RESUME, type Turn, type TurnMsg, askTitle, canResume, cleanTitle, newConversation, newTurn, plain, resumedTurn, runTurn, settle, triesSoFar, updateTurn, userMessage } from "./chat";
 import { EXAMPLE } from "./prompt";
 import { ModelError, type ReplyEvent } from "./provider";
 
@@ -192,6 +192,66 @@ describe("a reply that was cut short", () => {
     for (const m of [{ kind: "try" }, { kind: "thinking", text: "Hmm.", at: 2 }] as TurnMsg[]) turn = updateTurn(turn, m);
     const { conversation } = settle([{ kind: "user", text: "Double 2." }, { kind: "turn", turn }], newConversation());
     expect(JSON.stringify(conversation.messages[1])).toContain("Hmm.");
+  });
+});
+
+describe("resuming a reply", () => {
+  const over = (t: Turn, end: Extract<TurnMsg, { kind: "over" }>["end"]) => updateTurn(t, { kind: "over", end, at: 2 });
+  const withWords = () => updateTurn(updateTurn(newTurn(1), { kind: "try" }), { kind: "writing", text: "Par" });
+
+  it("is offered for a reply cut short, not one that was refused or that never began", () => {
+    expect(canResume(over(withWords(), { kind: "stopped", by: "stop" }))).toBe(true);
+    expect(canResume(over(withWords(), { kind: "stopped", by: "reload" }))).toBe(true);
+    expect(canResume(over(withWords(), { kind: "stopped", by: "message" }))).toBe(false);
+    expect(canResume(over(withWords(), { kind: "failed", code: "cut-off", message: "" }))).toBe(true);
+    expect(canResume(over(withWords(), { kind: "failed", code: "dropped", message: "" }))).toBe(true);
+    expect(canResume(over(withWords(), { kind: "failed", code: "refused", message: "" }))).toBe(false);
+    expect(canResume(over(withWords(), { kind: "failed", code: "key", message: "" }))).toBe(false);
+    expect(canResume(over(updateTurn(newTurn(1), { kind: "try" }), { kind: "failed", code: "dropped", message: "" }))).toBe(false);
+    expect(canResume(over(withWords(), { kind: "said" }))).toBe(false);
+    expect(canResume(withWords())).toBe(false);
+  });
+
+  it("gives the model how far it got and asks it to carry on, without the visitor saying anything", async () => {
+    const dropped: Asker = async function* () {
+      yield { kind: "thinking", text: "First the zero case." };
+      yield { kind: "text", text: "Here go" };
+      throw new ModelError("dropped", "It dropped.");
+    };
+    const first = await runTurn(newConversation(), "Double 2.", "", { ask: dropped });
+    expect(first.end).toMatchObject({ kind: "failed", code: "dropped" });
+    const { f, seen } = proxy([`es.\n\n${doc(EXAMPLE)}`]);
+    const msgs: TurnMsg[] = [];
+    const { end, conversation } = await runTurn(first.conversation, RESUME, "", { ask: f, resuming: true, onMessage: (m) => msgs.push(m) });
+    expect(end).toMatchObject({ kind: "ready" });
+    expect(JSON.stringify(seen[0]![1])).toContain("First the zero case.");
+    expect(JSON.stringify(seen[0]![1])).toContain("Here go");
+    expect(seen[0]!.at(-1)!.content).toContain(RESUME);
+    expect(msgs[0]).toEqual({ kind: "try", resumed: true });
+    expect(conversation.messages.map((m) => m.role).join(" ")).toMatch(/^(user assistant ?)+$/);
+  });
+
+  it("starts the count of tries again", () => {
+    const t = [{ thinking: "", reply: "" }, { thinking: "", reply: "" }, { thinking: "", reply: "" }, { thinking: "", reply: "", resumed: true }, { thinking: "", reply: "" }];
+    expect(triesSoFar(t)).toBe(2);
+    expect(triesSoFar(t.slice(0, 3))).toBe(3);
+  });
+
+  it("carries on in the same turn, with the words so far still there", () => {
+    let t = resumedTurn(over(withWords(), { kind: "stopped", by: "stop" }), 50, { provider: "p", model: "m2", effort: "default" });
+    expect(t).toMatchObject({ phase: { kind: "waiting" }, since: 50, took: undefined, by: { model: "m2" } });
+    t = updateTurn(t, { kind: "try", resumed: true });
+    expect(t.tries).toEqual([{ thinking: "", reply: "Par" }, { thinking: "", reply: "", resumed: true }]);
+  });
+
+  it("is cut short again by a reload without saying the visitor asked twice", () => {
+    let t = over(withWords(), { kind: "stopped", by: "stop" });
+    t = updateTurn(resumedTurn(t, 3), { kind: "try", resumed: true });
+    t = updateTurn(t, { kind: "writing", text: "tial" });
+    const before: Conversation = { messages: [{ role: "user", content: "Double 2." }, { role: "assistant", content: [{ type: "text", text: "cut" }] }] };
+    const { conversation } = settle([{ kind: "user", text: "Double 2." }, { kind: "turn", turn: t }], before);
+    expect(conversation.messages.map((m) => (m.role === "user" ? m.content : "")).filter(Boolean)).toEqual(["Double 2.", RESUME]);
+    expect(JSON.stringify(conversation.messages.at(-1))).toContain("tial");
   });
 });
 

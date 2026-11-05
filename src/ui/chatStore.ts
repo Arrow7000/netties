@@ -1,6 +1,6 @@
 import { type Accessor, type Setter, createEffect, createMemo, createSignal, on } from "solid-js";
 import { parseProgram, printProgram } from "../core/programText";
-import { type Conversation, type CutBy, type Entry, type ModelTag, type Rewind, type Turn, type TurnEnd, type TurnMsg, askTitle, newConversation, newTurn, rewind, runTurn, settle, unhold, updateTurn } from "../create/chat";
+import { type Conversation, type CutBy, type Entry, type ModelTag, RESUME, type Rewind, type Turn, type TurnEnd, type TurnMsg, askTitle, canResume, newConversation, newTurn, resumedTurn, rewind, runTurn, settle, unhold, updateTurn } from "../create/chat";
 import { CHAT_SYSTEM, TITLE_SYSTEM } from "../create/prompt";
 import type { Effort } from "../create/provider";
 import type { Editor } from "../state/editor";
@@ -311,11 +311,11 @@ export function createChat(ed: Editor, models = createModelSettings()) {
       if (said?.kind === "user") void name(t, said.text);
     }
     persist(t);
-    return run(t, index, text);
+    return run(t, index, text, false);
   };
 
   /** Get a reply for the turn at this index, asking this. */
-  const run = async (t: Thread, index: number, request: string) => {
+  const run = async (t: Thread, index: number, request: string, resuming: boolean) => {
     const ctrl = new AbortController();
     let saved = Date.now();
     const onMessage = (m: TurnMsg) => {
@@ -328,7 +328,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     };
     const go = async () => {
       const ask = models.asker(chosen(t)!, CHAT_SYSTEM);
-      const { end, conversation: next } = await runTurn(t.conversation, request, printed(), { ask, onMessage, signal: ctrl.signal, cutBy: () => t.cutBy });
+      const { end, conversation: next } = await runTurn(t.conversation, request, printed(), { ask, onMessage, signal: ctrl.signal, cutBy: () => t.cutBy, resuming });
       // Started over while this was going, or deleted: it no longer belongs to anything.
       if (t.running?.stop !== ctrl || leaving) return;
       t.conversation = next;
@@ -340,6 +340,19 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     let finished!: () => void;
     setRunning(t, { stop: ctrl, done: new Promise((r) => (finished = r)) });
     await go().finally(finished);
+  };
+
+  /** Pick the last reply back up from where it was cut short, in the same turn. The model has how far it got, and the visitor doesn't have to say anything. */
+  const resume = async () => {
+    await moving;
+    const t = current();
+    const index = t.entries().length - 1;
+    const e = t.entries()[index];
+    if (t.running || e?.kind !== "turn" || !canResume(e.turn)) return;
+    t.cutBy = "stop";
+    t.setEntries((es) => es.map((x, i) => (i === index && x.kind === "turn" ? { ...x, turn: resumedTurn(x.turn, Date.now(), tagOf(t)) } : x)));
+    persist(t);
+    return run(t, index, RESUME, true);
   };
 
   /** Say something else at this point instead: what came after it goes, and the net goes back to how it was then. */
@@ -444,8 +457,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
       if (asked?.kind !== "user") return;
       withModel(() => void (asked.at ? edit(index - 1, asked.text) : send(asked.text)));
     },
-    /** Pick a reply back up: the history already has how far it got. */
-    carryOn: () => withModel(() => void send("Carry on from where you left off.")),
+    resume: () => withModel(() => void resume()),
     /** Go back to a document from earlier in the chat. If it isn't what the model last saw, its next message shows it. */
     loadDocument(code: string) {
       if (ed.screen().kind !== "net") return ed.notify("Close what's open first.");

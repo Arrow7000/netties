@@ -45,6 +45,8 @@ export interface Try {
   code?: string;
   /** The examples it asked to see. A call that's only that isn't a try at anything. */
   looked?: string[];
+  /** It picks up a reply that was cut short, and starts the count of tries again. */
+  resumed?: boolean;
   /** Something the visitor should know about how the request was taken. */
   note?: string;
 }
@@ -80,7 +82,7 @@ export interface Turn {
 }
 
 export type TurnMsg =
-  | { kind: "try" }
+  | { kind: "try"; resumed?: boolean }
   | { kind: "note"; text: string }
   | { kind: "thinking"; text: string; at: number }
   | { kind: "writing"; text: string }
@@ -115,12 +117,14 @@ export function settle(entries: Entry[], c: Conversation, by: CutBy = "reload"):
   const asked = entries.at(-2);
   if (last?.kind !== "turn" || last.turn.phase.kind === "over" || asked?.kind !== "user") return { entries, conversation: c };
   const cut = last.turn.tries.at(-1);
+  // A reply that was picking up an earlier one was asked for by that, not by what the visitor said: that's already in the history.
+  const said = last.turn.tries.some((x) => x.resumed) ? RESUME : asked.text;
   return {
     entries: [...entries.slice(0, -1), { kind: "turn", turn: { ...last.turn, phase: { kind: "over", end: { kind: "stopped", by } } } }],
     conversation: {
       ...c,
       seen: undefined,
-      messages: [...c.messages, { role: "user", content: asked.text }, { role: "assistant", content: [{ type: "text", text: cutShort(WHY[by], cut?.thinking ?? "", cut?.reply ?? "") }] }],
+      messages: [...c.messages, { role: "user", content: said }, { role: "assistant", content: [{ type: "text", text: cutShort(WHY[by], cut?.thinking ?? "", cut?.reply ?? "") }] }],
     },
   };
 }
@@ -139,17 +143,36 @@ export function cutShort(why: string, thinking: string, text: string): string {
   return parts.join("\n\n");
 }
 
-/** Which try this is, not counting calls that only asked to see examples. */
-export const triesSoFar = (tries: Try[]) => tries.filter((t) => !t.looked).length;
+/** What the model is told when a reply is resumed, which the visitor doesn't see. It has how far it got in the history. A document has to come whole, since that's what gets checked. */
+export const RESUME = "Carry on from exactly where you left off, without going over what you've already said. If you were partway through a document, write the whole document.";
+
+/** Whether a turn that ended can be picked up: it was cut short with something to go on, not just refused. */
+export function canResume(turn: Turn): boolean {
+  if (turn.phase.kind !== "over") return false;
+  const end = turn.phase.end;
+  if (end.kind === "stopped") return end.by !== "message";
+  if (end.kind !== "failed" || !["cut-off", "dropped", "unreachable", "failed"].includes(end.code)) return false;
+  const last = turn.tries.at(-1);
+  return !!last && !!(last.thinking.trim() || last.reply.trim());
+}
+
+/** Which try this is, not counting calls that only asked to see examples. A resumed reply starts the count again. */
+export function triesSoFar(tries: Try[]): number {
+  const from = tries.map((t) => !!t.resumed).lastIndexOf(true);
+  return tries.slice(Math.max(from, 0)).filter((t) => !t.looked).length;
+}
 
 export const newTurn = (since: number, by?: ModelTag): Turn => ({ tries: [], phase: { kind: "waiting" }, since, ...(by ? { by } : {}) });
+
+/** A turn going again from where it was cut short. */
+export const resumedTurn = (t: Turn, since: number, by?: ModelTag): Turn => ({ ...t, phase: { kind: "waiting" }, since, took: undefined, ...(by ? { by } : {}) });
 
 /** How a turn moves along. */
 export function updateTurn(t: Turn, msg: TurnMsg): Turn {
   const last = (f: (x: Try) => Try) => ({ ...t, tries: t.tries.map((x, i) => (i === t.tries.length - 1 ? f(x) : x)) });
   switch (msg.kind) {
     case "try":
-      return { ...t, phase: { kind: "waiting" }, tries: [...t.tries, { thinking: "", reply: "" }] };
+      return { ...t, phase: { kind: "waiting" }, tries: [...t.tries, { thinking: "", reply: "", ...(msg.resumed ? { resumed: true } : {}) }] };
     case "note":
       return last((x) => ({ ...x, note: msg.text }));
     case "thinking":
@@ -186,6 +209,8 @@ export interface TurnOptions {
   signal?: AbortSignal;
   /** Why `signal` fired. */
   cutBy?: () => CutBy;
+  /** This picks up a reply that was cut short. */
+  resuming?: boolean;
 }
 
 /** However it ended, what had come in so far. */
@@ -264,8 +289,10 @@ export async function runTurn(c: Conversation, request: string, doc: string, opt
   let lastCode: string | undefined;
   let looks = 0;
 
+  let resuming = opts.resuming;
   for (let attempt = 1; attempt <= TRIES; attempt++) {
-    opts.onMessage?.({ kind: "try" });
+    opts.onMessage?.(resuming ? { kind: "try", resumed: true } : { kind: "try" });
+    resuming = false;
     const asked = await ask(messages, opts);
     if (asked.kind === "failed") {
       messages.push(close(cutShort(`That reply didn't arrive: ${asked.message}`, asked.thinking, asked.text)));

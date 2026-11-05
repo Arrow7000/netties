@@ -914,4 +914,124 @@ describe("chats", () => {
       expect(JSON.stringify(await reading(t.chat.id()))).not.toContain("sekret");
     });
   });
+
+  describe("resuming", () => {
+    const lastTurn = (t: Tab) => {
+      const e = t.chat.entries().at(-1);
+      if (e?.kind !== "turn") throw new Error("no turn");
+      return e.turn;
+    };
+
+    it("picks up a dropped reply in the same turn, with no new message, and it can land on the canvas", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      const going = t.send("Double 2.");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.say({ type: "thinking", text: "First the zero." });
+      calls[0]!.say({ type: "text", text: "Here go" });
+      await settled();
+      calls[0]!.fail();
+      await going;
+      expect(lastTurn(t).phase).toMatchObject({ kind: "over", end: { kind: "failed", code: "dropped" } });
+      expect(t.chat.entries()).toHaveLength(2);
+
+      t.chat.resume();
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      expect(t.chat.busy()).toBe(true);
+      expect(t.chat.entries()).toHaveLength(2);
+      const sent = JSON.stringify(calls[1]!.body.messages);
+      expect(sent).toContain("First the zero.");
+      expect(sent).toContain("Here go");
+      expect(sent).toContain("Carry on from exactly where you left off");
+      calls[1]!.end("es.\n\n```inet\n" + EXAMPLE + "\n```");
+      await vi.waitFor(() => expect(t.chat.busy()).toBe(false));
+      expect(t.chat.entries()).toHaveLength(2);
+      expect(lastTurn(t).tries.map((x) => x.reply.slice(0, 7))).toEqual(["Here go", "es.\n\n``"]);
+      expect(lastTurn(t).phase).toMatchObject({ kind: "over", end: { kind: "applied" } });
+      expect(t.canvas()).toContain("agent");
+    });
+
+    it("picks up a reply that hit its length limit", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      const going = t.send("Long.");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.say({ type: "text", text: "Part" });
+      await settled();
+      calls[0]!.finish("length");
+      await going;
+      expect(lastTurn(t).phase).toMatchObject({ kind: "over", end: { kind: "failed", code: "cut-off" } });
+      t.chat.resume();
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      calls[1]!.end("And the rest.");
+      await vi.waitFor(() => expect(t.chat.busy()).toBe(false));
+      expect(lastTurn(t).phase).toMatchObject({ kind: "over", end: { kind: "said" } });
+    });
+
+    it("picks up a reply cut off by a reload, on whichever model is chosen now", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      void t.send("Double 2.");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.say({ type: "thinking", text: "Going along." });
+      await settled();
+      now += 3000;
+      calls[0]!.say({ type: "thinking", text: " More." });
+      await settled();
+      t.leave();
+      const again = b.open(t.session);
+      await ready(again);
+      expect(lastTurn(again).phase).toMatchObject({ kind: "over", end: { kind: "stopped", by: "reload" } });
+      again.chat.setModel("custom", "other");
+      again.chat.resume();
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      expect(calls[1]!.body.model).toBe("other");
+      expect(JSON.stringify(calls[1]!.body.messages)).toContain("Going along.");
+      calls[1]!.end("Done.");
+      await vi.waitFor(() => expect(again.chat.busy()).toBe(false));
+      expect(lastTurn(again).by?.model).toBe("other");
+    });
+
+    it("asks for a model first if there isn't one, and doesn't start without it", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      const going = t.send("Double 2.");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.say({ type: "text", text: "Part" });
+      await settled();
+      calls[0]!.fail();
+      await going;
+      t.chat.models.forget("custom");
+      t.chat.resume();
+      await settled();
+      expect(calls).toHaveLength(1);
+      expect(t.chat.settings()).toBeDefined();
+    });
+
+    it("isn't offered twice at once", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      const going = t.send("Double 2.");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.say({ type: "text", text: "Part" });
+      await settled();
+      calls[0]!.fail();
+      await going;
+      t.chat.resume();
+      t.chat.resume();
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      await settled();
+      expect(calls).toHaveLength(2);
+    });
+  });
 });
