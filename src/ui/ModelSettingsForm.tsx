@@ -396,8 +396,13 @@ export function ModelPicker(props: { chat: Chat }) {
 export function EffortPicker(props: { chat: Chat }) {
   const chat = props.chat;
   const now = () => chat.choice()?.effort ?? "default";
+  const label = () => {
+    const c = chat.choice();
+    if (now() === "default") return "Reasoning";
+    return c && chat.models.refusesLevel(c.provider, c.model) ? "Reasoning: not supported" : `Reasoning: ${EFFORTS.find((e) => e.id === now())!.name}`;
+  };
   return (
-    <Menu class="chat-effort-button" title="How hard the model should think. Not every model takes this." label={<span>{now() === "default" ? "Reasoning" : `Reasoning: ${EFFORTS.find((e) => e.id === now())!.name}`}</span>}>
+    <Menu class="chat-effort-button" title="How hard the model should think. Not every model takes this." label={<span>{label()}</span>}>
       {(close) => (
         <For each={EFFORTS}>
           {(l) => (

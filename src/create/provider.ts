@@ -146,7 +146,8 @@ interface Optional {
   note?: string;
 }
 
-const NO_LEVEL = "This model doesn't take a reasoning level, so it's using its own.";
+/** Said when a model turns down a reasoning level, which is worth saying once for each model. */
+export const NO_LEVEL = "This model doesn't take a reasoning level, so it's using its own.";
 
 function request(a: Ask): { url: string; headers: Record<string, string>; body: Record<string, unknown>; optional: Optional[] } {
   const c = a.connection;

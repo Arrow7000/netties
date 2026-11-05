@@ -31,7 +31,11 @@ export interface ProviderEntry {
 interface Stored {
   providers: Record<string, ProviderEntry>;
   default?: Choice;
+  /** The models that have turned down a reasoning level, as provider and model. */
+  noLevel?: string[];
 }
+
+const modelKey = (provider: string, model: string) => `${provider}/${model}`;
 
 /** A pretend provider, with no cost, only under `npm run dev` (scripts/fakeModel.ts). */
 const devPresets = (): Preset[] => (import.meta.env.DEV && typeof location !== "undefined" ? [{ id: "fake", name: "Pretend model (dev only)", url: `${location.origin}/dev-model/v1`, wire: "openai", local: true }] : []);
@@ -44,7 +48,7 @@ function read(): Stored {
   try {
     const raw = localStorage.getItem(KEY);
     const got = raw ? (JSON.parse(raw) as Partial<Stored>) : undefined;
-    return { providers: got?.providers ?? {}, default: got?.default };
+    return { providers: got?.providers ?? {}, default: got?.default, noLevel: got?.noLevel };
   } catch {
     return { providers: {} };
   }
@@ -120,6 +124,12 @@ export function createModelSettings() {
       const { [id]: _gone, ...providers } = stored().providers;
       lists.delete(id);
       write({ ...stored(), providers, default: stored().default?.provider === id ? undefined : stored().default });
+    },
+    /** Whether this model has turned down a reasoning level, so the level isn't what it's using. */
+    refusesLevel: (provider: string, model: string) => !!stored().noLevel?.includes(modelKey(provider, model)),
+    /** This model has turned down a reasoning level. */
+    refusedLevel(provider: string, model: string) {
+      write({ ...stored(), noLevel: [...(stored().noLevel ?? []), modelKey(provider, model)] });
     },
     /** What a provider that's set up has to offer, from a recent list if there is one. */
     models(id: string): Promise<ModelInfo[]> {

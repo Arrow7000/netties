@@ -817,6 +817,32 @@ describe("chats", () => {
       expect(t.chat.models.entry("custom")?.model).toBeUndefined();
     });
 
+    it("that turns down a reasoning level is said once, and the chat doesn't go on claiming it", async () => {
+      const b = browser();
+      const calls = model();
+      const real = fetch;
+      vi.stubGlobal("fetch", async (url: string, o: { body?: string }) => (o.body && "reasoning_effort" in JSON.parse(o.body) ? new Response("Unknown argument: reasoning_effort", { status: 400 }) : real(url, o as RequestInit)));
+      const t = b.open();
+      await ready(t);
+      t.chat.setEffort("high");
+      const note = (i: number) => {
+        const e = t.chat.entries()[i];
+        return e?.kind === "turn" ? e.turn.tries[0]?.note : undefined;
+      };
+      expect(t.chat.models.refusesLevel("custom", "m")).toBe(false);
+      const first = t.send("One.");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      calls[0]!.end("Done.");
+      await first;
+      expect(note(1)).toContain("reasoning level");
+      expect(t.chat.models.refusesLevel("custom", "m")).toBe(true);
+      const second = t.send("Two.");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      calls[1]!.end("Done.");
+      await second;
+      expect(note(3)).toBeUndefined();
+    });
+
     describe("when a provider goes", () => {
       /** OpenAI and a local server, with the default on OpenAI. */
       const two = { providers: { openai: { key: "k", model: "gpt" }, ollama: { url: "http://localhost:11434/v1", model: "llama" } }, default: { provider: "openai", model: "gpt", effort: "high" } };

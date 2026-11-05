@@ -2,7 +2,7 @@ import { type Accessor, type Setter, createEffect, createMemo, createSignal, on 
 import { parseProgram, printProgram } from "../core/programText";
 import { type Conversation, type CutBy, type Entry, type ModelTag, RESUME, type Rewind, type Turn, type TurnEnd, type TurnMsg, askTitle, canResume, newConversation, newTurn, resumedTurn, rewind, runTurn, settle, unhold, updateTurn } from "../create/chat";
 import { CHAT_SYSTEM, TITLE_SYSTEM } from "../create/prompt";
-import type { Effort } from "../create/provider";
+import { type Effort, NO_LEVEL } from "../create/provider";
 import type { Editor } from "../state/editor";
 import { decode } from "../state/persist";
 import { type ChatDb, type Listing, type Saved, openChats, titleOf } from "./chatDb";
@@ -329,8 +329,13 @@ export function createChat(ed: Editor, models = createModelSettings()) {
   const run = async (t: Thread, index: number, request: string, resuming: boolean) => {
     const ctrl = new AbortController();
     let saved = Date.now();
+    const choice = chosen(t)!;
     const onMessage = (m: TurnMsg) => {
       if (t.running?.stop !== ctrl) return;
+      if (m.kind === "note" && m.text === NO_LEVEL) {
+        if (models.refusesLevel(choice.provider, choice.model)) return;
+        models.refusedLevel(choice.provider, choice.model);
+      }
       updateAt(t, index, (turn) => updateTurn(turn, m));
       if (Date.now() - saved > SAVE_EVERY) {
         saved = Date.now();
@@ -338,7 +343,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
       }
     };
     const go = async () => {
-      const ask = models.asker(chosen(t)!, CHAT_SYSTEM);
+      const ask = models.asker(choice, CHAT_SYSTEM);
       const { end, conversation: next } = await runTurn(t.conversation, request, printed(), { ask, onMessage, signal: ctrl.signal, cutBy: () => t.cutBy, resuming });
       // Started over while this was going, or deleted: it no longer belongs to anything.
       if (t.running?.stop !== ctrl || leaving) return;

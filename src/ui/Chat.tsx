@@ -347,8 +347,7 @@ function ResumeButton(props: { chat: Chat }) {
 }
 
 /** A model and how hard it was asked to think, as a few words. */
-const tagText = (b: ModelTag) => `${nameOf(b.provider)}: ${b.model}${b.effort === "default" ? "" : `, reasoning ${b.effort}`}`;
-const sameTag = (a: ModelTag | undefined, b: ModelTag | undefined) => a?.provider === b?.provider && a?.model === b?.model && a?.effort === b?.effort;
+const tagText = (chat: Chat, b: ModelTag) => `${nameOf(b.provider)}: ${b.model}${b.effort === "default" || chat.models.refusesLevel(b.provider, b.model) ? "" : `, reasoning ${b.effort}`}`;
 
 /** How a turn stands, under what it has said. */
 function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number }) {
@@ -430,7 +429,7 @@ function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number
     const by = props.entry.kind === "turn" ? (props.entry.turn.tries[0]?.by ?? props.entry.turn.by) : undefined;
     // A turn follows a message, so the one before is two back.
     const before = props.chat.entries()[props.index - 2];
-    return by && before?.kind === "turn" && before.turn.by && !sameTag(before.turn.by, by) ? tagText(by) : undefined;
+    return by && before?.kind === "turn" && before.turn.by && tagText(props.chat, before.turn.by) !== tagText(props.chat, by) ? tagText(props.chat, by) : undefined;
   };
   return (
     <Show when={props.entry.kind === "turn" ? (props.entry as Extract<Entry, { kind: "turn" }>).turn : undefined} fallback={<UserView chat={props.chat} entry={props.entry as Extract<Entry, { kind: "user" }>} index={props.index} />}>
