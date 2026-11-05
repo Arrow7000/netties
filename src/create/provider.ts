@@ -41,7 +41,7 @@ export interface Preset {
 
 export const CUSTOM = "custom";
 
-/** Each of these takes requests from a browser: checked 2026-11-05 with preflights and real requests. */
+/** The cloud ones take requests from a browser, as checked 2026-11-05; see TODO.md for how far. A local one has to be told to let the site in. */
 export const PRESETS: Preset[] = [
   // By default OpenRouter favours cheap hosts, which can be 10× slower.
   { id: "openrouter", name: "OpenRouter", url: "https://openrouter.ai/api/v1", wire: "openai", needsKey: true, keysAt: "https://openrouter.ai/keys", extra: { provider: { sort: "throughput" } } },

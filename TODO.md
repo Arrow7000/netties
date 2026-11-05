@@ -158,8 +158,9 @@ Choices made along the way that you haven't confirmed yet:
        - The API: Chat Completions is the standard, and Anthropic's Messages isn't
          the same thing. Its OpenAI-style endpoint ignores `reasoning_effort` and
          never returns thinking, so Anthropic goes through Messages.
-       - Which providers take browser requests, checked 2026-11-05: all 16 in the
-         list. OpenAI and Cerebras leave CORS headers off a 401 on chat requests,
+       - Which providers take browser requests, checked 2026-11-05: the 14 cloud
+         ones in the list, Qwen by preflight only and the others by a request with
+         a fake key as well. OpenAI and Cerebras leave CORS headers off a 401 on chat requests,
          so a wrong key looks like a network failure; for OpenAI the models
          endpoint says what's wrong, and the app asks it. Success responses were
          only seen for OpenRouter and Anthropic, with real keys.
