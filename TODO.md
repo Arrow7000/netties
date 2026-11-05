@@ -240,6 +240,12 @@ Choices made along the way that you haven't confirmed yet:
      netties and gives up, even on tasks it can do. If `create()` gets no code
      after every try, it should show the visitor what the model said.
 
+5. **Showing what a net means** (you, 2026-11-05: "instead of leaving it to the
+   user to interpret a sequence of S's as a natural number, to provide some...
+   like overlay or smth"). A working prototype is at `/meanings.html`, with the
+   findings, suggested order and four questions for you in
+   `design/brief-meanings.md`. Nothing is in the app yet.
+
 ## Research
 
 - **Linearity.** Nets are already linear (each port has exactly one wire;

@@ -471,18 +471,25 @@ export function runAhead(net: Net, sys: System, r: Reading, limit = 20_000): Ahe
   return { kind: copy.activePairs().length ? "stuck" : "done", interactions: stats.interactions, ends };
 }
 
+/** Which end of a wire gives and which takes, if the wire has a side that gives data. */
+export function wireSides(net: Net, sys: System, r: Reading, wire: WireId): { giver: End; taker: End } | undefined {
+  const [a, b] = net.wire(wire).ends;
+  const gives = (e: End) => e.kind === "port" && specOf(sys, net.agent(e.agent).type, e.slot).pol === "give";
+  const holdsData = (e: End) => e.kind === "port" && e.slot === 0 && isData(r, net.agent(e.agent).type);
+  const giver = gives(a) ? a : gives(b) ? b : holdsData(a) ? a : holdsData(b) ? b : undefined;
+  return giver && { giver, taker: giver === a ? b : a };
+}
+
 /**
  * What a wire will carry. Cut it, keep only what's connected to the side that
  * gives, and run that on its own, so what happens beyond the wire doesn't come
  * into it. Gives undefined if the wire has no side that gives data.
  */
 export function carries(net: Net, sys: System, r: Reading, wire: WireId, limit = 20_000): string | undefined {
-  const [a, b] = net.wire(wire).ends;
-  const gives = (e: End) => (e.kind === "port" ? specOf(sys, net.agent(e.agent).type, e.slot).pol === "give" : false);
-  const giver = gives(a) ? a : gives(b) ? b : a.kind === "port" && a.slot === 0 && isData(r, net.agent(a.agent).type) ? a : b.kind === "port" && b.slot === 0 && isData(r, net.agent(b.agent).type) ? b : undefined;
-  if (!giver) return undefined;
+  const sides = wireSides(net, sys, r, wire);
+  if (!sides) return undefined;
+  const { giver, taker } = sides;
   const copy = net.clone();
-  const taker = giver === a ? b : a;
   copy.disconnect(wire);
   copy.connect(giver, free("·probe"));
   if (taker.kind === "port") copy.connect(taker, free("·rest"));

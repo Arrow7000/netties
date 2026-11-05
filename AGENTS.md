@@ -24,3 +24,11 @@ npx vite-node scripts/route-check.ts
 # Also write each problem drawing as an SVG (--all writes every example step)
 npx vite-node scripts/route-check.ts --svg some/dir
 ```
+
+## Showing what a net means
+
+[localhost:5173/meanings.html](http://localhost:5173/meanings.html) is a prototype
+for reading a net as numbers, lists and formulas, on the real engine and layout.
+It's `src/dev/meanings.ts` and `src/dev/reading.ts`, and not part of the production
+build. See `design/brief-meanings.md`. `scripts/reading-eval.ts` asks the chat's
+model to write readings, and costs real money on OpenRouter.

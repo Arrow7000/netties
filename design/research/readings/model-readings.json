@@ -1,0 +1,640 @@
+{
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "spent": 0.476494,
+ "results": [
+  {
+   "name": "Length of a list",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 6,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow # \"length of {0}\" on 1\nshow δ \"{0}\" on 1, 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow # \"length of {0}\" on 1\nshow δ \"{0}\" on 1, 2",
+   "starts": {
+    "out": "length of [0, 1, 0]"
+   },
+   "ends": {
+    "out": "3"
+   }
+  },
+  {
+   "name": "Length of a list",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 7,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow # \"length of {0}\" on 1\nshow δ \"{0}\" on 1, 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow # \"length of {0}\" on 1\nshow δ \"{0}\" on 1, 2",
+   "starts": {
+    "out": "length of [0, 1, 0]"
+   },
+   "ends": {
+    "out": "3"
+   }
+  },
+  {
+   "name": "3 × 2",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 9,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2",
+   "starts": {
+    "out": "3 × 2"
+   },
+   "ends": {
+    "out": "6"
+   }
+  },
+  {
+   "name": "Complete a typed if",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 6,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow T \"true\"\nshow F \"false\"\nshow # \"length of {0}\" on 1\nshow ¬ \"not {0}\" on 1\nshow Z? \"{0} = 0\" on 1\nshow if \"if {0} then {2} else {3}\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow T \"true\"\nshow F \"false\"\nshow # \"length of {0}\" on 1\nshow ¬ \"not {0}\" on 1\nshow Z? \"{0} = 0\" on 1\nshow if \"if {0} then {2} else {3}\" on 1",
+   "starts": {
+    "out": "if ((length of _) = 0) then _ else _"
+   },
+   "ends": {
+    "out": "?"
+   }
+  },
+  {
+   "name": "Complete a typed if",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 16,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow T \"true\"\nshow F \"false\"\nshow # \"length {0}\" on 1\nshow ¬ \"not {0}\" on 1\nshow Z? \"{0} = 0\" on 1\nshow if \"if {0} then {2} else {3}\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow T \"true\"\nshow F \"false\"\nshow # \"length {0}\" on 1\nshow ¬ \"not {0}\" on 1\nshow Z? \"{0} = 0\" on 1\nshow if \"if {0} then {2} else {3}\" on 1",
+   "starts": {
+    "out": "if ((length _) = 0) then _ else _"
+   },
+   "ends": {
+    "out": "?"
+   }
+  },
+  {
+   "name": "3 × 2",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 24,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2",
+   "starts": {
+    "out": "3 × 2"
+   },
+   "ends": {
+    "out": "6"
+   }
+  },
+  {
+   "name": "Inspect a computed tree",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 52,
+   "tries": [
+    {
+     "lines": "show R0 \"leaf\"\nshow R1 \"stem {1}\"\nshow R2 \"fork {1} {2}\"\nshow BS \"stem {0}\" on 1\nshow BF \"fork {0} {2}\" on 1\nshow AR \"fork {2} {0}\" on 1\nshow Shape \"{0}\" on 1\nshow View0 \"leaf\"\nshow View1 \"stem {1}\"\nshow View2 \"fork {1} {2}\"",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show R0 \"leaf\"\nshow R1 \"stem {1}\"\nshow R2 \"fork {1} {2}\"\nshow BS \"stem {0}\" on 1\nshow BF \"fork {0} {2}\" on 1\nshow AR \"fork {2} {0}\" on 1\nshow Shape \"{0}\" on 1\nshow View0 \"leaf\"\nshow View1 \"stem {1}\"\nshow View2 \"fork {1} {2}\"",
+   "starts": {
+    "view": "fork (stem leaf) (stem leaf)"
+   },
+   "ends": {
+    "view": "fork (stem leaf) (stem leaf)"
+   }
+  },
+  {
+   "name": "Inspect a computed tree",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 51,
+   "tries": [
+    {
+     "lines": "show R0 \"leaf\"\nshow R1 \"stem({1})\"\nshow R2 \"fork({1}, {2})\"\nshow View0 \"leaf\"\nshow View1 \"stem({1})\"\nshow View2 \"fork({1}, {2})\"\nshow BS \"stem({0})\" on 1\nshow BF \"fork({0}, {2})\" on 1\nshow AR \"fork({2}, {0})\" on 1\nshow Shape \"{0}\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show R0 \"leaf\"\nshow R1 \"stem({1})\"\nshow R2 \"fork({1}, {2})\"\nshow View0 \"leaf\"\nshow View1 \"stem({1})\"\nshow View2 \"fork({1}, {2})\"\nshow BS \"stem({0})\" on 1\nshow BF \"fork({0}, {2})\" on 1\nshow AR \"fork({2}, {0})\" on 1\nshow Shape \"{0}\" on 1",
+   "starts": {
+    "view": "fork(stem(leaf), stem(leaf))"
+   },
+   "ends": {
+    "view": "fork(stem(leaf), stem(leaf))"
+   }
+  },
+  {
+   "name": "Fibonacci: 6 → 8",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 16,
+   "tries": [
+    {
+     "lines": "show number S 0\n\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\n\nshow δ \"{0}\" on 1, 2\n\nshow Fib \"F({0})\" on 1\nshow Fib \"F({0} + 1)\" on 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2\nshow Fib \"F({0})\" on 1\nshow Fib \"F({0} + 1)\" on 2",
+   "starts": {
+    "out": "F(6)"
+   },
+   "ends": {
+    "out": "8"
+   }
+  },
+  {
+   "name": "Fibonacci: 6 → 8",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 15,
+   "tries": [
+    {
+     "lines": "show number S 0\n\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2\nshow Fib \"F({0})\" on 1\nshow Fib \"F({0} + 1)\" on 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2\nshow Fib \"F({0})\" on 1\nshow Fib \"F({0} + 1)\" on 2",
+   "starts": {
+    "out": "F(6)"
+   },
+   "ends": {
+    "out": "8"
+   }
+  },
+  {
+   "name": "Sort a list",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 11,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow Sort \"sort {0}\" on 1\nshow Ins \"insert {2} into {0}\" on 1\nshow ↕ \"min({0}, {3})\" on 1\nshow ↕ \"max({0}, {3})\" on 2\nshow ↕S \"min({0}, S({3}))\" on 1\nshow ↕S \"max({0}, S({3}))\" on 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow Sort \"sort {0}\" on 1\nshow Ins \"insert {2} into {0}\" on 1\nshow ↕ \"min({0}, {3})\" on 1\nshow ↕ \"max({0}, {3})\" on 2\nshow ↕S \"min({0}, S({3}))\" on 1\nshow ↕S \"max({0}, S({3}))\" on 2",
+   "starts": {
+    "out": "sort [3, 1, 2, 0]"
+   },
+   "ends": {
+    "out": "[0, 1, 2, 3]"
+   }
+  },
+  {
+   "name": "Sort a list",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 20,
+   "tries": [
+    {
+     "lines": "show number S 0\n    Chains of the agent S ending in the agent 0 are natural numbers. S has one aux port, 0 has none.\n\nshow list ∷ []\n    Chains of the agent ∷ ending in the agent [] are lists. ∷ has two aux ports (the first item and the rest), [] has none.\n\nshow Sort \"sort {0}\" on 1\n\nshow Ins \"insert {2} into {0}\" on 1\n\nshow ↕ \"smaller of {0} and {3}\" on 1\nshow ↕ \"larger of {0} and {3}\" on 2\n\nshow ↕S \"smaller of {0} and {3}+1\" on 1\nshow ↕S \"larger of {0} and {3}+1\" on 2",
+     "problems": [
+      "a reading is only show lines (in: Chains of the agent S ending in the agent 0 are natural numbers. S has one aux port, 0 has none.)",
+      "a reading is only show lines (in: Chains of the agent ∷ ending in the agent [] are lists. ∷ has two aux ports (the first item and the rest), [] has none.)"
+     ],
+     "faults": []
+    },
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow Sort \"sort {0}\" on 1\nshow Ins \"insert {2} into {0}\" on 1\nshow ↕ \"smaller of {0} and {3}\" on 1\nshow ↕ \"larger of {0} and {3}\" on 2\nshow ↕S \"smaller of {0} and {3}+1\" on 1\nshow ↕S \"larger of {0} and {3}+1\" on 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow Sort \"sort {0}\" on 1\nshow Ins \"insert {2} into {0}\" on 1\nshow ↕ \"smaller of {0} and {3}\" on 1\nshow ↕ \"larger of {0} and {3}\" on 2\nshow ↕S \"smaller of {0} and {3}+1\" on 1\nshow ↕S \"larger of {0} and {3}+1\" on 2",
+   "starts": {
+    "out": "sort [3, 1, 2, 0]"
+   },
+   "ends": {
+    "out": "[0, 1, 2, 3]"
+   }
+  },
+  {
+   "name": "range(5)",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 12,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow # \"length of {0}\" on 1\nshow δ \"{0}\" on 1, 2\nshow From \"naturals from {1}\"\nshow Take \"first {0} items of {2}\" on 1\nshow Pull \"first ({2} + 1) items of {0}\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow # \"length of {0}\" on 1\nshow δ \"{0}\" on 1, 2\nshow From \"naturals from {1}\"\nshow Take \"first {0} items of {2}\" on 1\nshow Pull \"first ({2} + 1) items of {0}\" on 1",
+   "starts": {
+    "out": "first 5 items of (naturals from 0)"
+   },
+   "ends": {
+    "out": "[0, 1, 2, 3, 4]"
+   }
+  },
+  {
+   "name": "range(5)",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 14,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow # \"length of {0}\" on 1\nshow δ \"{0}\" on 1, 2\nshow From \"the stream of naturals starting at {1}\"\nshow Take \"first {0} items of {2}\" on 1\nshow Pull \"first {2}+1 items of {0}\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow # \"length of {0}\" on 1\nshow δ \"{0}\" on 1, 2\nshow From \"the stream of naturals starting at {1}\"\nshow Take \"first {0} items of {2}\" on 1\nshow Pull \"first {2}+1 items of {0}\" on 1",
+   "starts": {
+    "out": "first 5 items of (the stream of naturals starting at 0)"
+   },
+   "ends": {
+    "out": "[0, 1, 2, 3, 4]"
+   }
+  },
+  {
+   "name": "Map a function: x² + 1",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 14,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow δ \"{0}\" on 1, 2\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow Sq \"x ↦ x × x\"\nshow Plus \"x ↦ x + {1}\"\nshow Then \"x ↦ {2}({1}(x))\"\nshow Apply \"{0}({2})\" on 1\nshow Map \"map {2} over {0}\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow δ \"{0}\" on 1, 2\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow Sq \"x ↦ x × x\"\nshow Plus \"x ↦ x + {1}\"\nshow Then \"x ↦ {2}({1}(x))\"\nshow Apply \"{0}({2})\" on 1\nshow Map \"map {2} over {0}\" on 1",
+   "starts": {
+    "out": "map (x ↦ (x ↦ x + 1)((x ↦ x × x)(x))) over [1, 2, 3]"
+   },
+   "ends": {
+    "out": "[2, 5, 10]"
+   }
+  },
+  {
+   "name": "Map a function: x² + 1",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 28,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow δ \"{0}\" on 1, 2\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow Sq \"x ↦ x × x\"\nshow Plus \"x ↦ x + {1}\"\nshow Then \"x ↦ {2}({1}(x))\"\nshow Apply \"{0}({2})\" on 1\nshow Map \"map {2} {0}\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow δ \"{0}\" on 1, 2\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow Sq \"x ↦ x × x\"\nshow Plus \"x ↦ x + {1}\"\nshow Then \"x ↦ {2}({1}(x))\"\nshow Apply \"{0}({2})\" on 1\nshow Map \"map {2} {0}\" on 1",
+   "starts": {
+    "out": "map (x ↦ (x ↦ x + 1)((x ↦ x × x)(x))) [1, 2, 3]"
+   },
+   "ends": {
+    "out": "[2, 5, 10]"
+   }
+  },
+  {
+   "name": "Differentiate a formula, then run it",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 26,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2\nshow X \"x\"\nshow K \"{1}\"\nshow Add \"{1} + {2}\"\nshow Mul \"({1}) × ({2})\"\nshow D \"d/dx({0})\" on 1\nshow Eval \"eval({0}, x = {2})\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2\nshow X \"x\"\nshow K \"{1}\"\nshow Add \"{1} + {2}\"\nshow Mul \"({1}) × ({2})\"\nshow D \"d/dx({0})\" on 1\nshow Eval \"eval({0}, x = {2})\" on 1",
+   "starts": {
+    "out": "eval(d/dx((x + 1) × (x + 2)), x = 2)"
+   },
+   "ends": {
+    "out": "7"
+   }
+  },
+  {
+   "name": "3 × 2",
+   "anonymous": true,
+   "run": 1,
+   "seconds": 8,
+   "tries": [
+    {
+     "lines": "show number B A\nshow C \"{0} + {2}\" on 1\nshow D \"{0} × {2}\" on 1\nshow E \"{0}\" on 1, 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number B A\nshow C \"{0} + {2}\" on 1\nshow D \"{0} × {2}\" on 1\nshow E \"{0}\" on 1, 2",
+   "starts": {
+    "out": "3 × 2"
+   },
+   "ends": {
+    "out": "6"
+   }
+  },
+  {
+   "name": "Differentiate a formula, then run it",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 22,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2\nshow X \"x\"\nshow K \"{1}\"\nshow Add \"({1}) + ({2})\"\nshow Mul \"({1}) × ({2})\"\nshow D \"d/dx({0})\" on 1\nshow Eval \"{0} at x = {2}\" on 1",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow + \"{0} + {2}\" on 1\nshow × \"{0} × {2}\" on 1\nshow δ \"{0}\" on 1, 2\nshow X \"x\"\nshow K \"{1}\"\nshow Add \"({1}) + ({2})\"\nshow Mul \"({1}) × ({2})\"\nshow D \"d/dx({0})\" on 1\nshow Eval \"{0} at x = {2}\" on 1",
+   "starts": {
+    "out": "d/dx(((x) + (1)) × ((x) + (2))) at x = 2"
+   },
+   "ends": {
+    "out": "7"
+   }
+  },
+  {
+   "name": "Fibonacci: 6 → 8",
+   "anonymous": true,
+   "run": 1,
+   "seconds": 14,
+   "tries": [
+    {
+     "lines": "show number B A\nshow C \"{0} + {2}\" on 1\nshow D \"{0} × {2}\" on 1\nshow E \"{0}\" on 1, 2\nshow G \"fib {0}\" on 1\nshow G \"fib({0} + 1)\" on 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number B A\nshow C \"{0} + {2}\" on 1\nshow D \"{0} × {2}\" on 1\nshow E \"{0}\" on 1, 2\nshow G \"fib {0}\" on 1\nshow G \"fib({0} + 1)\" on 2",
+   "starts": {
+    "out": "fib 6"
+   },
+   "ends": {
+    "out": "8"
+   }
+  },
+  {
+   "name": "3 × 2",
+   "anonymous": true,
+   "run": 0,
+   "seconds": 25,
+   "tries": [
+    {
+     "lines": "show number B A\nshow C \"{2} + {0}\" on 1\nshow D \"{0} × {2}\" on 1\nshow E \"{0}\" on 1, 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number B A\nshow C \"{2} + {0}\" on 1\nshow D \"{0} × {2}\" on 1\nshow E \"{0}\" on 1, 2",
+   "starts": {
+    "out": "3 × 2"
+   },
+   "ends": {
+    "out": "6"
+   }
+  },
+  {
+   "name": "Fibonacci: 6 → 8",
+   "anonymous": true,
+   "run": 0,
+   "seconds": 21,
+   "tries": [
+    {
+     "lines": "show number B A\nshow C \"{0} + {2}\" on 1\nshow D \"{0} × {2}\" on 1\nshow E \"{0}\" on 1, 2\nshow G \"fib {0}\" on 1\nshow G \"fib ({0} + 1)\" on 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number B A\nshow C \"{0} + {2}\" on 1\nshow D \"{0} × {2}\" on 1\nshow E \"{0}\" on 1, 2\nshow G \"fib {0}\" on 1\nshow G \"fib ({0} + 1)\" on 2",
+   "starts": {
+    "out": "fib 6"
+   },
+   "ends": {
+    "out": "8"
+   }
+  },
+  {
+   "name": "Sort a list",
+   "anonymous": true,
+   "run": 0,
+   "seconds": 33,
+   "tries": [
+    {
+     "lines": "show number B A\nshow list D C\nshow E \"sort {0}\" on 1\nshow F \"insert {2} into {0}\" on 1\nshow G \"min({0}, {3})\" on 1\nshow G \"max({0}, {3})\" on 2\nshow H \"min({0}, {3} + 1)\" on 1\nshow H \"max({0}, {3} + 1)\" on 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number B A\nshow list D C\nshow E \"sort {0}\" on 1\nshow F \"insert {2} into {0}\" on 1\nshow G \"min({0}, {3})\" on 1\nshow G \"max({0}, {3})\" on 2\nshow H \"min({0}, {3} + 1)\" on 1\nshow H \"max({0}, {3} + 1)\" on 2",
+   "starts": {
+    "out": "sort [3, 1, 2, 0]"
+   },
+   "ends": {
+    "out": "[0, 1, 2, 3]"
+   }
+  },
+  {
+   "name": "Sort a list",
+   "anonymous": true,
+   "run": 1,
+   "seconds": 29,
+   "tries": [
+    {
+     "lines": "show number B A\nshow list D C\nshow E \"sort {0}\" on 1\nshow F \"insert {2} into {0}\" on 1\nshow G \"smaller of {0} and {3}\" on 1\nshow G \"larger of {0} and {3}\" on 2\nshow H \"smaller of {0} and {3} + 1\" on 1\nshow H \"larger of {0} and {3} + 1\" on 2",
+     "problems": [],
+     "faults": []
+    }
+   ],
+   "passed": true,
+   "normalised": "show number B A\nshow list D C\nshow E \"sort {0}\" on 1\nshow F \"insert {2} into {0}\" on 1\nshow G \"smaller of {0} and {3}\" on 1\nshow G \"larger of {0} and {3}\" on 2\nshow H \"smaller of {0} and {3} + 1\" on 1\nshow H \"larger of {0} and {3} + 1\" on 2",
+   "starts": {
+    "out": "sort [3, 1, 2, 0]"
+   },
+   "ends": {
+    "out": "[0, 1, 2, 3]"
+   }
+  },
+  {
+   "name": "Find the primes up to 7",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 36,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\n\nshow δ \"{0}\" on 1, 2\n\nshow T \"true\"\nshow F \"false\"\n\nshow Sieve \"numbers in {0} not divisible by any earlier number in {0}\" on 1\nshow Filter \"numbers in {0} not divisible by {2}\" on 1\nshow Keep \"if {0} then {3} without multiples of {4} else {2} followed by {3} without multiples of {4}\" on 1\nshow Mod \"({0} - {3}) is a multiple of {2}\" on 1\nshow Count \"({3} + 1 - {0}) is a multiple of {2}\" on 1\nshow Z? \"{0} = 0\" on 1",
+     "problems": [],
+     "faults": [],
+     "stop": "stop"
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow δ \"{0}\" on 1, 2\nshow T \"true\"\nshow F \"false\"\nshow Sieve \"numbers in {0} not divisible by any earlier number in {0}\" on 1\nshow Filter \"numbers in {0} not divisible by {2}\" on 1\nshow Keep \"if {0} then {3} without multiples of {4} else {2} followed by {3} without multiples of {4}\" on 1\nshow Mod \"({0} - {3}) is a multiple of {2}\" on 1\nshow Count \"({3} + 1 - {0}) is a multiple of {2}\" on 1\nshow Z? \"{0} = 0\" on 1",
+   "starts": {
+    "out": "numbers in [2, 3, 4, 5, 6, 7] not divisible by any earlier number in [2, 3, 4, 5, 6, 7]"
+   },
+   "ends": {
+    "out": "[2, 3, 5, 7]"
+   }
+  },
+  {
+   "name": "Find the primes up to 7",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 38,
+   "tries": [
+    {
+     "lines": "show number S 0\nshow list ∷ []\nshow δ \"{0}\" on 1, 2\nshow T \"true\"\nshow F \"false\"\nshow Mod \"{0} ≡ {3} (mod {2})\" on 1\nshow Count \"{3} + 1 ≡ {0} (mod {2})\" on 1\nshow Z? \"{0} = 0\" on 1\nshow Keep \"the candidates from {2} and {3} that are not multiples of {4}\" on 1\nshow Filter \"the candidates from {0} that are not multiples of {2}\" on 1\nshow Sieve \"the primes in {0}\" on 1",
+     "problems": [],
+     "faults": [],
+     "stop": "stop"
+    }
+   ],
+   "passed": true,
+   "normalised": "show number S 0\nshow list ∷ []\nshow δ \"{0}\" on 1, 2\nshow T \"true\"\nshow F \"false\"\nshow Mod \"{0} ≡ {3} (mod {2})\" on 1\nshow Count \"{3} + 1 ≡ {0} (mod {2})\" on 1\nshow Z? \"{0} = 0\" on 1\nshow Keep \"the candidates from {2} and {3} that are not multiples of {4}\" on 1\nshow Filter \"the candidates from {0} that are not multiples of {2}\" on 1\nshow Sieve \"the primes in {0}\" on 1",
+   "starts": {
+    "out": "the primes in [2, 3, 4, 5, 6, 7]"
+   },
+   "ends": {
+    "out": "[2, 3, 5, 7]"
+   }
+  },
+  {
+   "name": "Triage: inspect, then run a child",
+   "anonymous": false,
+   "run": 0,
+   "seconds": 248,
+   "tries": [
+    {
+     "lines": "",
+     "problems": [
+      "the reply has no show lines"
+     ],
+     "faults": [],
+     "stop": "max_tokens"
+    },
+    {
+     "lines": "",
+     "problems": [
+      "the reply has no show lines"
+     ],
+     "faults": [],
+     "stop": "max_tokens"
+    },
+    {
+     "lines": "show Leaf \"leaf\"\nshow Stem \"stem({1})\"\nshow Fork \"fork({1}, {2})\"\nshow App \"{1} applied to {2}\"\nshow Eval \"value of {0}\" on 1\nshow Call \"{0} applied to {2}\" on 1\nshow Dup \"{0}\" on 1, 2",
+     "problems": [],
+     "faults": [],
+     "stop": "stop"
+    }
+   ],
+   "passed": true,
+   "normalised": "show Leaf \"leaf\"\nshow Stem \"stem({1})\"\nshow Fork \"fork({1}, {2})\"\nshow App \"{1} applied to {2}\"\nshow Eval \"value of {0}\" on 1\nshow Call \"{0} applied to {2}\" on 1\nshow Dup \"{0}\" on 1, 2",
+   "starts": {
+    "out": "value of (((leaf applied to ((leaf applied to leaf) applied to leaf)) applied to (leaf applied to leaf)) applied to ((leaf applied to (((leaf applied to leaf) applied to (leaf applied to leaf)) applied to leaf)) applied to leaf))"
+   },
+   "ends": {
+    "out": "stem(leaf)"
+   }
+  },
+  {
+   "name": "Triage: inspect, then run a child",
+   "anonymous": false,
+   "run": 1,
+   "seconds": 427,
+   "tries": [
+    {
+     "lines": "",
+     "problems": [
+      "the reply has no show lines"
+     ],
+     "faults": [],
+     "stop": "max_tokens"
+    },
+    {
+     "lines": "",
+     "problems": [
+      "the reply has no show lines"
+     ],
+     "faults": [],
+     "stop": "max_tokens"
+    },
+    {
+     "lines": "",
+     "problems": [
+      "the reply has no show lines"
+     ],
+     "faults": [],
+     "stop": "max_tokens"
+    }
+   ],
+   "passed": false,
+   "normalised": "",
+   "starts": {
+    "out": "Eval(App(App(App(Leaf, App(App(Leaf, Leaf), Leaf)), App(Leaf, Leaf)), App(App(Leaf, App(App(App(Leaf, Leaf), App(Leaf, Leaf)), Leaf)), Leaf)))"
+   },
+   "ends": {
+    "out": "Stem(Leaf)"
+   }
+  }
+ ]
+}
