@@ -144,8 +144,11 @@ Choices made along the way that you haven't confirmed yet:
      'ok now make types required and add another agent type that does xyz'
      within the context of an existing conversation"). Built behind a switch,
      2026-11-04, on no design round: `VITE_CHAT=on` shows it, in the local `.env`
-     and not in production. Logic in `src/create/chat.ts`, the panel in
-     `src/ui/Chat.tsx`.
+     and not in production, where `?chat=on` lets a browser in for good and
+     `?chat=off` takes it back out (`src/ui/chatUnlock.ts`, 2026-11-05, so a friend
+     can try it; you: "it's just a feature switch"). It adds about 15 kB compressed
+     for everyone, which loading it only once unlocked would save. Logic in
+     `src/create/chat.ts`, the panel in `src/ui/Chat.tsx`.
      - Bring your own model (you, 2026-11-05: "i think for now let's just allow
        people to bring their own models and providers... we can make requests
        right from the frontend! which also neatly gets rid of the whole netlify
@@ -171,9 +174,22 @@ Choices made along the way that you haven't confirmed yet:
          downloaded).
        - Models: no provider says which are popular, and OpenRouter's
          `?order=top-weekly` changes nothing. So the list is the provider's own
-         `/models`, newest first, searchable, and any name can be typed.
-       - Open: `Off` and the levels are one fixed list for every
-         model, with no `xhigh`/`max`.
+         `/models`, newest first, searchable, and any name can be typed, with each
+         provider's format in the placeholder. A kept shortlist was looked into
+         and dropped (you, 2026-11-05: "that might be plenty for what i need").
+         If lists turn out too noisy: models.dev has what it takes, keyless, with
+         release dates, and a weekly job could keep a small file from it.
+       - Reasoning levels vary by model, even within a lab: DeepSeek, Moonshot
+         and `glm-5.3` have low, high and max, with no medium. OpenRouter's
+         `/models` says which (`reasoning.supported_efforts`) and so does
+         Anthropic's (`capabilities.effort`), both seen on real lists; other
+         providers get the usual levels, and one that's turned down is ruled out
+         for that model until it's picked again. xhigh and max haven't been
+         tried on a real reply.
+       - Open: settings still does two jobs under one Save, connecting a provider
+         and choosing the default, so adding a second provider makes it the
+         default. Splitting them, or a "use for new chats" checkbox, waits until
+         it's been used for a while.
      - Resume (you, 2026-11-05: "a resume button for when replies or reasoning gets
        cut off, so you can easily resume its response without explaining to the
        model what happened"). It works by a hidden message with how far it got,
