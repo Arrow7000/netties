@@ -144,12 +144,42 @@ Choices made along the way that you haven't confirmed yet:
      don't, but where you can have a conversation and ask for something like
      'ok now make types required and add another agent type that does xyz'
      within the context of an existing conversation"). Built behind a switch,
-     2026-11-04, on no design round: `VITE_CHAT=on` shows it and `CHAT_MODEL`
-     picks the OpenRouter model behind /api/chat, which is a 404 without it. Both
-     are in the local `.env` and neither is in production. Plain `npm run dev`
-     serves it (`netlify/lib/chatDev.ts`), and `CHAT_MODEL=fake` answers from a
-     script, for free. Logic in `src/create/chat.ts`, the panel in
+     2026-11-04, on no design round: `VITE_CHAT=on` shows it, in the local `.env`
+     and not in production. Logic in `src/create/chat.ts`, the panel in
      `src/ui/Chat.tsx`. /api/create and its limits are unchanged.
+     - Bring your own model (you, 2026-11-05: "i think for now let's just allow
+       people to bring their own models and providers... we can make requests
+       right from the frontend! which also neatly gets rid of the whole netlify
+       60s request timeout"). Built that day: `src/create/provider.ts`, settings
+       in `src/ui/modelSettings.ts` and `src/ui/ModelSettingsForm.tsx`. Under `npm
+       run dev`, "Pretend model" in the provider list answers from a script, for
+       free (`scripts/fakeModel.ts`). Keys stay in localStorage, and are never
+       saved with chats. `CHAT_MODEL` now only matters to `reading-eval`.
+       - The API: Chat Completions is the standard, and Anthropic's Messages isn't
+         the same thing. Its OpenAI-style endpoint ignores `reasoning_effort` and
+         never returns thinking, so Anthropic goes through Messages.
+       - Which providers take browser requests, checked 2026-11-05: all 16 in the
+         list. OpenAI and Cerebras leave CORS headers off a 401 on chat requests,
+         so a wrong key looks like a network failure; for OpenAI the models
+         endpoint says what's wrong, and the app asks it. Success responses were
+         only seen for OpenRouter and Anthropic, with real keys.
+       - Local models, tested in Chrome 156 from the live site's origin: localhost
+         and LAN addresses work once the visitor allows Chrome's permission prompt
+         and the server allows the site. Stock Ollama answers 403 until
+         `OLLAMA_ORIGINS` includes the site; the app says how. Not tried: Safari or
+         Firefox, LM Studio, or a real local model's replies (Ollama here has none
+         downloaded).
+       - Models: no provider says which are popular, and OpenRouter's
+         `?order=top-weekly` changes nothing. So the list is the provider's own
+         `/models`, newest first, searchable, and any name can be typed.
+       - Open: whether to remove /api/create, which is still live on our key with
+         no UI using it; and `Off` and the levels are one fixed list for every
+         model, with no `xhigh`/`max`.
+     - Resume (you, 2026-11-05: "a resume button for when replies or reasoning gets
+       cut off, so you can easily resume its response without explaining to the
+       model what happened"). It works by a hidden message with how far it got,
+       since newer models refuse a reply seeded with its start. A document has to
+       come whole, so one cut off part way gets written again.
      - The tries (you, 2026-11-04): "the retry limit should be set per turn, not
        overall. so when i send a msg the model gets 3 tries to get a net through
        the checker but after i message it should get 3 more. actually tbh i think
@@ -172,11 +202,11 @@ Choices made along the way that you haven't confirmed yet:
        Load button rather than changing the canvas. They live in the tab, so
        reloading or closing it cuts them all off, each with Continue. Nothing says
        a reply has finished elsewhere yet, beyond the list and the Chat button.
-     - Names: the model names a chat from its first message, through
-       /api/chat/title, with no thinking (about 1 s and $0.00004 a title). Until
-       then, or if that fails, it goes by its first line. Any chat without a name
-       from the model gets one when the page loads, in order, stopping at the
-       first failure until the next load.
+     - Names: the model names a chat from its first message, with as little
+       thinking as it allows. Until then, or if that fails, it goes by its first
+       line. A chat without a name gets one when it's next added to: never on
+       loading the page, which would spend the visitor's money unasked, and could
+       bring up the browser's permission prompt for a local model.
      - Examples: the prompt lists every example's name and description (a test keeps
        that the same as the app's), and the model asks to see some with a block
        marked `examples`; netties answers through the same loop as its feedback.
@@ -202,6 +232,12 @@ Choices made along the way that you haven't confirmed yet:
        seeing the reasoning of the try that failed.
      - Thinking to the limit: sorting 3 numbers used all 32,000 tokens in 4 of 6
        tries, with no net at the end ("The reply was too long and got cut off").
+       There's no such limit in the chat now, apart from 64,000 for Anthropic and
+       DeepSeek, and a reply that hits one can be resumed.
+     - A flaky test: "is really N times as fast" in `editor.test.ts` takes about
+       3.8 s alone and about 5 s in the whole suite, against a 5 s timeout. On
+       2026-11-05 it failed 4 of 5 whole runs on a clean checkout, on a busy
+       machine. A property test in `layout.test.ts` also failed once.
      - After the desktop UX: the phone. Tap targets are under the app's 40 px; a
        sideways phone leaves the net about 70 px; Step and Run are behind the panel
        upright, and how to reach them is undecided (you, 2026-11-04: "not sure yet.
@@ -210,14 +246,13 @@ Choices made along the way that you haven't confirmed yet:
        "ideally we should have a clear name to refer to a net+agent types+rules
        but ye good enough for now"). The chat says "Show as text" for now, and the
        code and the prompt say "document".
-     - Before it can go live: Netlify's 60 s limit (below), which the dev server
-       doesn't have; a visual pass from you; a phone's real keyboard, which hasn't
+     - Before it can go live: a visual pass from you; a phone's real keyboard, which hasn't
        been tried; holding a reply while a rule with unsaved changes is open,
        which hasn't been run. The eval only has compute-an-answer tasks, so it
        needs follow-up and edit tasks too. On the one follow-up tried so far,
        DeepSeek 1017 took 4 s against 17 s for writing the system it edited, so
        edits may fit in 60 s where whole systems don't: worth measuring.
-   - **Netlify ends the response 60 s in**, even while data is flowing
+   - **Netlify ends the response 60 s in** (now only a matter for /api/create), even while data is flowing
      (tested on a draft deploy, 2026-11-04). That's about 12k tokens from
      Haiku, which often thinks for far longer on harder requests, so it gets
      5 to 10 of the 33 hard attempts right in time; Sonnet gets 26, Opus 27
