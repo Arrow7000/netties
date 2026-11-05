@@ -5,7 +5,7 @@ import { copyText } from "./clipboard";
 import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
 import { Menu, MenuItem } from "./Menu";
-import { nameOf, presetsHere } from "./modelSettings";
+import { nameHint, nameOf, presetsHere } from "./modelSettings";
 
 /** How a provider's list of models stands. */
 type Listing = { kind: "idle" } | { kind: "loading" } | { kind: "loaded"; models: ModelInfo[] } | { kind: "failed"; message: string };
@@ -16,6 +16,17 @@ const matching = (models: ModelInfo[], query: string) => {
   return q ? models.filter((m) => m.id.toLowerCase().includes(q) || m.name?.toLowerCase().includes(q)) : models;
 };
 const MOST_SHOWN = 100;
+
+/** A long list only goes so far, so say when there's more than can be seen. */
+function MoreThanShown(props: { total: number }) {
+  return (
+    <Show when={props.total > MOST_SHOWN}>
+      <div class="model-note">
+        Showing {MOST_SHOWN} of {props.total}. Search for more.
+      </div>
+    </Show>
+  );
+}
 
 /** What the form says when something's waiting for it, so that Save going ahead with it is no surprise. */
 const WAITING: Record<Waiting, { head: string; note: string; button: string }> = {
@@ -120,7 +131,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
   createEffect(
     on([provider, url, key, wire], () => {
       setListing({ kind: "idle" });
-      const c = connection();
+      const c = models.connect(provider(), entry(), true);
       if (!c) return;
       const ctrl = new AbortController();
       const timer = setTimeout(() => {
@@ -137,10 +148,11 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
     }),
   );
 
-  const choices = () => {
+  const found = () => {
     const l = listing();
-    return l.kind === "loaded" ? matching(l.models, model()).slice(0, MOST_SHOWN) : [];
+    return l.kind === "loaded" ? matching(l.models, model()) : [];
   };
+  const choices = () => found().slice(0, MOST_SHOWN);
 
   /** Whether saving only puts a failed chat's key or address right: the same provider, and the model field left alone. Then it's on the model it was on, and new chats are too. */
   const keepsChat = () => {
@@ -272,8 +284,8 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
       </label>
       <label>
         {modelLabel()}
-        <input class="input" aria-label={modelLabel()} spellcheck={false} autocomplete="off" placeholder={listing().kind === "loaded" ? "Search, or type a model's name" : "The model's name"} value={model()} onInput={(e) => setModel(e.currentTarget.value)} />
-        <Show when={preset()?.needsKey && !key().trim()}>
+        <input class="input" aria-label={modelLabel()} spellcheck={false} autocomplete="off" placeholder={nameHint(provider())} value={model()} onInput={(e) => setModel(e.currentTarget.value)} />
+        <Show when={preset()?.needsKey && !preset()?.openList && !key().trim()}>
           <span class="hint">Paste your key to see the models.</span>
         </Show>
         <Show when={listing().kind === "loading"}>
@@ -288,6 +300,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
         <Show when={choices().length && !choices().some((m) => m.id === model())}>
           <div class="model-choices" role="listbox" aria-label="Models">
             <For each={choices()}>{(m) => <MenuItem title={m.name ?? m.id} note={m.name ? m.id : undefined} onClick={() => (setModel(m.id), saveButton.focus())} />}</For>
+            <MoreThanShown total={found().length} />
           </div>
         </Show>
       </label>
@@ -351,10 +364,11 @@ function ProviderModels(props: { chat: Chat; provider: string; query: string; he
     (models) => setListing({ kind: "loaded", models }),
     (e: Error) => setListing({ kind: "failed", message: e.message }),
   );
-  const shown = createMemo(() => {
+  const found = createMemo(() => {
     const l = listing();
-    return l.kind === "loaded" ? matching(l.models, props.query).slice(0, MOST_SHOWN) : [];
+    return l.kind === "loaded" ? matching(l.models, props.query) : [];
   });
+  const shown = () => found().slice(0, MOST_SHOWN);
   const current = () => props.chat.choice();
   /** A name that was typed in, or is too far down to be shown, so the chat's model is still there to see. */
   const unlisted = () => {
@@ -388,6 +402,7 @@ function ProviderModels(props: { chat: Chat; provider: string; query: string; he
           />
         )}
       </For>
+      <MoreThanShown total={found().length} />
     </>
   );
 }
@@ -419,7 +434,7 @@ export function ModelPicker(props: { chat: Chat }) {
           const typedOn = () => (chat.usable() ? chat.choice()!.provider : providers()[0]);
           return (
             <>
-              <input ref={box} class="input" aria-label="Search models" placeholder="Search, or type a model's name" spellcheck={false} autocomplete="off" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+              <input ref={box} class="input" aria-label="Search models" placeholder={typedOn() ? `Search, or type ${nameHint(typedOn()!)}` : "Search, or type a model's name"} spellcheck={false} autocomplete="off" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
               <div class="model-scroll">
                 <For each={providers()}>{(id) => <ProviderModels chat={chat} provider={id} query={query()} heading={providers().length > 1} onPick={close} />}</For>
                 <Show when={typed() && typedOn()}>

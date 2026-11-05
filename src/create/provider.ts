@@ -41,6 +41,10 @@ export interface Preset {
   maxTokens?: number;
   /** Where to ask, without running a model, whether a key is any good, for a provider whose list of models would load with any key at all. */
   keyCheck?: string;
+  /** Lists its models for anyone, so they can be shown before there's a key. */
+  openList?: boolean;
+  /** A real model's name, to show what names look like here. It only illustrates the format, so it's no harm if it ages. */
+  example?: string;
 }
 
 export const CUSTOM = "custom";
@@ -48,22 +52,22 @@ export const CUSTOM = "custom";
 /** The cloud ones take requests from a browser, as checked 2026-11-05; see TODO.md for how far. A local one has to be told to let the site in. */
 export const PRESETS: Preset[] = [
   // By default OpenRouter favours cheap hosts, which can be 10× slower.
-  { id: "openrouter", name: "OpenRouter", url: "https://openrouter.ai/api/v1", wire: "openai", needsKey: true, keysAt: "https://openrouter.ai/keys", extra: { provider: { sort: "throughput" } }, keyCheck: "/key" },
-  { id: "anthropic", name: "Anthropic", url: "https://api.anthropic.com/v1", wire: "anthropic", needsKey: true, keysAt: "https://platform.claude.com/settings/keys", maxTokens: 64_000 },
-  { id: "openai", name: "OpenAI", url: "https://api.openai.com/v1", wire: "openai", needsKey: true, keysAt: "https://platform.openai.com/api-keys" },
-  { id: "google", name: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai", wire: "openai", needsKey: true, keysAt: "https://aistudio.google.com/apikey" },
-  { id: "deepseek", name: "DeepSeek", url: "https://api.deepseek.com", wire: "openai", needsKey: true, keysAt: "https://platform.deepseek.com/api_keys", maxTokens: 64_000 },
-  { id: "xai", name: "xAI", url: "https://api.x.ai/v1", wire: "openai", needsKey: true, keysAt: "https://console.x.ai" },
-  { id: "groq", name: "Groq", url: "https://api.groq.com/openai/v1", wire: "openai", needsKey: true, keysAt: "https://console.groq.com/keys" },
-  { id: "mistral", name: "Mistral", url: "https://api.mistral.ai/v1", wire: "openai", needsKey: true, keysAt: "https://console.mistral.ai/api-keys" },
-  { id: "together", name: "Together", url: "https://api.together.xyz/v1", wire: "openai", needsKey: true, keysAt: "https://api.together.ai/settings/api-keys" },
-  { id: "fireworks", name: "Fireworks", url: "https://api.fireworks.ai/inference/v1", wire: "openai", needsKey: true, keysAt: "https://fireworks.ai/account/api-keys" },
-  { id: "cerebras", name: "Cerebras", url: "https://api.cerebras.ai/v1", wire: "openai", needsKey: true, keysAt: "https://cloud.cerebras.ai" },
-  { id: "moonshot", name: "Moonshot (Kimi)", short: "Moonshot", url: "https://api.moonshot.ai/v1", wire: "openai", needsKey: true, keysAt: "https://platform.moonshot.ai/console/api-keys" },
-  { id: "zai", name: "Z.ai (GLM)", short: "Z.ai", url: "https://api.z.ai/api/paas/v4", wire: "openai", needsKey: true, keysAt: "https://z.ai/manage-apikey/apikey-list" },
-  { id: "qwen", name: "Alibaba (Qwen)", short: "Alibaba", url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", wire: "openai", needsKey: true, keysAt: "https://modelstudio.console.alibabacloud.com" },
-  { id: "ollama", name: "Ollama (on this computer)", short: "Ollama", url: "http://localhost:11434/v1", wire: "openai", local: true },
-  { id: "lmstudio", name: "LM Studio (on this computer)", short: "LM Studio", url: "http://localhost:1234/v1", wire: "openai", local: true },
+  { id: "openrouter", name: "OpenRouter", url: "https://openrouter.ai/api/v1", wire: "openai", needsKey: true, keysAt: "https://openrouter.ai/keys", extra: { provider: { sort: "throughput" } }, keyCheck: "/key", openList: true, example: "anthropic/claude-sonnet-5.5" },
+  { id: "anthropic", name: "Anthropic", url: "https://api.anthropic.com/v1", wire: "anthropic", needsKey: true, keysAt: "https://platform.claude.com/settings/keys", maxTokens: 64_000, example: "claude-sonnet-5-5" },
+  { id: "openai", name: "OpenAI", url: "https://api.openai.com/v1", wire: "openai", needsKey: true, keysAt: "https://platform.openai.com/api-keys", example: "gpt-6.1-terra" },
+  { id: "google", name: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai", wire: "openai", needsKey: true, keysAt: "https://aistudio.google.com/apikey", example: "gemini-3.8-flash" },
+  { id: "deepseek", name: "DeepSeek", url: "https://api.deepseek.com", wire: "openai", needsKey: true, keysAt: "https://platform.deepseek.com/api_keys", maxTokens: 64_000, example: "deepseek-flash" },
+  { id: "xai", name: "xAI", url: "https://api.x.ai/v1", wire: "openai", needsKey: true, keysAt: "https://console.x.ai", example: "grok-4.7" },
+  { id: "groq", name: "Groq", url: "https://api.groq.com/openai/v1", wire: "openai", needsKey: true, keysAt: "https://console.groq.com/keys", example: "openai/gpt-oss-120b" },
+  { id: "mistral", name: "Mistral", url: "https://api.mistral.ai/v1", wire: "openai", needsKey: true, keysAt: "https://console.mistral.ai/api-keys", example: "mistral-large-4" },
+  { id: "together", name: "Together", url: "https://api.together.xyz/v1", wire: "openai", needsKey: true, keysAt: "https://api.together.ai/settings/api-keys", example: "zai-org/GLM-5.3" },
+  { id: "fireworks", name: "Fireworks", url: "https://api.fireworks.ai/inference/v1", wire: "openai", needsKey: true, keysAt: "https://fireworks.ai/account/api-keys", example: "accounts/fireworks/models/glm-5p3" },
+  { id: "cerebras", name: "Cerebras", url: "https://api.cerebras.ai/v1", wire: "openai", needsKey: true, keysAt: "https://cloud.cerebras.ai", example: "gpt-oss-120b" },
+  { id: "moonshot", name: "Moonshot (Kimi)", short: "Moonshot", url: "https://api.moonshot.ai/v1", wire: "openai", needsKey: true, keysAt: "https://platform.moonshot.ai/console/api-keys", example: "kimi-k3" },
+  { id: "zai", name: "Z.ai (GLM)", short: "Z.ai", url: "https://api.z.ai/api/paas/v4", wire: "openai", needsKey: true, keysAt: "https://z.ai/manage-apikey/apikey-list", example: "glm-5.3" },
+  { id: "qwen", name: "Alibaba (Qwen)", short: "Alibaba", url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", wire: "openai", needsKey: true, keysAt: "https://modelstudio.console.alibabacloud.com", example: "qwen3.8-flash" },
+  { id: "ollama", name: "Ollama (on this computer)", short: "Ollama", url: "http://localhost:11434/v1", wire: "openai", local: true, example: "qwen3.8:27b" },
+  { id: "lmstudio", name: "LM Studio (on this computer)", short: "LM Studio", url: "http://localhost:1234/v1", wire: "openai", local: true, example: "qwen/qwen3-coder-30b" },
 ];
 
 export const presetOf = (id: string) => PRESETS.find((p) => p.id === id);
@@ -226,7 +230,8 @@ function saidIn(raw: string): string {
 function refusedBy(c: Connection, model: string, status: number, raw: string): ModelError {
   const said = saidIn(raw);
   const also = said ? `: ${said}` : ".";
-  if (status === 401 || status === 403) return new ModelError("key", `${c.name} didn't accept the API key${also}`);
+  // Google and xAI answer a bad key with a 400, and say what it's about.
+  if (status === 401 || status === 403 || (status === 400 && /api[ _-]?key/i.test(said))) return new ModelError("key", `${c.name} didn't accept the API key${also}`);
   if (status === 402 || status === 429) return new ModelError("rate", `${c.name} is holding back: it may be out of credit or at its rate limit${also}`);
   if (status === 404) return new ModelError("model", `${c.name} couldn't find the model ${model}${also}`);
   return new ModelError("failed", `${c.name} said no (${status})${also}`);
@@ -460,7 +465,28 @@ const listHeaders = (c: Connection): Record<string, string> =>
       : {};
 
 /** Models that can't chat. A provider's list has them all together, and only some say which are which. */
-const NOT_CHAT = /embed|whisper|tts|dall-e|image|moderation|rerank|transcri|audio|realtime|speech|sora|guard|-ocr|video/i;
+const NOT_CHAT = /embed|whisper|tts|dall-e|image|moderation|rerank|transcri|audio|realtime|speech|sora|guard|-ocr|video|lyria/i;
+
+/** What a provider says about a model beyond its name, which only some do. */
+interface Listed {
+  id?: string;
+  name?: string;
+  display_name?: string;
+  created?: number;
+  created_at?: string;
+  type?: string;
+  /** OpenRouter's: where it can be used. A batch-only entry has no way to chat. */
+  endpoints?: string[];
+  architecture?: { output_modalities?: string[] };
+}
+
+/** Whether a model can be chatted with, as far as anything says. */
+const canChat = (m: Listed) =>
+  typeof m.id === "string" &&
+  !NOT_CHAT.test(m.id) &&
+  !NOT_CHAT.test(m.type ?? "") &&
+  (!m.endpoints || m.endpoints.some((e) => e.endsWith("/chat/completions"))) &&
+  (!m.architecture?.output_modalities || m.architecture.output_modalities.includes("text"));
 
 /**
  * What a provider says the key can use, newest first. Providers don't say which
@@ -485,11 +511,11 @@ export async function listModels(c: Connection, opts: { signal?: AbortSignal; fe
   const j = (await res.json().catch(() => undefined)) as unknown;
   const box = j as { data?: unknown; models?: unknown } | null | undefined;
   // Ollama says `"data": null` when nothing's been downloaded.
-  const raw = (Array.isArray(j) ? j : box && "data" in box && box.data === null ? [] : (box?.data ?? box?.models)) as { id?: string; name?: string; display_name?: string; created?: number; created_at?: string; type?: string }[] | undefined;
+  const raw = (Array.isArray(j) ? j : box && "data" in box && box.data === null ? [] : (box?.data ?? box?.models)) as Listed[] | undefined;
   if (!Array.isArray(raw)) throw new ModelError("failed", `${c.name} didn't send a list of models.`);
-  const when = (m: (typeof raw)[number]) => m.created ?? (m.created_at ? Date.parse(m.created_at) / 1000 : 0);
+  const when = (m: Listed) => m.created ?? (m.created_at ? Date.parse(m.created_at) / 1000 : 0);
   return raw
-    .filter((m) => typeof m.id === "string" && !NOT_CHAT.test(m.id) && !NOT_CHAT.test(m.type ?? ""))
+    .filter(canChat)
     .sort((a, b) => when(b) - when(a))
     .map((m) => ({ id: m.id!.replace(/^models\//, ""), name: m.display_name ?? m.name }));
 }

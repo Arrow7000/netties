@@ -362,6 +362,35 @@ describe("listing models", () => {
     await expect(listModels(OPENAI, { fetch: f })).rejects.toMatchObject({ code: "key" });
   });
 
+  it("takes a 400 about the key as a wrong key, as Google and xAI answer one", async () => {
+    for (const body of [{ error: { message: "Please pass a valid API key" } }, { code: "invalid-argument", error: "Incorrect API key provided." }]) {
+      const { f } = provider(new Response(JSON.stringify(body), { status: 400 }));
+      await expect(listModels(OPENAI, { fetch: f })).rejects.toMatchObject({ code: "key" });
+    }
+  });
+
+  it("doesn't take any other 400 for a wrong key", async () => {
+    const { f } = provider(new Response(JSON.stringify({ error: { message: "bad request" } }), { status: 400 }));
+    await expect(listModels(OPENAI, { fetch: f })).rejects.toMatchObject({ code: "failed" });
+  });
+
+  it("leaves out what a provider says can't chat or write text", async () => {
+    const { f } = provider(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: "vendor/chat", endpoints: ["/api/v1/chat/completions"], architecture: { output_modalities: ["text"] } },
+            { id: "vendor/both", endpoints: ["/api/v1/chat/completions"], architecture: { output_modalities: ["text", "video"] } },
+            { id: "vendor/chat:batch", endpoints: ["/api/v1/batches"], architecture: { output_modalities: ["text"] } },
+            { id: "vendor/picture", endpoints: ["/api/v1/chat/completions"], architecture: { output_modalities: ["other"] } },
+            { id: "vendor/says-nothing" },
+          ],
+        }),
+      ),
+    );
+    expect((await listModels(OPENAI, { fetch: f })).map((m) => m.id)).toEqual(["vendor/chat", "vendor/both", "vendor/says-nothing"]);
+  });
+
   it("says when what came back isn't a list", async () => {
     const { f } = provider(new Response("{}"));
     await expect(listModels(OPENAI, { fetch: f })).rejects.toMatchObject({ code: "failed" });

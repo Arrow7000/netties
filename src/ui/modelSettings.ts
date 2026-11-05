@@ -38,9 +38,16 @@ interface Stored {
 const modelKey = (provider: string, model: string) => `${provider}/${model}`;
 
 /** A pretend provider, with no cost, only under `npm run dev` (scripts/fakeModel.ts). */
-const devPresets = (): Preset[] => (import.meta.env.DEV && typeof location !== "undefined" ? [{ id: "fake", name: "Pretend model (dev only)", short: "Pretend model", url: `${location.origin}/dev-model/v1`, wire: "openai", local: true }] : []);
+const devPresets = (): Preset[] => (import.meta.env.DEV && typeof location !== "undefined" ? [{ id: "fake", name: "Pretend model (dev only)", short: "Pretend model", url: `${location.origin}/dev-model/v1`, wire: "openai", local: true, example: "fake-writer" }] : []);
 
 export const presetsHere = (): Preset[] => [...PRESETS, ...devPresets()];
+
+/** What a model's name looks like on a provider, for a field waiting for one. */
+export const nameHint = (id: string) => {
+  if (id === CUSTOM) return "Exactly as your server names it";
+  const example = presetsHere().find((p) => p.id === id)?.example;
+  return example ? `e.g. ${example}` : "The model's name";
+};
 
 /** What to call a provider in a sentence. */
 export const nameOf = (id: string) => {
@@ -76,13 +83,13 @@ export function createModelSettings() {
     if (e.key === KEY) setStored(read());
   });
 
-  /** How to reach a provider, given what's filled in for it. It may not be usable yet. */
-  const connect = (id: string, entry: ProviderEntry | undefined): Connection | undefined => {
+  /** How to reach a provider, given what's filled in for it, or just to ask what it has. It may not be usable yet. */
+  const connect = (id: string, entry: ProviderEntry | undefined, onlyToList = false): Connection | undefined => {
     const preset = presetsHere().find((p) => p.id === id);
     if (id !== CUSTOM && !preset) return undefined;
     const url = normalizeUrl(entry?.url ?? preset?.url ?? "");
     if (!url) return undefined;
-    if (preset?.needsKey && !entry?.key) return undefined;
+    if (preset?.needsKey && !entry?.key && !(onlyToList && preset.openList)) return undefined;
     return { name: nameOf(id), url: preset && !preset.local ? preset.url : url, wire: preset?.wire ?? entry?.wire ?? "openai", key: entry?.key || undefined, extra: preset?.extra, maxTokens: preset?.maxTokens, keyCheck: preset?.keyCheck };
   };
 
