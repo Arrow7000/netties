@@ -83,7 +83,7 @@ const serveChat: Connect.NextHandleFunction = async (req, res) => {
   const system = body.messages[0]!;
   const talk = body.messages.slice(1);
   if (system.content === TITLE_SYSTEM) {
-    send({ content: talk[0]!.content.split(/\s+/).slice(0, 4).join(" ") }, "stop");
+    send({ content: talk[0]!.content.split(/\s+/).slice(0, 6).join(" ") }, "stop");
     res.end("data: [DONE]\n\n");
     return;
   }

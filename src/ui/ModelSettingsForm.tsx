@@ -91,13 +91,16 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
   /** Having just forgotten the key, as nothing else on the form shows that it happened. */
   const [forgot, setForgot] = createSignal(false);
 
+  /** What was filled in for each provider that has been left, so that going back finds it there. It lasts as long as the form does. */
+  const drafts = new Map<string, { url: string; wire: Wire; key: string; model: string }>();
   /** Fill in what's known for this provider. */
   const load = () => {
     const e = saved();
-    setUrl(e?.url ?? (preset()?.local ? preset()!.url : ""));
-    setWire(e?.wire ?? "openai");
-    setKey(e?.key ?? "");
-    setModel(filled());
+    const d = drafts.get(provider());
+    setUrl(d?.url ?? e?.url ?? (preset()?.local ? preset()!.url : ""));
+    setWire(d?.wire ?? e?.wire ?? "openai");
+    setKey(d?.key ?? e?.key ?? "");
+    setModel(d?.model ?? filled());
   };
   /** What new chats really use, which a pick in a chat doesn't change, or else what was last saved for this provider. */
   const filled = () => {
@@ -109,6 +112,9 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
   const entry = () => ({ ...(key().trim() ? { key: key().trim() } : {}), ...(local() || custom() ? { url: url().trim() } : {}), ...(custom() ? { wire: wire() } : {}), model: model().trim() });
   const connection = () => models.connect(provider(), entry());
   const canSave = () => !!connection() && !!model().trim();
+  /** What's missing, for a Save that's greyed out. */
+  const missing = () =>
+    [!connection() && (preset()?.needsKey ? "an API key" : "an address"), !model().trim() && "a model"].filter(Boolean).join(" and ");
 
   // What can be chosen from depends on the address and the key. Typing either in shouldn't ask at every letter.
   createEffect(
@@ -218,6 +224,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
           aria-label="Provider"
           value={provider()}
           onChange={(e) => {
+            drafts.set(provider(), { url: url(), wire: wire(), key: key(), model: model() });
             setProvider(e.currentTarget.value);
             setForgot(false);
             load();
@@ -266,6 +273,9 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
       <label>
         {modelLabel()}
         <input class="input" aria-label={modelLabel()} spellcheck={false} autocomplete="off" placeholder={listing().kind === "loaded" ? "Search, or type a model's name" : "The model's name"} value={model()} onInput={(e) => setModel(e.currentTarget.value)} />
+        <Show when={preset()?.needsKey && !key().trim()}>
+          <span class="hint">Paste your key to see the models.</span>
+        </Show>
         <Show when={listing().kind === "loading"}>
           <span class="hint">Asking {nameOf(provider())} what it has…</span>
         </Show>
@@ -288,6 +298,9 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
           <For each={EFFORTS}>{(l) => <option value={l.id}>{l.name}</option>}</For>
         </select>
       </label>
+      <Show when={missing()}>
+        <span class="hint model-missing">To save, this needs {missing()}.</span>
+      </Show>
       <div class="model-actions">
         <button ref={saveButton} type="submit" class="btn primary" disabled={!canSave()}>
           {saveLabel()}
@@ -319,6 +332,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
             title={`Remove ${nameOf(provider())} and all that's kept for it, so it's no longer in the model menu. Your chats stay.`}
             onClick={() => {
               models.remove(provider());
+              drafts.delete(provider());
               load();
             }}
           >
@@ -383,45 +397,55 @@ export function ModelPicker(props: { chat: Chat }) {
   const chat = props.chat;
   const label = () => (chat.usable() ? chat.choice()!.model : "Choose a model");
   return (
-    <Menu class="chat-model-button" menuClass="model-menu" title={chat.usable() ? `${nameOf(chat.choice()!.provider)}: ${chat.choice()!.model}` : "Choose a model"} label={<span>{label()}</span>}>
-      {(close) => {
-        const [query, setQuery] = createSignal("");
-        let box!: HTMLInputElement;
-        onMount(() => {
-          if (!fingers()) box.focus();
-        });
-        const typed = () => query().trim();
-        const providers = () => chat.models.ready();
-        /** A name that isn't on any list can still be used, on the provider this chat is on. */
-        const typedOn = () => (chat.usable() ? chat.choice()!.provider : providers()[0]);
-        return (
-          <>
-            <input ref={box} class="input" aria-label="Search models" placeholder="Search, or type a model's name" spellcheck={false} autocomplete="off" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
-            <div class="model-scroll">
-              <For each={providers()}>{(id) => <ProviderModels chat={chat} provider={id} query={query()} heading={providers().length > 1} onPick={close} />}</For>
-              <Show when={typed() && typedOn()}>
-                <MenuItem
-                  title={`Use "${typed()}"`}
-                  note={nameOf(typedOn()!)}
-                  onClick={() => {
-                    chat.setModel(typedOn()!, typed());
-                    close();
-                  }}
-                />
-              </Show>
-            </div>
-            <hr />
-            <MenuItem
-              title="Providers and keys…"
-              onClick={() => {
-                close();
-                chat.openSettings();
-              }}
-            />
-          </>
-        );
-      }}
-    </Menu>
+    <Show
+      when={chat.models.ready().length}
+      // With nothing set up there's nothing to pick from, so a menu would only be in the way of the form.
+      fallback={
+        <button class="btn chat-model-button" title="Choose a model" onClick={() => chat.openSettings()}>
+          <span>Choose a model</span>
+        </button>
+      }
+    >
+      <Menu class="chat-model-button" menuClass="model-menu" title={chat.usable() ? `${nameOf(chat.choice()!.provider)}: ${chat.choice()!.model}` : "Choose a model"} label={<span>{label()}</span>}>
+        {(close) => {
+          const [query, setQuery] = createSignal("");
+          let box!: HTMLInputElement;
+          onMount(() => {
+            if (!fingers()) box.focus();
+          });
+          const typed = () => query().trim();
+          const providers = () => chat.models.ready();
+          /** A name that isn't on any list can still be used, on the provider this chat is on. */
+          const typedOn = () => (chat.usable() ? chat.choice()!.provider : providers()[0]);
+          return (
+            <>
+              <input ref={box} class="input" aria-label="Search models" placeholder="Search, or type a model's name" spellcheck={false} autocomplete="off" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+              <div class="model-scroll">
+                <For each={providers()}>{(id) => <ProviderModels chat={chat} provider={id} query={query()} heading={providers().length > 1} onPick={close} />}</For>
+                <Show when={typed() && typedOn()}>
+                  <MenuItem
+                    title={`Use "${typed()}"`}
+                    note={nameOf(typedOn()!)}
+                    onClick={() => {
+                      chat.setModel(typedOn()!, typed());
+                      close();
+                    }}
+                  />
+                </Show>
+              </div>
+              <hr />
+              <MenuItem
+                title="Providers and keys…"
+                onClick={() => {
+                  close();
+                  chat.openSettings();
+                }}
+              />
+            </>
+          );
+        }}
+      </Menu>
+    </Show>
   );
 }
 
@@ -441,7 +465,7 @@ export function EffortPicker(props: { chat: Chat }) {
           {(l) => (
             <MenuItem
               title={l.name}
-              note={l.id === "default" ? "Whatever the model does by itself" : l.id === "off" ? "Or as little as it allows" : undefined}
+              note={l.id === "default" ? "Whatever the model does by itself" : l.id === "off" ? "As little as the model allows" : undefined}
               current={now() === l.id}
               disabled={!chat.choice()}
               onClick={() => {
