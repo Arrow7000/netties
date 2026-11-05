@@ -739,6 +739,7 @@ export function createNetModel(opts: NetModelOptions) {
     animSnapshot,
     animate,
     settleFrom,
+    noAnimation,
     /**
      * Manual layout: put agents a step created where it says. Automatic
      * layout places them itself; they only start out there, as the net

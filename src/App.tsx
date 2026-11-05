@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
-import { createEditor } from "./state/editor";
+import { SPEEDS, createEditor } from "./state/editor";
 import { type Doc, arrival, fromShareHash, loadInitialDoc, SHARE_LOAD_ERROR, sharePushes } from "./state/persist";
 import { Canvas, type Pad, createCamera } from "./ui/Canvas";
 import { CHAT_WIDTH, ChatPanel } from "./ui/Chat";
@@ -30,10 +30,8 @@ import { typingOn } from "./core/types";
 
 const THEME_KEY = "netties:theme";
 
-/** Speeds the slider steps through, as powers of two. */
-const SPEED_MIN = -3;
-const SPEED_MAX = 2;
-const SLOW = 0.2;
+/** The speed the clock button goes to. */
+const SLOW = 0.25;
 
 /** Room the desktop chrome takes round the canvas: the bars, and the palette on the right. */
 const DESKTOP_PAD: Pad = { t: 72, r: 270, b: 90, l: 48 };
@@ -323,7 +321,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
     URL.revokeObjectURL(a.href);
   };
 
-  // Speed: the slider is logarithmic; the clock button toggles slow motion.
+  // Speed: the slider goes through the speeds there are; the clock button toggles slow motion.
   let beforeSlow = 1;
   const slow = () => ed.speed() <= SLOW + 1e-6;
   const toggleSlow = () => {
@@ -333,11 +331,6 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
       ed.setSpeed(SLOW);
     }
   };
-  const speedText = () => {
-    const s = ed.speed();
-    return `${s >= 1 ? Math.round(s * 10) / 10 : Math.round(s * 100) / 100}×`;
-  };
-
   // Pieces of the bottom bar that move into the view menu on a phone.
   const speed = () => (
     <div class="speed">
@@ -346,14 +339,15 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
       </button>
       <input
         type="range"
-        min={SPEED_MIN}
-        max={SPEED_MAX}
-        step={0.25}
-        value={Math.log2(ed.speed())}
-        onInput={(e) => ed.setSpeed(2 ** e.currentTarget.valueAsNumber)}
+        min={0}
+        max={SPEEDS.length - 1}
+        step={1}
+        value={SPEEDS.indexOf(ed.speed() as (typeof SPEEDS)[number])}
+        onInput={(e) => ed.setSpeed(SPEEDS[e.currentTarget.valueAsNumber]!)}
         aria-label="Animation speed"
+        aria-valuetext={`${ed.speed()} times`}
       />
-      <output>{speedText()}</output>
+      <output>{ed.speed()}×</output>
     </div>
   );
   const layout = () => (

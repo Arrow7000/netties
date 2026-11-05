@@ -102,7 +102,9 @@ export function createEditor(initial: Doc | undefined) {
       // ignore
     }
   };
-  const stepDuration = () => 420 / speed();
+  const stepDuration = () => STEP / speed();
+  /** How long a run takes over each step, so that N× is N times as fast as 1×. */
+  const stepEvery = () => (STEP * (1 + FLASH) + PAUSE) / speed();
   const resetRun = () => {
     setStats(emptyStats());
     setSteps(0);
@@ -293,31 +295,106 @@ export function createEditor(initial: Doc | undefined) {
   };
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let painting = 0;
   const stop = () => {
     if (timer) clearTimeout(timer);
+    cancelAnimationFrame(painting);
     timer = undefined;
     setPreviewMode(undefined);
     setRunning(false);
   };
+  /**
+   * Several steps with nothing drawn but where they end up. Past a certain speed
+   * nobody can follow the steps, and working out how each one moves is most of
+   * what they cost. Automatic layout only: by hand, new agents need placing.
+   */
+  const stepAhead = (n: number): number => {
+    const fromExample = inExampleRun();
+    const s: Stats = { ...stats(), byRule: new Map(stats().byRule) };
+    let fired = 0;
+    for (; fired < n; fired++) {
+      const recs = parallelStep(model.net, system, s);
+      if (!recs.length) break;
+      for (const r of recs) {
+        model.dissolveAround(r.removed);
+        r.removed.forEach((id) => model.deletePosition(id));
+      }
+    }
+    if (!fired) return 0;
+    batch(() => {
+      setStats(s);
+      setSteps((k) => k + fired);
+      rememberReduction(fromExample);
+      model.clearSelection();
+      model.bump();
+      model.noAnimation();
+    });
+    return fired;
+  };
+
   const run = () => {
     if (running()) return stop();
     if (model.activeWires().size === 0) return;
     model.checkpoint();
     setRunning(true);
     let rounds = 0;
+    /** When this step's turn began: the next one's comes a step's time after that, however long this one took. */
+    let began = 0;
+    /** When the work of this step began, after any preview. */
+    let working = 0;
+    /** How many steps are due, in the time since `counted`, when they're being taken without being drawn. */
+    let owed = 0;
+    let counted = 0;
+    /**
+     * On to the next step once this one is on the screen, leaving the page time
+     * to itself in proportion to what the step cost. A net can get big enough to
+     * take longer to draw than a step's time, and that mustn't lock up the page,
+     * Stop button and all. A tab in the background never draws, so it doesn't wait for that.
+     */
+    const next = () => {
+      const go = () => {
+        cancelAnimationFrame(painting);
+        clearTimeout(timer);
+        const now = performance.now();
+        timer = setTimeout(tick, Math.max(ahead() ? BREATHER : 0, (now - working) * REST, began + stepEvery() - now));
+      };
+      painting = requestAnimationFrame(go);
+      timer = setTimeout(go, HIDDEN_FRAME);
+    };
+    const ahead = () => model.mode() === "auto" && speed() >= STEP_AHEAD;
     const step = () => {
+      working = performance.now();
       setPreviewMode(undefined);
-      if (!stepAll(false) || ++rounds >= 2000) return stop();
-      // Leave each step a moment on screen once it has finished moving.
-      timer = setTimeout(tick, stepDuration() + 140);
+      if (ahead()) {
+        const now = performance.now();
+        owed = Math.min(owed + (now - counted) / stepEvery(), MOST_AHEAD);
+        counted = now;
+        const fired = stepAhead(Math.max(1, Math.floor(owed)));
+        if (!fired) return stop();
+        owed = Math.max(0, owed - fired);
+        rounds += fired;
+      } else {
+        owed = 0;
+        counted = performance.now();
+        if (!stepAll(false)) return stop();
+        rounds++;
+      }
+      if (rounds >= RUN_LIMIT) {
+        setMessage(`Stopped after ${RUN_LIMIT.toLocaleString("en")} steps. Press Run to carry on.`);
+        return stop();
+      }
+      next();
     };
     // Flash what's about to happen, for longer the slower the run.
     const tick = () => {
       if (model.activeWires().size === 0) return stop();
+      began = performance.now();
+      if (ahead()) return step();
       setPreviewMode("all");
       if (!previewing()) return step();
       timer = setTimeout(step, stepDuration() * FLASH);
     };
+    counted = performance.now();
     timer = setTimeout(tick, 0);
   };
 
@@ -905,8 +982,31 @@ export function createEditor(initial: Doc | undefined) {
 export type Editor = ReturnType<typeof createEditor>;
 
 const SPEED_KEY = "netties:speed";
+/**
+ * The speeds there are. Each third of the slider gets its own range: slow motion
+ * up to 1×, normal watching up to 4×, and getting through big nets up to 16×.
+ */
+export const SPEEDS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16] as const;
+/** The speed closest to this one, going by ratio, as a speed saved before there were stops may not be one. */
+export const nearestSpeed = (s: number): number => SPEEDS.reduce<number>((best, x) => (Math.abs(Math.log(x / s)) < Math.abs(Math.log(best / s)) ? x : best), SPEEDS[0]);
+/** How long a step takes to animate at 1×, in ms. */
+const STEP = 420;
 /** How long a run shows each step's preview, as a share of the time a step takes to animate. */
 const FLASH = 0.8;
+/** How long a step stays on screen once it has finished moving, at 1×. */
+const PAUSE = 140;
+/** From this speed up, a run stops animating and previewing, and takes as many steps as are due between drawings. */
+const STEP_AHEAD = 8;
+/** The most steps taken at a time, so a tab coming back from the background doesn't lock up catching up. */
+const MOST_AHEAD = 64;
+/** The least time between steps of a run going flat out, in ms. */
+const BREATHER = 16;
+/** How long a run leaves the page alone after a step, as a share of what the step cost, so that it stays responsive however big the net. */
+const REST = 0.5;
+/** How long a run waits for a frame before taking it that none is coming, as in a background tab, in ms. */
+const HIDDEN_FRAME = 200;
+/** Where a run stops by itself, as a net may never finish. */
+const RUN_LIMIT = 100_000;
 /** Don't preview more active pairs than this at once. */
 const PREVIEW_LIMIT = 24;
 
@@ -914,7 +1014,7 @@ const PREVIEW_LIMIT = 24;
 function readSpeed(): number {
   try {
     const s = Number(localStorage.getItem(SPEED_KEY));
-    return s > 0 ? s : 1;
+    return s > 0 ? nearestSpeed(s) : 1;
   } catch {
     return 1;
   }

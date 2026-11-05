@@ -1,9 +1,9 @@
 import { createRoot } from "solid-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type AgentType, port } from "../core/net";
 import { examples } from "../core/examples";
 import { setPortOn, setTypingOn } from "../core/types";
-import { createEditor } from "./editor";
+import { SPEEDS, createEditor, nearestSpeed } from "./editor";
 import { parseProgram } from "../core/programText";
 
 const unary: AgentType = { id: "u", name: "Unary", symbol: "U", arity: 1 };
@@ -11,6 +11,7 @@ const unary: AgentType = { id: "u", name: "Unary", symbol: "U", arity: 1 };
 describe("editor update boundary", () => {
   beforeEach(() => {
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    vi.stubGlobal("requestAnimationFrame", () => 0);
     vi.stubGlobal("cancelAnimationFrame", () => undefined);
   });
 
@@ -221,5 +222,132 @@ instance "c" parent - expanded members [0] ports [["p1",0,0]];
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("the speed of a run", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", (f: () => void) => setTimeout(f, 16));
+    vi.stubGlobal("cancelAnimationFrame", (t: ReturnType<typeof setTimeout>) => clearTimeout(t));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const running = (speed: number, f: (ed: ReturnType<typeof createEditor>) => void, example = "Runs forever") =>
+    createRoot((dispose) => {
+      const ed = createEditor(undefined);
+      ed.loadExample(examples.find((e) => e.name === example)!, true);
+      ed.setSpeed(speed);
+      ed.dispatch({ kind: "run/toggle" });
+      f(ed);
+      ed.dispatch({ kind: "run/stop" });
+      dispose();
+    });
+
+  it("has stops at round numbers, a third of the slider below 1× and a third above 4×", () => {
+    expect(SPEEDS.indexOf(1)).toBe((SPEEDS.length - 1) / 3);
+    expect(SPEEDS.indexOf(4)).toBe(((SPEEDS.length - 1) * 2) / 3);
+    expect(SPEEDS.at(-1)).toBe(16);
+  });
+
+  it("takes a speed saved before there were stops to the closest one", () => {
+    expect(nearestSpeed(0.59)).toBe(0.5);
+    expect(nearestSpeed(1.19)).toBe(1);
+    expect(nearestSpeed(2.83)).toBe(3);
+    expect(nearestSpeed(100)).toBe(16);
+    expect(nearestSpeed(0.01)).toBe(0.1);
+    for (const s of SPEEDS) expect(nearestSpeed(s)).toBe(s);
+  });
+
+  it("is really N times as fast at N×, whether it's animating or stepping ahead", () => {
+    for (const speed of [0.25, 1, 2, 4, 6, 8, 12, 16]) {
+      running(speed, (ed) => {
+        vi.advanceTimersByTime(30_000);
+        const expected = (30_000 * speed) / 896;
+        expect(Math.abs(ed.steps() - expected), `${ed.steps()} steps at ${speed}×`).toBeLessThanOrEqual(Math.max(1, expected * 0.05));
+      });
+    }
+  });
+
+  it("takes as many steps as are due when drawing can't keep up, and rests in proportion", () => {
+    // A frame that takes half a second to come, as on a net too big to draw in time.
+    vi.stubGlobal("requestAnimationFrame", (f: () => void) => setTimeout(f, 150));
+    running(16, (ed) => {
+      vi.advanceTimersByTime(10_000);
+      expect(ed.steps()).toBeGreaterThan(160);
+      expect(ed.steps()).toBeLessThan(200);
+    });
+  });
+
+  it("gets to the end of a net going flat out, and stops", () => {
+    running(16, (ed) => {
+      vi.advanceTimersByTime(60_000);
+      expect(ed.running()).toBe(false);
+      expect(ed.steps()).toBeGreaterThan(0);
+      expect(ed.stats().interactions).toBeGreaterThan(0);
+      expect(ed.previewing()).toBeUndefined();
+    }, "3 × 2");
+  });
+
+  it("ends up with the same net stepping ahead as step by step", () => {
+    const outcome = (speed: number) => {
+      let text = "";
+      running(speed, (ed) => {
+        vi.advanceTimersByTime(600_000);
+        expect(ed.running()).toBe(false);
+        text = JSON.stringify([ed.steps(), ed.stats().interactions, ed.toDoc().net]);
+      }, "Fibonacci: 6 → 8");
+      return text;
+    };
+    expect(outcome(16)).toBe(outcome(1));
+  });
+
+  it("can be slowed down partway, going back to animating and previewing", () => {
+    running(16, (ed) => {
+      vi.advanceTimersByTime(5_000);
+      const fast = ed.steps();
+      ed.setSpeed(1);
+      vi.advanceTimersByTime(5_000);
+      const gained = ed.steps() - fast;
+      expect(gained).toBeGreaterThanOrEqual(4);
+      expect(gained).toBeLessThanOrEqual(7);
+    });
+  });
+
+  it("stops at once when told to, at any speed, and stays stopped", () => {
+    for (const speed of [1, 8, 16]) {
+      running(speed, (ed) => {
+        vi.advanceTimersByTime(2_000);
+        expect(ed.running()).toBe(true);
+        ed.dispatch({ kind: "run/toggle" });
+        expect(ed.running()).toBe(false);
+        const at = ed.steps();
+        vi.advanceTimersByTime(10_000);
+        expect(ed.steps()).toBe(at);
+        expect(vi.getTimerCount()).toBe(0);
+      });
+    }
+  });
+
+  it("keeps going in a background tab, where no frames come", () => {
+    vi.stubGlobal("requestAnimationFrame", () => 0);
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+    running(16, (ed) => {
+      vi.advanceTimersByTime(10_000);
+      expect(ed.steps()).toBeGreaterThan(160);
+      expect(ed.steps()).toBeLessThan(200);
+    });
+  });
+
+  it("gets past the old limit of 2,000 steps", () => {
+    running(16, (ed) => {
+      vi.advanceTimersByTime(150_000);
+      expect(ed.steps()).toBeGreaterThan(2_000);
+      expect(ed.running()).toBe(true);
+    });
   });
 });
