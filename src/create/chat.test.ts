@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Asker, type Conversation, type Entry, RESUME, type Turn, type TurnMsg, askTitle, canResume, cleanTitle, newConversation, newTurn, plain, resumedTurn, runTurn, settle, triesSoFar, updateTurn, userMessage } from "./chat";
+import { type Asker, type Conversation, type Entry, RESUME, type Turn, type TurnMsg, askTitle, canResume, cleanTitle, joinResumed, newConversation, newTurn, plain, resumedTurn, runTurn, seamIndex, settle, triesSoFar, updateTurn, userMessage } from "./chat";
 import { EXAMPLE } from "./prompt";
 import { ModelError, type ReplyEvent } from "./provider";
 
@@ -29,6 +29,70 @@ const goingOn = (ctrl: AbortController, ...events: ReplyEvent[]): Asker =>
       else ctrl.signal.addEventListener("abort", stop);
     });
   };
+
+describe("a resumed reply as it's shown", () => {
+  const A = { provider: "p", model: "a", effort: "default" as const };
+  const B = { provider: "p", model: "b", effort: "high" as const };
+  const marks = (s: string) => s.replace(/[\uE000-\uF8FF]/g, (m) => `[${seamIndex(m)}]`);
+
+  it("leaves tries that weren't resumed apart", () => {
+    const shown = joinResumed([{ thinking: "", reply: "one", problem: "p" }, { thinking: "", reply: "two" }]);
+    expect(shown.map((t) => [t.words, t.upTo])).toEqual([["one", 0], ["two", 1]]);
+  });
+
+  it("carries the words on from the fragment, with a seam where it picks up", () => {
+    const [one, ...rest] = joinResumed([{ thinking: "", reply: "each succes", by: A }, { thinking: "", reply: "sor into two", resumed: true, by: A }]);
+    expect(rest).toEqual([]);
+    expect(marks(one!.words)).toBe("each succes[0]sor into two");
+    expect(one!.seams).toEqual([{}]);
+    expect(one!.upTo).toBe(1);
+  });
+
+  it("names the model at the seam if it changed, and not for a change of level alone", () => {
+    expect(joinResumed([{ thinking: "", reply: "x", by: A }, { thinking: "", reply: "y", resumed: true, by: B }])[0]!.seams).toEqual([{ to: B }]);
+    expect(joinResumed([{ thinking: "", reply: "x", by: B }, { thinking: "", reply: "y", resumed: true, by: { ...B, effort: "low" } }])[0]!.seams).toEqual([{}]);
+    // Chats saved before each try knew its model just say it was resumed.
+    expect(joinResumed([{ thinking: "", reply: "x" }, { thinking: "", reply: "y", resumed: true, by: B }])[0]!.seams).toEqual([{}]);
+  });
+
+  it("makes one row of the thinking, adding up the time", () => {
+    const shown = joinResumed([
+      { thinking: "a", reply: "", thoughtFrom: 100, thoughtMs: 1000 },
+      { thinking: "b", reply: "", thoughtFrom: 5000, thoughtMs: 2000, resumed: true },
+      { thinking: "c", reply: "w", thoughtFrom: 9000, thoughtMs: 500, resumed: true },
+    ]);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]!.thinking).toBe("a\n\nb\n\nc");
+    expect(shown[0]!.thoughtMs).toBe(3500);
+    // So the time counts on from what it had, while it's still thinking.
+    expect(shown[0]!.thoughtFrom).toBe(9000 - 3000);
+  });
+
+  it("shows a seam on its own when no words came before it", () => {
+    const [one] = joinResumed([{ thinking: "a", reply: "", by: A }, { thinking: "b", reply: "words", resumed: true, by: B }]);
+    expect(one!.words).toBe("words");
+    expect(one!.seams).toEqual([]);
+    expect(one!.pickedUp).toEqual({ to: B });
+  });
+
+  it("takes a document out of each part on its own, so one cut short doesn't swallow the words after it", () => {
+    const [one] = joinResumed([{ thinking: "", reply: "Here:\n\n```inet\nagent D", by: A }, { thinking: "", reply: "Again.\n\n```inet\nagent D 1\n```\nDone.", resumed: true, by: A }]);
+    expect(marks(one!.words)).toBe("Here:[0]\n\nAgain.\n\n\nDone.");
+    expect(one!.reply).toContain("agent D 1");
+  });
+
+  it("puts the seam ahead of line breaks, so what follows still starts a line", () => {
+    const [one] = joinResumed([{ thinking: "", reply: "First.\n\n" }, { thinking: "", reply: "- item", resumed: true }]);
+    expect(marks(one!.words)).toBe("First.[0]\n\n- item");
+  });
+
+  it("changes nothing that's kept", () => {
+    const tries = [{ thinking: "a", reply: "x" }, { thinking: "b", reply: "y", resumed: true }];
+    const copy = structuredClone(tries);
+    joinResumed(tries);
+    expect(tries).toEqual(copy);
+  });
+});
 
 describe("naming a chat", () => {
   it("tidies what the model sends back", () => {
@@ -243,7 +307,7 @@ describe("resuming a reply", () => {
     let t = resumedTurn(over(withWords(), { kind: "stopped", by: "stop" }), 50, { provider: "p", model: "m2", effort: "default" });
     expect(t).toMatchObject({ phase: { kind: "waiting" }, since: 50, took: undefined, by: { model: "m2" } });
     t = updateTurn(t, { kind: "try", resumed: true });
-    expect(t.tries).toEqual([{ thinking: "", reply: "Par" }, { thinking: "", reply: "", resumed: true }]);
+    expect(t.tries).toEqual([{ thinking: "", reply: "Par" }, { thinking: "", reply: "", resumed: true, by: { provider: "p", model: "m2", effort: "default" } }]);
   });
 
   it("is cut short again by a reload without saying the visitor asked twice", () => {

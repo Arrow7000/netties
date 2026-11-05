@@ -49,6 +49,8 @@ export interface Try {
   resumed?: boolean;
   /** Something the visitor should know about how the request was taken. */
   note?: string;
+  /** The model it was asked of, in chats saved since a reply could change model part way. */
+  by?: ModelTag;
 }
 
 /** What ended a reply early. */
@@ -167,6 +169,64 @@ export function triesSoFar(tries: Try[]): number {
   return tries.slice(Math.max(from, 0)).filter((t) => !t.looked).length;
 }
 
+/** The part of a reply that's words: the document is shown apart from it. */
+const withoutDocuments = (reply: string) => reply.replace(/```[\s\S]*?(?:```|$)/g, "");
+
+/** A place in a reply's words where it was picked up, with the model that took over if there was a change. */
+export interface Seam {
+  to?: ModelTag;
+}
+
+/** The characters that stand for seams in `ShownTry.words`: the first for the first seam, and so on. They're private use, so a model has no business sending them. */
+const SEAM_MARK = 0xe000;
+export const SEAM_MARKS = /[\uE000-\uF8FF]/g;
+export const seamIndex = (mark: string) => mark.charCodeAt(0) - SEAM_MARK;
+
+/** A try as the visitor sees it: one reply, whichever calls to the model it took. */
+export interface ShownTry extends Try {
+  /** What it said, without documents, with a mark at each seam that came after some words. */
+  words: string;
+  seams: Seam[];
+  /** The seam to show on its own, when it was picked up before any words came. */
+  pickedUp?: Seam;
+  /** The index in the turn's tries of the last call that went into this. */
+  upTo: number;
+}
+
+/**
+ * Tries as they're shown, with a resumed one joined onto what it picks up: the
+ * words carry on from the fragment, and the thinking makes one row. This is
+ * only for showing it. What's kept and what the model is sent stay as they were.
+ */
+export function joinResumed(tries: Try[]): ShownTry[] {
+  const out: ShownTry[] = [];
+  tries.forEach((t, i) => {
+    const before = out.at(-1);
+    const words = withoutDocuments(t.reply).replace(SEAM_MARKS, "");
+    if (!t.resumed || !before) {
+      out.push({ ...t, words, seams: [], upTo: i });
+      return;
+    }
+    const was = tries[i - 1]!.by;
+    const seam: Seam = t.by && was && (t.by.provider !== was.provider || t.by.model !== was.model) ? { to: t.by } : {};
+    const said = before.words.trimEnd();
+    const thought = (before.thoughtMs ?? 0) + (t.thoughtMs ?? 0);
+    out[out.length - 1] = {
+      ...before,
+      ...t,
+      thinking: [before.thinking, t.thinking].filter(Boolean).join("\n\n"),
+      ...(before.thinking || t.thinking ? { thoughtMs: thought, thoughtFrom: t.thoughtFrom === undefined ? before.thoughtFrom : t.thoughtFrom - (before.thoughtMs ?? 0) } : {}),
+      note: before.note ?? t.note,
+      // The mark goes right after the last word, ahead of any line breaks, so whatever comes next still starts its own line.
+      words: said ? said + String.fromCharCode(SEAM_MARK + before.seams.length) + before.words.slice(said.length) + words : words,
+      seams: said ? [...before.seams, seam] : before.seams,
+      pickedUp: said ? before.pickedUp : seam,
+      upTo: i,
+    };
+  });
+  return out;
+}
+
 export const newTurn = (since: number, by?: ModelTag): Turn => ({ tries: [], phase: { kind: "waiting" }, since, ...(by ? { by } : {}) });
 
 /** A turn going again from where it was cut short. */
@@ -177,7 +237,7 @@ export function updateTurn(t: Turn, msg: TurnMsg): Turn {
   const last = (f: (x: Try) => Try) => ({ ...t, tries: t.tries.map((x, i) => (i === t.tries.length - 1 ? f(x) : x)) });
   switch (msg.kind) {
     case "try":
-      return { ...t, phase: { kind: "waiting" }, tries: [...t.tries, { thinking: "", reply: "", ...(msg.resumed ? { resumed: true } : {}) }] };
+      return { ...t, phase: { kind: "waiting" }, tries: [...t.tries, { thinking: "", reply: "", ...(msg.resumed ? { resumed: true } : {}), ...(t.by ? { by: t.by } : {}) }] };
     case "note":
       return last((x) => ({ ...x, note: msg.text }));
     case "thinking":

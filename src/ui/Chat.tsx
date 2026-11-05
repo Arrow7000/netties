@@ -1,5 +1,5 @@
 import { For, Index, type JSX, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
-import { type ModelTag, type Try, type Turn, type TurnEnd, canResume, triesSoFar } from "../create/chat";
+import { type ModelTag, SEAM_MARKS, type Seam, type ShownTry, type Turn, type TurnEnd, canResume, joinResumed, seamIndex, triesSoFar } from "../create/chat";
 import { TRIES } from "../create/client";
 import type { Chat, Entry } from "./chatStore";
 import { fingers } from "./compact";
@@ -13,8 +13,6 @@ import { pieces } from "./pieces";
 /** Width of the panel on a desktop, which the canvas leaves room for. */
 export const CHAT_WIDTH = 360;
 
-/** The part of a reply that's words: the document is shown apart from it. */
-const wordsOf = (reply: string) => reply.replace(/```[\s\S]*?(?:```|$)/g, "").trim();
 /** How far along the document is, while it's being written. */
 const linesWritten = (reply: string) => {
   const open = /```(?!examples)[^\n]*\n((?:(?!```)[\s\S])*)$/.exec(reply);
@@ -82,13 +80,25 @@ function anchored(el: HTMLElement, onChange?: (atEnd: boolean) => void) {
   };
 }
 
-function inline(s: string): (JSX.Element | string)[] {
+function styled(s: string): (JSX.Element | string)[] {
   return s.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\s][^*\n]*\*)/g).map((p) => {
     if (p.startsWith("`") && p.length > 2) return <code classList={{ whole: p.length < 24 }}>{p.slice(1, -1)}</code>;
     if (p.startsWith("**") && p.length > 4) return <b>{p.slice(2, -2)}</b>;
     if (p.startsWith("*") && p.endsWith("*") && p.length > 2) return <em>{p.slice(1, -1)}</em>;
     return p;
   });
+}
+
+/** What a line of a reply says, with a quiet marker at any place it was picked up. */
+function inline(s: string, seams: string[]): (JSX.Element | string)[] {
+  const out: (JSX.Element | string)[] = [];
+  let from = 0;
+  for (const m of s.matchAll(SEAM_MARKS)) {
+    out.push(...styled(s.slice(from, m.index)), <span class="chat-seam">{seams[seamIndex(m[0])]}</span>);
+    from = m.index + m[0].length;
+  }
+  out.push(...styled(s.slice(from)));
+  return out;
 }
 
 type Block = { kind: "p" | "h" | "table"; lines: string[] } | { kind: "ul" | "ol"; lines: string[]; start: number };
@@ -120,7 +130,7 @@ function blocksOf(text: string): Block[] {
 }
 
 /** Enough of Markdown for what models write. */
-function Prose(props: { text: string }) {
+function Prose(props: { text: string; seams: string[] }) {
   // Blocks that haven't changed stay the same objects, so For leaves them on the page and only the one being written is rebuilt.
   let kept = new Map<string, Block>();
   const blocks = () => {
@@ -139,27 +149,30 @@ function Prose(props: { text: string }) {
       {(b) => {
         switch (b.kind) {
           case "ul":
-            return <ul>{b.lines.map((l) => <li>{inline(l)}</li>)}</ul>;
+            return <ul>{b.lines.map((l) => <li>{inline(l, props.seams)}</li>)}</ul>;
           case "ol":
-            return <ol start={b.start}>{b.lines.map((l) => <li>{inline(l)}</li>)}</ol>;
+            return <ol start={b.start}>{b.lines.map((l) => <li>{inline(l, props.seams)}</li>)}</ol>;
           case "h":
-            return <p><b>{inline(b.lines[0]!)}</b></p>;
+            return <p><b>{inline(b.lines[0]!, props.seams)}</b></p>;
           case "table":
-            return <pre>{b.lines.join("\n")}</pre>;
+            return <pre>{b.lines.join("\n").replace(SEAM_MARKS, "")}</pre>;
           case "p":
-            return <p>{inline(b.lines.join("\n"))}</p>;
+            return <p>{inline(b.lines.join("\n"), props.seams)}</p>;
         }
       }}
     </For>
   );
 }
 
-function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: number }) {
+/** Where a reply was picked up, naming the model if it changed there. */
+const seamText = (s: Seam) => (s.to ? `Resumed on ${nameOf(s.to.provider)}: ${s.to.model}` : "Resumed");
+
+function TryView(props: { t: ShownTry; n: number; last: boolean; turn: Turn; now: number }) {
   const going = () => props.last && props.turn.phase.kind !== "over";
   const thinking = () => going() && props.turn.phase.kind === "thinking";
   /** "Thinking" or "Try 2 of 3: thinking", and so on. */
   const doing = (what: string) => (triesSoFar(props.turn.tries) > 1 ? `Try ${props.n} of ${TRIES}: ${what}` : what[0]!.toUpperCase() + what.slice(1));
-  const words = () => wordsOf(props.t.reply);
+  const words = () => props.t.words.trim();
   const lines = () => (going() ? linesWritten(props.t.reply) : undefined);
   let trace: ReturnType<typeof anchored> | undefined;
   return (
@@ -175,9 +188,12 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
           </div>
         </details>
       </Show>
+      <Show when={props.t.pickedUp}>
+        {(s) => <div class="chat-seam">{seamText(s())}</div>}
+      </Show>
       <Show when={words()}>
         <div class="chat-words">
-          <Prose text={words()} />
+          <Prose text={words()} seams={props.t.seams.map(seamText)} />
         </div>
       </Show>
       <Show when={props.t.looked}>
@@ -410,7 +426,8 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
 function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number }) {
   /** Which model a turn came from is only worth saying when it has changed in this chat. */
   const changedTo = () => {
-    const by = props.entry.kind === "turn" ? props.entry.turn.by : undefined;
+    // Who started it: a reply that moved model part way says so where it did.
+    const by = props.entry.kind === "turn" ? (props.entry.turn.tries[0]?.by ?? props.entry.turn.by) : undefined;
     // A turn follows a message, so the one before is two back.
     const before = props.chat.entries()[props.index - 2];
     return by && before?.kind === "turn" && before.turn.by && !sameTag(before.turn.by, by) ? tagText(by) : undefined;
@@ -422,7 +439,7 @@ function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number
           <Show when={changedTo()}>
             <div class="chat-by">{changedTo()}</div>
           </Show>
-          <Index each={turn().tries}>{(t, i) => <TryView t={t()} n={triesSoFar(turn().tries.slice(0, i + 1))} last={i === turn().tries.length - 1} turn={turn()} now={props.now} />}</Index>
+          <Index each={joinResumed(turn().tries)}>{(t) => <TryView t={t()} n={triesSoFar(turn().tries.slice(0, t().upTo + 1))} last={t().upTo === turn().tries.length - 1} turn={turn()} now={props.now} />}</Index>
           <TurnStatus chat={props.chat} index={props.index} turn={turn()} now={props.now} />
         </div>
       )}
