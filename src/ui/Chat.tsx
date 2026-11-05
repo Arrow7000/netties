@@ -570,7 +570,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
       // So a click anywhere in it keeps the keyboard here, not on the canvas.
       tabindex={-1}
       onKeyDown={(e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !(e.target as Element).closest("textarea")) {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !(e.target as Element).closest("textarea, input")) {
           e.preventDefault();
           getSelection()?.selectAllChildren(log);
         }
