@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMou
 import { CUSTOM, EFFORTS, type Effort, type ModelInfo, type Wire, isLocalAddress, listModels, normalizeUrl } from "../create/provider";
 import type { Chat, Waiting } from "./chatStore";
 import { fingers } from "./compact";
+import { closeOnEscape } from "./dismiss";
 import { Menu, MenuItem } from "./Menu";
 import { nameOf, presetsHere } from "./modelSettings";
 
@@ -26,8 +27,12 @@ const WAITING: Record<Waiting, { head: string; note: string; button: string }> =
  * Choosing a provider, its key and a model. The key stays in this browser. The
  * list of models comes from the provider itself as soon as there's enough to ask it with, which also shows whether the key works.
  */
-export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
+export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: () => void; onEscape: () => void }) {
   const models = props.chat.models;
+  let form!: HTMLFormElement;
+  let firstField!: HTMLSelectElement;
+  let keyField!: HTMLInputElement;
+  let saveButton!: HTMLButtonElement;
   const here = presetsHere();
   const why = () => props.chat.settings();
   /**
@@ -112,7 +117,19 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
     const keep = keepsChat();
     models.save(provider(), entry(), effort(), !keep);
     props.chat.closeSettings(true, keep);
+    props.onSaved();
   };
+
+  // Escape leaves the form, even from a field: stopping at the field would leave the keyboard nowhere.
+  closeOnEscape(() => props.onEscape(), true);
+
+  // The keyboard starts on the first field, or on the key if that's what's wrong, selected so that a paste replaces it. On a phone that would bring up the on-screen keyboard, so it only comes into the form.
+  onMount(() => {
+    const w = why();
+    if (fingers()) form.focus({ preventScroll: true });
+    else if (w?.kind === "fixing" && w.code === "key") keyField.select();
+    else firstField.focus();
+  });
 
   /** Save takes a chat that's waiting along with it, so a field only about new chats would mislead. */
   const modelLabel = () => (why()?.kind === "waiting" ? "Model for this chat and new chats" : "Model for new chats");
@@ -126,7 +143,9 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
 
   return (
     <form
+      ref={form}
       class="model-form"
+      tabindex={-1}
       onSubmit={(e) => {
         e.preventDefault();
         save();
@@ -161,6 +180,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
       <label>
         Provider
         <select
+          ref={firstField}
           class="input"
           aria-label="Provider"
           value={provider()}
@@ -196,7 +216,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
         <span>
           API key <Show when={!preset()?.needsKey}><span class="optional">(optional)</span></Show>
         </span>
-        <input class="input" aria-label="API key" type="password" spellcheck={false} autocomplete="off" value={key()} onInput={(e) => (setKey(e.currentTarget.value), setForgot(false))} />
+        <input ref={keyField} class="input" aria-label="API key" type="password" spellcheck={false} autocomplete="off" value={key()} onInput={(e) => (setKey(e.currentTarget.value), setForgot(false))} />
         <Show when={forgot()}>
           <span class="hint">Key forgotten. The address, model and your chats stay.</span>
         </Show>
@@ -225,7 +245,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
         </Show>
         <Show when={choices().length && !choices().some((m) => m.id === model())}>
           <div class="model-choices" role="listbox" aria-label="Models">
-            <For each={choices()}>{(m) => <MenuItem title={m.name ?? m.id} note={m.name ? m.id : undefined} onClick={() => setModel(m.id)} />}</For>
+            <For each={choices()}>{(m) => <MenuItem title={m.name ?? m.id} note={m.name ? m.id : undefined} onClick={() => (setModel(m.id), saveButton.focus())} />}</For>
           </div>
         </Show>
       </label>
@@ -236,7 +256,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
         </select>
       </label>
       <div class="model-actions">
-        <button type="submit" class="btn primary" disabled={!canSave()}>
+        <button ref={saveButton} type="submit" class="btn primary" disabled={!canSave()}>
           {saveLabel()}
         </button>
         <Show when={props.chat.settings()}>

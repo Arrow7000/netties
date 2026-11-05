@@ -4413,6 +4413,7 @@ button.select.open {
   flex-direction: column;
   gap: 12px;
   padding: 2px;
+  outline: none;
 }
 
 .model-form h2 {

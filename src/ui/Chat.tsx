@@ -1,4 +1,4 @@
-import { For, Index, type JSX, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
+import { For, Index, type JSX, Show, createComputed, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { type ModelTag, type Try, type Turn, type TurnEnd, canResume, triesSoFar } from "../create/chat";
 import { TRIES } from "../create/client";
 import type { Chat, Entry } from "./chatStore";
@@ -504,9 +504,13 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
   let following: ReturnType<typeof anchored> | undefined;
 
   /** A new chat that has no model to go to starts with setting one up. An old one is there to read until it's added to. */
-  const setting = () => !!chat.settings() || (chat.loaded() && !chat.entries().length && !chat.usable());
+  const setting = createMemo(() => !!chat.settings() || (chat.loaded() && !chat.entries().length && !chat.usable()));
+  /** What had the keyboard when the settings came up, to go back to. This runs before they take it. */
+  let opener: Element | null = null;
+  createComputed(on(setting, (now) => void (now && (opener = document.activeElement)), { defer: true }));
 
-  closeOnEscape(() => (chat.settings() ? chat.closeSettings() : props.onEscape()));
+  const escape = () => (chat.settings() ? chat.closeSettings() : props.onEscape());
+  closeOnEscape(escape);
 
   /** Back to the box after a button, but not on a phone, where that brings up the keyboard. */
   const refocus = () => {
@@ -533,7 +537,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
     }
   });
 
-  // Back from the settings: the box is ready, and the chat is at its end.
+  // Back from the settings: the chat is at its end, and the keyboard is back where it came from if that's still there, or else in the box.
   createEffect(
     on(
       setting,
@@ -541,11 +545,26 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
         if (now) return;
         following?.toEnd();
         size();
-        refocus();
+        if (opener instanceof HTMLElement && opener !== document.body && opener.getClientRects().length && !(fingers() && opener.matches("input, textarea"))) opener.focus();
+        else refocus();
       },
       { defer: true },
     ),
   );
+
+  // Having chosen a model or a level, what comes next is saying something.
+  createEffect(
+    on(
+      createMemo(() => JSON.stringify(chat.choice())),
+      refocus,
+      { defer: true },
+    ),
+  );
+
+  // Going, the keyboard goes back to the button that opens it rather than being dropped at the top of the page.
+  onCleanup(() => {
+    if (panel.contains(document.activeElement)) document.querySelector<HTMLElement>(".chat-toggle")?.focus();
+  });
 
   // Another chat starts from its latest message, wherever this one was scrolled to.
   createEffect(on(chat.id, () => following?.toEnd(), { defer: true }));
@@ -593,7 +612,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
       </header>
       <Show when={setting()}>
         <div class="model-form-wrap">
-          <ModelSettingsForm chat={chat} first={!chat.entries().length && !chat.settings()} />
+          <ModelSettingsForm chat={chat} first={!chat.entries().length && !chat.settings()} onSaved={refocus} onEscape={escape} />
         </div>
       </Show>
       {/* Hidden rather than taken away, so a chat comes back from the settings just as it was. */}
