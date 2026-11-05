@@ -821,7 +821,8 @@ describe("chats", () => {
       const b = browser();
       const calls = model();
       const real = fetch;
-      vi.stubGlobal("fetch", async (url: string, o: { body?: string }) => (o.body && "reasoning_effort" in JSON.parse(o.body) ? new Response("Unknown argument: reasoning_effort", { status: 400 }) : real(url, o as RequestInit)));
+      const sent: string[] = [];
+      vi.stubGlobal("fetch", async (url: string, o: { body?: string }) => (o.body && sent.push(o.body) && "reasoning_effort" in JSON.parse(o.body) ? new Response("Unknown argument: reasoning_effort", { status: 400 }) : real(url, o as RequestInit)));
       const t = b.open();
       await ready(t);
       t.chat.setEffort("high");
@@ -829,18 +830,23 @@ describe("chats", () => {
         const e = t.chat.entries()[i];
         return e?.kind === "turn" ? e.turn.tries[0]?.note : undefined;
       };
-      expect(t.chat.models.refusesLevel("custom", "m")).toBe(false);
+      expect(t.chat.models.refusesLevel("custom", "m", "high")).toBe(false);
       const first = t.send("One.");
       await vi.waitFor(() => expect(calls).toHaveLength(1));
       calls[0]!.end("Done.");
       await first;
-      expect(note(1)).toContain("reasoning level");
-      expect(t.chat.models.refusesLevel("custom", "m")).toBe(true);
+      expect(note(1)).toContain("reasoning level High");
+      expect(t.chat.models.refusesLevel("custom", "m", "high")).toBe(true);
+      expect(t.chat.models.refusesLevel("custom", "m", "low")).toBe(false);
       const second = t.send("Two.");
       await vi.waitFor(() => expect(calls).toHaveLength(2));
       calls[1]!.end("Done.");
       await second;
       expect(note(3)).toBeUndefined();
+      // Not asked for again, unless it's picked again.
+      expect("reasoning_effort" in JSON.parse(sent.at(-1)!)).toBe(false);
+      t.chat.setEffort("high");
+      expect(t.chat.models.refusesLevel("custom", "m", "high")).toBe(false);
     });
 
     describe("when a provider goes", () => {

@@ -12,7 +12,8 @@ import { EXAMPLE, TITLE_SYSTEM } from "../src/create/prompt";
  * time; "browse" asks to see an example first; "cutoff" hits the length limit
  * part way; "drop" loses the connection part way, once a message, which Resume
  * picks up. Anything else gets the doubling example. A model named "no-reasoning" turns down
- * reasoning levels, and "denied" as a key is refused.
+ * reasoning levels and "no-off" turning it off, "few-levels" and "no-levels" list what they take,
+ * and "denied" as a key is refused.
  */
 
 const inet = (doc: string) => "```inet\n" + doc + "\n```";
@@ -59,7 +60,7 @@ function script(messages: Message[]): Script {
 
 const serveModels: Connect.NextHandleFunction = (_req, res) => {
   res.setHeader("content-type", "application/json");
-  res.end(JSON.stringify({ data: [{ id: "fake-writer", created: 2 }, { id: "no-reasoning", created: 1 }, { id: "fake-embedding", created: 3 }] }));
+  res.end(JSON.stringify({ data: [{ id: "fake-writer", created: 2 }, { id: "no-reasoning", created: 1 }, { id: "no-off", created: 1 }, { id: "few-levels", created: 1, reasoning: { supported_efforts: ["low", "high", "max"] } }, { id: "no-levels", created: 1, supported_parameters: ["max_tokens"] }, { id: "fake-embedding", created: 3 }] }));
 };
 
 const serveChat: Connect.NextHandleFunction = async (req, res) => {
@@ -73,6 +74,7 @@ const serveChat: Connect.NextHandleFunction = async (req, res) => {
   };
   if (req.headers.authorization === "Bearer denied") return fail(401, "That's not a key.");
   if (body.model === "no-reasoning" && body.reasoning_effort) return fail(400, "Unrecognized request argument supplied: reasoning_effort");
+  if (body.model === "no-off" && body.reasoning_effort === "none") return fail(400, "Unsupported value: reasoning_effort does not support none with this model.");
 
   const ctrl = new AbortController();
   res.on("close", () => ctrl.abort());

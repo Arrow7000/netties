@@ -6,6 +6,7 @@ import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
 import * as I from "./icons";
 import { Menu, MenuItem } from "./Menu";
+import { effortName } from "../create/provider";
 import { EffortPicker, ModelPicker, ModelSettingsForm, Trouble } from "./ModelSettingsForm";
 import { nameOf } from "./modelSettings";
 import { pieces } from "./pieces";
@@ -347,7 +348,7 @@ function ResumeButton(props: { chat: Chat }) {
 }
 
 /** A model and how hard it was asked to think, as a few words. */
-const tagText = (chat: Chat, b: ModelTag) => `${nameOf(b.provider)}: ${b.model}${b.effort === "default" || chat.models.refusesLevel(b.provider, b.model) ? "" : `, reasoning ${b.effort}`}`;
+const tagText = (chat: Chat, b: ModelTag) => `${nameOf(b.provider)}: ${b.model}${b.effort === "default" || chat.models.refusesLevel(b.provider, b.model, b.effort) ? "" : `, reasoning ${effortName(b.effort).toLowerCase()}`}`;
 
 /** How a turn stands, under what it has said. */
 function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number }) {

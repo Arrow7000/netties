@@ -2,7 +2,7 @@ import { type Accessor, type Setter, createEffect, createMemo, createSignal, on 
 import { parseProgram, printProgram } from "../core/programText";
 import { type Conversation, type CutBy, type Entry, type ModelTag, RESUME, type Rewind, type Turn, type TurnEnd, type TurnMsg, askTitle, canResume, newConversation, newTurn, resumedTurn, rewind, runTurn, settle, unhold, updateTurn } from "../create/chat";
 import { CHAT_SYSTEM, TITLE_SYSTEM } from "../create/prompt";
-import { type Effort, NO_LEVEL } from "../create/provider";
+import { type Effort, levelRefused } from "../create/provider";
 import type { Editor } from "../state/editor";
 import { decode } from "../state/persist";
 import { type ChatDb, type Listing, type Saved, openChats, titleOf } from "./chatDb";
@@ -170,7 +170,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
 
   const tagOf = (t: Thread): ModelTag | undefined => {
     const c = chosen(t);
-    return c ? { provider: c.provider, model: c.model, effort: c.effort } : undefined;
+    return c ? { provider: c.provider, model: c.model, effort: models.effective(c) } : undefined;
   };
 
   /** The chat with this id, if this tab has it in hand. */
@@ -330,12 +330,10 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     const ctrl = new AbortController();
     let saved = Date.now();
     const choice = chosen(t)!;
+    const level = models.effective(choice);
     const onMessage = (m: TurnMsg) => {
       if (t.running?.stop !== ctrl) return;
-      if (m.kind === "note" && m.text === NO_LEVEL) {
-        if (models.refusesLevel(choice.provider, choice.model)) return;
-        models.refusedLevel(choice.provider, choice.model);
-      }
+      if (m.kind === "note" && level !== "default" && m.text === levelRefused(level)) models.refusedLevel(choice.provider, choice.model, level);
       updateAt(t, index, (turn) => updateTurn(turn, m));
       if (Date.now() - saved > SAVE_EVERY) {
         saved = Date.now();
@@ -434,7 +432,9 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     },
     setEffort(effort: Effort) {
       const c = chosen(current());
-      if (c) choose(current(), { ...c, effort });
+      if (!c) return;
+      models.forgetRefusal(c.provider, c.model, effort);
+      choose(current(), { ...c, effort });
     },
     /** The settings on the screen. */
     settings,

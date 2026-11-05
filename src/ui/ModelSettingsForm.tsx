@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
-import { CUSTOM, EFFORTS, type Effort, type ModelInfo, type Wire, isLocalAddress, listModels, normalizeUrl, troubleParts } from "../create/provider";
+import { CUSTOM, type Effort, type ModelInfo, type Wire, effortName, isLocalAddress, listModels, normalizeUrl, offered, troubleParts } from "../create/provider";
 import type { Chat, Waiting } from "./chatStore";
 import { copyText } from "./clipboard";
 import { fingers } from "./compact";
@@ -155,6 +155,13 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
   };
   const choices = () => found().slice(0, MOST_SHOWN);
 
+  /** The levels on offer for the model in the field, and so the one that's really chosen if it doesn't take the last one picked. */
+  const levels = () => {
+    const l = listing();
+    return offered(l.kind === "loaded" ? l.models.find((m) => m.id === model().trim())?.levels : undefined);
+  };
+  const level = () => (levels().some((l) => l.id === effort()) ? effort() : "default");
+
   /** Whether saving only puts a failed chat's key or address right: the same provider, and the model field left alone. Then it's on the model it was on, and new chats are too. */
   const keepsChat = () => {
     const w = why();
@@ -167,7 +174,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
   const save = () => {
     if (!canSave()) return;
     const keep = keepsChat();
-    models.save(provider(), entry(), effort(), !keep);
+    models.save(provider(), entry(), level(), !keep);
     props.chat.closeSettings(true, keep);
     props.onSaved();
   };
@@ -313,8 +320,8 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
       <Show when={listing().kind === "failed" ? (listing() as { message: string }).message : undefined}>{(m) => <Trouble message={m()} />}</Show>
       <label>
         Reasoning
-        <select class="input" aria-label="Reasoning" value={effort()} onChange={(e) => setEffort(e.currentTarget.value as Effort)}>
-          <For each={EFFORTS}>{(l) => <option value={l.id}>{l.name}</option>}</For>
+        <select class="input" aria-label="Reasoning" value={level()} onChange={(e) => setEffort(e.currentTarget.value as Effort)}>
+          <For each={levels()}>{(l) => <option value={l.id} selected={l.id === level()}>{l.name}</option>}</For>
         </select>
       </label>
       <Show when={missing()}>
@@ -472,33 +479,53 @@ export function ModelPicker(props: { chat: Chat }) {
   );
 }
 
-/** How hard the model should think, for this chat. */
+/** How hard the model should think, for this chat. It shows what the model takes, where its provider says. */
 export function EffortPicker(props: { chat: Chat }) {
   const chat = props.chat;
-  const now = () => chat.choice()?.effort ?? "default";
-  const label = () => {
-    const c = chat.choice();
-    if (now() === "default") return "Reasoning";
-    return c && chat.models.refusesLevel(c.provider, c.model) ? "Reasoning: not supported" : `Reasoning: ${EFFORTS.find((e) => e.id === now())!.name}`;
+  const choice = () => chat.choice();
+  const now = () => {
+    const c = choice();
+    return c ? chat.models.effective(c) : "default";
+  };
+  const levels = () => {
+    const c = choice();
+    return offered(c ? chat.models.levels(c.provider, c.model) : undefined);
+  };
+  const note = (l: Effort) => {
+    const c = choice();
+    if (c && chat.models.refusesLevel(c.provider, c.model, l)) return "Turned down last time. Pick it to try again.";
+    return l === "default" ? "Whatever the model does by itself" : l === "off" ? "As little as the model allows" : l === "max" ? "Spends as much as it takes" : undefined;
   };
   return (
-    <Menu class="chat-effort-button" title="How hard the model should think. Not every model takes this." label={<span>{label()}</span>}>
-      {(close) => (
-        <For each={EFFORTS}>
-          {(l) => (
-            <MenuItem
-              title={l.name}
-              note={l.id === "default" ? "Whatever the model does by itself" : l.id === "off" ? "As little as the model allows" : undefined}
-              current={now() === l.id}
-              disabled={!chat.choice()}
-              onClick={() => {
-                chat.setEffort(l.id);
-                close();
-              }}
-            />
-          )}
-        </For>
-      )}
+    <Menu class="chat-effort-button" title="How hard the model should think. What's on offer depends on the model." label={<span>{now() === "default" ? "Reasoning" : `Reasoning: ${effortName(now())}`}</span>}>
+      {(close) => {
+        // Asking its provider is what shows which levels this model takes.
+        onMount(() => {
+          const c = choice();
+          if (c) chat.models.models(c.provider).catch(() => {});
+        });
+        return (
+          <>
+            <For each={levels()}>
+              {(l) => (
+                <MenuItem
+                  title={l.name}
+                  note={note(l.id)}
+                  current={now() === l.id}
+                  disabled={!choice()}
+                  onClick={() => {
+                    chat.setEffort(l.id);
+                    close();
+                  }}
+                />
+              )}
+            </For>
+            <Show when={levels().length === 1}>
+              <div class="model-note">This model has no levels to choose from.</div>
+            </Show>
+          </>
+        );
+      }}
     </Menu>
   );
 }

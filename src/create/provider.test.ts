@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type Ask, type Connection, type ReplyEvent, ModelError, isLocalAddress, listModels, localSetup, normalizeUrl, streamReply, thinkSplitter, troubleParts } from "./provider";
+import { type Ask, type Connection, type Effort, type ReplyEvent, ModelError, isLocalAddress, levelRefused, offered, listModels, localSetup, normalizeUrl, streamReply, thinkSplitter, troubleParts } from "./provider";
 
 const OPENAI: Connection = { name: "Test", url: "https://x.test/v1", wire: "openai", key: "k" };
 const ANTHROPIC: Connection = { name: "Claude", url: "https://a.test/v1", wire: "anthropic", key: "k", maxTokens: 1000 };
@@ -140,6 +140,16 @@ describe("an OpenAI-style reply", () => {
     const off = provider(new Response(sse(piece({ content: "ok" }, "stop"))));
     await collect(ask(OPENAI, off.f, { effort: "off" }));
     expect(off.calls[0]!.body.reasoning_effort).toBe("none");
+    for (const effort of ["minimal", "xhigh", "max"] as const) {
+      const top = provider(new Response(sse(piece({ content: "ok" }, "stop"))));
+      await collect(ask(OPENAI, top.f, { effort }));
+      expect(top.calls[0]!.body.reasoning_effort).toBe(effort);
+    }
+  });
+
+  it("says it's only the level asked for that was turned down", () => {
+    expect(levelRefused("xhigh")).toBe("This model doesn't take the reasoning level Extra high, so it's using its own.");
+    expect(levelRefused("off")).toBe("This model can't turn reasoning off, so it's using its own level.");
   });
 
   it("goes again without a reasoning level the model turns down, and says so", async () => {
@@ -147,7 +157,7 @@ describe("an OpenAI-style reply", () => {
     const { events, error } = await collect(ask(OPENAI, f, { effort: "high" }));
     expect(error).toBeUndefined();
     expect(calls[1]!.body).not.toHaveProperty("reasoning_effort");
-    expect(events[0]).toEqual({ kind: "note", text: expect.stringMatching(/doesn't take a reasoning level/) });
+    expect(events[0]).toEqual({ kind: "note", text: levelRefused("high") });
     expect(events[1]).toEqual({ kind: "text", text: "ok" });
   });
 
@@ -389,6 +399,46 @@ describe("listing models", () => {
       ),
     );
     expect((await listModels(OPENAI, { fetch: f })).map((m) => m.id)).toEqual(["vendor/chat", "vendor/both", "vendor/says-nothing"]);
+  });
+
+  it("reads which reasoning levels a model takes, from OpenRouter", async () => {
+    const { f } = provider(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: "some", reasoning: { supported_efforts: ["max", "none", "low"] } },
+            { id: "all", reasoning: { supported_efforts: null }, supported_parameters: ["reasoning"] },
+            { id: "none", supported_parameters: ["max_tokens"] },
+            { id: "unsaid" },
+          ],
+        }),
+      ),
+    );
+    expect(await listModels(OPENAI, { fetch: f })).toEqual([{ id: "some", levels: ["off", "low", "max"] }, { id: "all" }, { id: "none", levels: [] }, { id: "unsaid" }]);
+  });
+
+  it("reads which reasoning levels a model takes, from Anthropic, where Off is always there", async () => {
+    const yes = { supported: true };
+    const no = { supported: false };
+    const { f } = provider(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: "top", capabilities: { effort: { supported: true, low: yes, medium: yes, high: yes, xhigh: yes, max: no } } },
+            { id: "old", capabilities: { effort: { supported: false, low: no, medium: no, high: no, xhigh: null, max: no } } },
+            { id: "unknown", capabilities: null },
+          ],
+        }),
+      ),
+    );
+    expect((await listModels(ANTHROPIC, { fetch: f })).map((m) => m.levels)).toEqual([["off", "low", "medium", "high", "xhigh"], ["off"], undefined]);
+  });
+
+  it("offers what a model takes, or else the usual levels", () => {
+    const ids = (levels?: Effort[]) => offered(levels).map((e) => e.id);
+    expect(ids()).toEqual(["default", "off", "low", "medium", "high", "xhigh", "max"]);
+    expect(ids(["minimal", "high"])).toEqual(["default", "minimal", "high"]);
+    expect(ids([])).toEqual(["default"]);
   });
 
   it("says when what came back isn't a list", async () => {

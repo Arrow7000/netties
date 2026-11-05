@@ -31,11 +31,11 @@ export interface ProviderEntry {
 interface Stored {
   providers: Record<string, ProviderEntry>;
   default?: Choice;
-  /** The models that have turned down a reasoning level, as provider and model. */
+  /** The reasoning levels that models have turned down, as provider, model and level. */
   noLevel?: string[];
 }
 
-const modelKey = (provider: string, model: string) => `${provider}/${model}`;
+const levelKey = (provider: string, model: string, effort: Effort) => `${provider}/${model}#${effort}`;
 
 /** A pretend provider, with no cost, only under `npm run dev` (scripts/fakeModel.ts). */
 const devPresets = (): Preset[] => (import.meta.env.DEV && typeof location !== "undefined" ? [{ id: "fake", name: "Pretend model (dev only)", short: "Pretend model", url: `${location.origin}/dev-model/v1`, wire: "openai", local: true, example: "fake-writer" }] : []);
@@ -104,6 +104,17 @@ export function createModelSettings() {
   const setupFor = (id: string) => (typeof location === "undefined" ? undefined : localSetup(id, location.origin));
 
   const lists = new Map<string, { at: number; url: string; key?: string; list: Promise<ModelInfo[]> }>();
+  /** What the lists that have come in said, to know what a model takes without asking again. */
+  const [listed, setListed] = createSignal<Record<string, ModelInfo[]>>({});
+  const levels = (provider: string, model: string) => listed()[provider]?.find((m) => m.id === model)?.levels;
+  const refusesLevel = (provider: string, model: string, effort: Effort) => !!stored().noLevel?.includes(levelKey(provider, model, effort));
+
+  /** The level a choice comes to. One this model is known not to take isn't asked for, and it goes by its own, while the chat keeps its choice for the next model. */
+  const effective = (c: Choice): Effort => {
+    if (c.effort === "default") return "default";
+    const known = levels(c.provider, c.model);
+    return (known && !known.includes(c.effort)) || refusesLevel(c.provider, c.model, c.effort) ? "default" : c.effort;
+  };
 
   return {
     entry: (id: string) => stored().providers[id],
@@ -137,11 +148,16 @@ export function createModelSettings() {
       lists.delete(id);
       write({ ...stored(), providers, default: stored().default?.provider === id ? undefined : stored().default });
     },
-    /** Whether this model has turned down a reasoning level, so the level isn't what it's using. */
-    refusesLevel: (provider: string, model: string) => !!stored().noLevel?.includes(modelKey(provider, model)),
-    /** This model has turned down a reasoning level. */
-    refusedLevel(provider: string, model: string) {
-      write({ ...stored(), noLevel: [...(stored().noLevel ?? []), modelKey(provider, model)] });
+    levels,
+    effective,
+    refusesLevel,
+    /** This model has turned down this reasoning level. */
+    refusedLevel(provider: string, model: string, effort: Effort) {
+      if (!refusesLevel(provider, model, effort)) write({ ...stored(), noLevel: [...(stored().noLevel ?? []), levelKey(provider, model, effort)] });
+    },
+    /** Give a level that was turned down another go, as what a model takes can change. */
+    forgetRefusal(provider: string, model: string, effort: Effort) {
+      if (refusesLevel(provider, model, effort)) write({ ...stored(), noLevel: stored().noLevel!.filter((k) => k !== levelKey(provider, model, effort)) });
     },
     /** What a provider that's set up has to offer, from a recent list if there is one. */
     models(id: string): Promise<ModelInfo[]> {
@@ -151,14 +167,17 @@ export function createModelSettings() {
       if (had && had.url === c.url && had.key === c.key && Date.now() - had.at < LIST_MS) return had.list;
       const list = listModels(c, { setup: setupFor(id) });
       lists.set(id, { at: Date.now(), url: c.url, key: c.key, list });
-      list.catch(() => lists.delete(id));
+      list.then(
+        (got) => setListed((had) => ({ ...had, [id]: got })),
+        () => lists.delete(id),
+      );
       return list;
     },
     /** What to ask for a chat's replies: this choice with these instructions. Only for a choice that's usable. */
     asker(choice: Choice, system: string): Asker {
       return (messages, signal) => {
         const c = connection(choice.provider);
-        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: choice.effort, system, messages, signal, setup: setupFor(choice.provider) });
+        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, setup: setupFor(choice.provider) });
       };
     },
     setupFor,

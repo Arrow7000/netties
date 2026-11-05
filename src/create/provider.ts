@@ -12,14 +12,24 @@
 export type Wire = "openai" | "anthropic";
 
 /** How hard to think. "default" sends nothing, leaving it to the model. */
-export type Effort = "default" | "off" | "low" | "medium" | "high";
+export type Effort = "default" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export const EFFORTS: { id: Effort; name: string }[] = [
   { id: "default", name: "Default" },
   { id: "off", name: "Off" },
+  { id: "minimal", name: "Minimal" },
   { id: "low", name: "Low" },
   { id: "medium", name: "Medium" },
   { id: "high", name: "High" },
+  { id: "xhigh", name: "Extra high" },
+  { id: "max", name: "Max" },
 ];
+export const effortName = (e: Effort) => EFFORTS.find((l) => l.id === e)!.name;
+
+/**
+ * The levels to offer for a model: what its provider says it takes, or else the
+ * usual ones, as most providers don't say. Levels vary by model, even within a lab.
+ */
+export const offered = (levels?: readonly Effort[]) => EFFORTS.filter((e) => e.id === "default" || (levels ? levels.includes(e.id) : e.id !== "minimal"));
 
 export interface Preset {
   id: string;
@@ -170,8 +180,8 @@ interface Optional {
   note?: string;
 }
 
-/** Said when a model turns down a reasoning level, which is worth saying once for each model. */
-export const NO_LEVEL = "This model doesn't take a reasoning level, so it's using its own.";
+/** Said when a model turns down a reasoning level, which may only be that one. */
+export const levelRefused = (e: Effort) => (e === "off" ? "This model can't turn reasoning off, so it's using its own level." : `This model doesn't take the reasoning level ${effortName(e)}, so it's using its own.`);
 
 function request(a: Ask): { url: string; headers: Record<string, string>; body: Record<string, unknown>; optional: Optional[] } {
   const c = a.connection;
@@ -179,13 +189,13 @@ function request(a: Ask): { url: string; headers: Record<string, string>; body: 
     const body: Record<string, unknown> = { model: a.model, stream: true, max_tokens: c.maxTokens ?? 64_000, system: a.system, messages: a.messages, cache_control: { type: "ephemeral" }, thinking: { type: "adaptive", display: "summarized" }, ...c.extra };
     // Newer models always think, and refuse to be told not to, so "off" is as little as they'll do.
     if (a.effort === "off") delete body.thinking;
-    if (a.effort !== "default") body.output_config = { effort: a.effort === "off" ? "low" : a.effort };
+    if (a.effort !== "default") body.output_config = { effort: a.effort === "off" || a.effort === "minimal" ? "low" : a.effort };
     return {
       url: `${c.url}/messages`,
       headers: { "content-type": "application/json", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true", ...(c.key ? { "x-api-key": c.key } : {}) },
       body,
       optional: [
-        { field: "output_config", mentions: /output_config|effort/i, note: NO_LEVEL },
+        { field: "output_config", mentions: /output_config|effort/i, note: levelRefused(a.effort) },
         { field: "thinking", mentions: /thinking/i },
         { field: "cache_control", mentions: /cache_control/i },
       ],
@@ -199,7 +209,7 @@ function request(a: Ask): { url: string; headers: Record<string, string>; body: 
     headers: { "content-type": "application/json", ...(c.key ? { authorization: `Bearer ${c.key}` } : {}) },
     body,
     optional: [
-      { field: "reasoning_effort", mentions: /reasoning|effort|thinking/i, note: NO_LEVEL },
+      { field: "reasoning_effort", mentions: /reasoning|effort|thinking/i, note: levelRefused(a.effort) },
       { field: "max_tokens", mentions: /max_tokens|max_completion_tokens/i },
     ],
   };
@@ -455,6 +465,8 @@ export async function* streamReply(a: Ask): AsyncGenerator<ReplyEvent, void> {
 export interface ModelInfo {
   id: string;
   name?: string;
+  /** The reasoning levels it takes, when its provider says. */
+  levels?: Effort[];
 }
 
 const listHeaders = (c: Connection): Record<string, string> =>
@@ -478,6 +490,25 @@ interface Listed {
   /** OpenRouter's: where it can be used. A batch-only entry has no way to chat. */
   endpoints?: string[];
   architecture?: { output_modalities?: string[] };
+  /** OpenRouter's. With no list, it takes them all. */
+  reasoning?: { supported_efforts?: string[] | null } | null;
+  supported_parameters?: string[];
+  /** Anthropic's. */
+  capabilities?: { effort?: Record<string, unknown> } | null;
+}
+
+/** The reasoning levels a model takes, if its provider says. */
+function levelsIn(m: Listed): Effort[] | undefined {
+  const anthropic = m.capabilities?.effort;
+  if (anthropic) {
+    // Off is up to the request here, which leaves out thinking and asks for the least effort, so any model has it.
+    const takes = (level: string) => (anthropic[level] as { supported?: boolean } | null | undefined)?.supported === true;
+    return ["off", ...EFFORTS.map((e) => e.id).filter((e) => e !== "default" && e !== "off" && takes(e))];
+  }
+  const efforts = m.reasoning?.supported_efforts;
+  if (efforts) return EFFORTS.map((e) => e.id).filter((e) => e !== "default" && efforts.includes(e === "off" ? "none" : e));
+  if (m.supported_parameters && !m.reasoning && !m.supported_parameters.includes("reasoning")) return [];
+  return undefined;
 }
 
 /** Whether a model can be chatted with, as far as anything says. */
@@ -517,5 +548,8 @@ export async function listModels(c: Connection, opts: { signal?: AbortSignal; fe
   return raw
     .filter(canChat)
     .sort((a, b) => when(b) - when(a))
-    .map((m) => ({ id: m.id!.replace(/^models\//, ""), name: m.display_name ?? m.name }));
+    .map((m) => {
+      const levels = levelsIn(m);
+      return { id: m.id!.replace(/^models\//, ""), name: m.display_name ?? m.name, ...(levels ? { levels } : {}) };
+    });
 }
