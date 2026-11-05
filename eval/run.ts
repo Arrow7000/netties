@@ -9,7 +9,6 @@
  */
 import { appendFileSync, mkdirSync } from "node:fs";
 import { type Stage, grade } from "./check";
-import { MAX_TOKENS as LIVE_MAX_TOKENS } from "../netlify/lib/create";
 import { checkReply } from "../src/create/check";
 import { feedbackMessage } from "../src/create/client";
 import { MODELS, type Model } from "./models";
@@ -17,6 +16,8 @@ import { TASKS, type Task } from "./tasks";
 
 process.loadEnvFile(".env");
 
+/** What --live held replies to: about 60 s of Haiku, the limit on the Netlify proxy this measured. */
+const LIVE_MAX_TOKENS = 11_000;
 const TRIES = 3;
 /** How long one reply can take on the site (see `send` below). */
 const LIVE_TURN_MS = 60_000;

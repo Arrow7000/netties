@@ -1,5 +1,4 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { ModelCall } from "../netlify/lib/create";
 
 const URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -10,6 +9,15 @@ const URL = "https://openrouter.ai/api/v1/chat/completions";
  * side for the small models we use, so the daily budget stays honest.
  */
 const STOPPED_MICROS_PER_CHAR = 0.25;
+
+export interface ModelCall {
+  /** The reply as it comes, thinking included. */
+  text: AsyncIterable<string | { thinking: string }>;
+  /** `micros` is what the call cost. */
+  final: Promise<{ content: Anthropic.ContentBlock[]; stop: string | null; usage: { input_tokens: number; output_tokens: number }; micros: number }>;
+  /** `text` then ends and `final` resolves as usual. */
+  abort(): void;
+}
 
 export interface OpenRouterOptions {
   apiKey: string;

@@ -131,12 +131,11 @@ Choices made along the way that you haven't confirmed yet:
    - Tablets: they get the desktop layout, which hasn't been tried with
      fingers.
 4. **The LLM create UI**, low priority (you, 2026-10-13: "not my main
-   priority. in fact it's quite a low one"). The backend is live at POST
-   /api/create (`netlify/edge-functions/create.ts`, logic in
-   `netlify/lib/create.ts`, browser side `create()` in
-   `src/create/client.ts`; Haiku 5.5, 30 calls per visitor per hour, $1 a day for everyone; test
-   locally with `netlify dev --command "npx vite --port 5299 --strictPort"
-   --target-port 5299 --port 8899`).
+   priority. in fact it's quite a low one"). The first backend, a capped proxy on our key at /api/create, is gone
+   (you, 2026-11-05: "that's the netlify approach right? so yeah i think just
+   delete that. unless... we want to keep it in case we want to do what cursor did
+   for a while and be our own router for users..? ok if so let's deal with that
+   then. delete for now."). It's in git at `942e7ca`, in `netlify/`, if that comes up.
    The round: brief, clickable prototypes, you pick. "Describe/create"
    first, "explain this" second. Add Turnstile if bots show up.
    - **A chat, not one-offs** (you, 2026-11-04: "a proper chat interface so
@@ -146,7 +145,7 @@ Choices made along the way that you haven't confirmed yet:
      within the context of an existing conversation"). Built behind a switch,
      2026-11-04, on no design round: `VITE_CHAT=on` shows it, in the local `.env`
      and not in production. Logic in `src/create/chat.ts`, the panel in
-     `src/ui/Chat.tsx`. /api/create and its limits are unchanged.
+     `src/ui/Chat.tsx`.
      - Bring your own model (you, 2026-11-05: "i think for now let's just allow
        people to bring their own models and providers... we can make requests
        right from the frontend! which also neatly gets rid of the whole netlify
@@ -173,8 +172,7 @@ Choices made along the way that you haven't confirmed yet:
        - Models: no provider says which are popular, and OpenRouter's
          `?order=top-weekly` changes nothing. So the list is the provider's own
          `/models`, newest first, searchable, and any name can be typed.
-       - Open: whether to remove /api/create, which is still live on our key with
-         no UI using it; and `Off` and the levels are one fixed list for every
+       - Open: `Off` and the levels are one fixed list for every
          model, with no `xhigh`/`max`.
      - Resume (you, 2026-11-05: "a resume button for when replies or reasoning gets
        cut off, so you can easily resume its response without explaining to the
@@ -226,7 +224,7 @@ Choices made along the way that you haven't confirmed yet:
      - Words: the chat prompt names netties' terms and asks for plain English
        otherwise, labels included. Over 18 tries each on 6 requests, words like
        "subtrahend" and "addend" went from 23 uses to 0, with nets no worse (10
-       passed against 8). `SYSTEM` for /api/create is untouched.
+       passed against 8). `SYSTEM`, which the eval uses, is untouched.
      - Reasoning: finished replies' reasoning doesn't go back to the model, only
        cut-off replies' does, as text. DeepSeek ignores reasoning sent back in a
        request without tools. Still to test: whether a retry does better for
@@ -253,7 +251,7 @@ Choices made along the way that you haven't confirmed yet:
        needs follow-up and edit tasks too. On the one follow-up tried so far,
        DeepSeek 1017 took 4 s against 17 s for writing the system it edited, so
        edits may fit in 60 s where whole systems don't: worth measuring.
-   - **Netlify ends the response 60 s in** (now only a matter for /api/create), even while data is flowing
+   - **Netlify ends the response 60 s in** (no longer a matter for the chat, which doesn't go through Netlify), even while data is flowing
      (tested on a draft deploy, 2026-11-04). That's about 12k tokens from
      Haiku, which often thinks for far longer on harder requests, so it gets
      5 to 10 of the 33 hard attempts right in time; Sonnet gets 26, Opus 27
@@ -268,13 +266,9 @@ Choices made along the way that you haven't confirmed yet:
      fit in 60 s, with examples or low effort barely changing that. Neither
      has a real lambda or a general primes. Particle-1's weights aren't open.
      Not yet fairly tested: Beam 1.0, whose provider rejects every retry.
-   - A response killed at 60 s never reaches the code that adds the call to
-     the day's spend, so the $1 cap undercounts those. `MAX_TOKENS` stops
-     Haiku just short of it, but a slower model would need a lower cap.
    - The prompt has to say netties checks each draft and that there are three
      tries. Without that, or if told it may decline, Haiku says it can't run
-     netties and gives up, even on tasks it can do. If `create()` gets no code
-     after every try, it should show the visitor what the model said.
+     netties and gives up, even on tasks it can do.
 
 5. **Showing what a net means** (you, 2026-11-05: "instead of leaving it to the
    user to interpret a sequence of S's as a natural number, to provide some...
