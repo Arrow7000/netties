@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleChat } from "./chat";
-import { CHAT_LIMITS, type CreateEvent, type Deps, LIMITS, checkConversation, handleCreate } from "./create";
+import { type CreateEvent, type Deps, LIMITS, checkConversation, handleCreate } from "./create";
 
 /** Counters in memory. */
 function memory() {
@@ -99,19 +98,9 @@ describe("handleCreate", () => {
     expect(model.seen).toHaveLength(0);
   });
 
-  it("has no chat without a model, as in production", async () => {
-    const { mem, model } = deps();
-    const res = await handleChat(ask(), { model: undefined, apiKey: "k", counters: mem.counters, visitor: "v", callModel: model.callModel });
-    expect(res.status).toBe(404);
-    expect(model.seen).toHaveLength(0);
-  });
-
-  it("keeps prod's limit on turns, but lets a chat go on", () => {
+  it("keeps to its limit on turns", () => {
     const long = Array.from({ length: 21 }, (_, i) => (i % 2 ? { role: "assistant", content: [{ type: "text", text: "x" }] } : { role: "user", content: "x" }));
     expect(checkConversation(long)).toMatch(/at most 3 turns/);
-    expect(checkConversation(long, CHAT_LIMITS)).toBeUndefined();
-    // A chat message can carry the whole document.
-    expect(checkConversation([{ role: "user", content: "x".repeat(50_000) }], CHAT_LIMITS)).toBeUndefined();
   });
 
   it("streams thinking, and counts what the provider said a call cost", async () => {

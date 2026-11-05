@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { ModelCall } from "./create.ts";
+import type { ModelCall } from "../netlify/lib/create";
 
 const URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -28,7 +28,7 @@ interface Chunk {
   error?: { message: string };
 }
 
-/** A reply from any model on OpenRouter, in the proxy's terms. Only text goes back to the model, not its thinking. */
+/** A reply from any model on OpenRouter, with what it cost, for the scripts that have to watch what they spend. The app doesn't use this. */
 export function callOpenRouter(o: OpenRouterOptions): ModelCall {
   const ctrl = new AbortController();
   let resolve!: (v: Awaited<ModelCall["final"]>) => void;

@@ -44,13 +44,6 @@ export const LIMITS: Limits = {
   bodyBytes: 1_000_000,
 };
 
-/**
- * The limits for a conversation, on /api/chat. Only the daily budget and the
- * body size really hold it in: a chat has no natural number of turns, and each
- * of its messages can carry the whole document.
- */
-export const CHAT_LIMITS: Limits = { ...LIMITS, callsPerHour: 120, turns: 500, requestChars: 100_000, feedbackChars: 100_000 };
-
 /** Counters that survive between requests. Not atomic; the caps are approximate. */
 export interface Counters {
   get(key: string): Promise<number>;

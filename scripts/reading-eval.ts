@@ -11,8 +11,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { loadEnv } from "vite";
-import { CHAT_MAX_TOKENS } from "../netlify/lib/chat";
-import { callOpenRouter } from "../netlify/lib/openrouter";
+import { callOpenRouter } from "./openrouter";
 import { examples } from "../src/core/examples";
 import { Net, free } from "../src/core/net";
 import { System } from "../src/core/system";
@@ -20,6 +19,8 @@ import { print } from "../src/core/text";
 import { checkReading, formula, parseShows, printShows, readingFor, runAhead } from "../src/dev/reading";
 
 const BUDGET = 0.75;
+/** Thinking counts too, and small models can think for about 27,000 tokens on a hard request. */
+const MAX_TOKENS = 32_000;
 const TRIES = 3;
 const RUNS = Number(process.argv[2]) || 2;
 /** Names of examples to run again, separated by | since names can have commas; their new runs replace the old. */
@@ -113,7 +114,7 @@ let spent = 0;
 let lastStop: string | null = null;
 
 async function ask(messages: { role: "user" | "assistant"; content: string }[]): Promise<string> {
-  const call = callOpenRouter({ apiKey: env.OPENROUTER_API_KEY!, model, system: READING_PROMPT, maxTokens: CHAT_MAX_TOKENS, messages });
+  const call = callOpenRouter({ apiKey: env.OPENROUTER_API_KEY!, model, system: READING_PROMPT, maxTokens: MAX_TOKENS, messages });
   for await (const _ of call.text);
   const final = await call.final;
   spent += final.micros / 1e6;
