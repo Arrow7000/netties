@@ -4469,6 +4469,10 @@ button.select.open {
   gap: 6px;
 }
 
+.model-missing {
+  font-size: 12px;
+}
+
 .model-actions .spacer {
   flex: 1;
 }
@@ -4543,5 +4547,54 @@ div.chat-seam {
 
 .chat-actions .chat-again {
   margin: 0;
-  color: var(--ink);
+}
+
+.chat-actions + .chat-note {
+  margin: 6px 0 0;
+}
+
+.chat-again.outline {
+  color: var(--text);
+}
+
+/* Stop, Send and the ways out of a failed reply, for a finger. */
+@media (pointer: coarse) {
+  .chat-again {
+    height: 44px;
+    min-width: 44px;
+  }
+
+  .chat-compose .btn.icon.primary {
+    width: 44px;
+    height: 48px;
+  }
+
+  .chat-compose .chat-field textarea {
+    min-height: 48px;
+    padding: 13px 50px 13px 10px;
+  }
+
+  .btn.chat-stop {
+    right: 2px;
+    bottom: 2px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* A phone upright: settings get the whole height, since there's a lot to fill in and the on-screen keyboard takes much of it. */
+@media (max-width: 760px) and (min-height: 501px) {
+  .chat:has(.model-form-wrap) {
+    height: calc(100dvh - var(--chat-keyboard, 0px));
+    border-width: 0;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+@media (max-width: 760px), (max-height: 500px) {
+  /* Anything smaller and iOS zooms the page on focus. */
+  .model-form .input {
+    font-size: 16px;
+  }
 }

@@ -39,7 +39,7 @@ export interface Preset {
   extra?: Record<string, unknown>;
   /** A limit on a reply's length, for a provider whose own default is too short for a model's thinking. */
   maxTokens?: number;
-  /** Where to ask, at no cost, whether a key is any good, for a provider whose list of models would load with any key at all. */
+  /** Where to ask, without running a model, whether a key is any good, for a provider whose list of models would load with any key at all. */
   keyCheck?: string;
 }
 

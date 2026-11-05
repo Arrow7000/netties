@@ -340,7 +340,7 @@ const SETTINGS_CAN_FIX = ["key", "model", "unreachable", "blocked"];
 
 function ResumeButton(props: { chat: Chat }) {
   return (
-    <button class="btn chat-again" onClick={props.chat.resume} title="Have it pick up from how far it got, thinking included">
+    <button class="btn primary chat-again" onClick={props.chat.resume} title="Carry on from here, keeping what's there">
       Resume
     </button>
   );
@@ -376,22 +376,26 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
                   <div class="chat-actions">
                     {/* Going again with a key that was turned down won't help, so changing it comes first. */}
                     <Show when={end.code === "key"}>
-                      <button class="btn chat-again" onClick={() => props.chat.fixSettings(props.index)}>
+                      <button class="btn primary chat-again" onClick={() => props.chat.fixSettings(props.index)}>
                         Change the key
                       </button>
                     </Show>
                     <Show when={canResume(props.turn)}>
                       <ResumeButton chat={props.chat} />
                     </Show>
-                    <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
+                    <button class="btn outline chat-again" onClick={() => props.chat.retry(props.index)} title="Start this reply over">
                       Try again
                     </button>
                     <Show when={end.code !== "key" && SETTINGS_CAN_FIX.includes(end.code)}>
-                      <button class="btn chat-again" onClick={() => props.chat.fixSettings(props.index)}>
+                      <button class="btn outline chat-again" onClick={() => props.chat.fixSettings(props.index)}>
                         Check settings
                       </button>
                     </Show>
                   </div>
+                  {/* There are no tooltips on a touch screen. */}
+                  <Show when={canResume(props.turn)}>
+                    <p class="chat-note">Resume keeps what's here and carries on. Try again starts this reply over.</p>
+                  </Show>
                 </Show>
               </div>
             );
@@ -400,7 +404,7 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
               <div class="chat-result bad">
                 <div>Three tries, and none passed the checks, so the canvas hasn't changed.</div>
                 <Show when={latest()}>
-                  <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
+                  <button class="btn outline chat-again" onClick={() => props.chat.retry(props.index)} title="Start this reply over">
                     Try again
                   </button>
                 </Show>
