@@ -806,6 +806,17 @@ describe("chats", () => {
   describe("the model", () => {
     const noModel = (b: ReturnType<typeof browser>) => b.local.delete("netties:models");
 
+    it("picked in a chat stays with that chat, leaving the default and what's saved for the provider alone", async () => {
+      const b = browser();
+      model();
+      const t = b.open();
+      await ready(t);
+      t.chat.setModel("custom", "picked");
+      expect(t.chat.choice()).toMatchObject({ model: "picked" });
+      expect(t.chat.models.defaults()).toMatchObject({ model: "m" });
+      expect(t.chat.models.entry("custom")?.model).toBeUndefined();
+    });
+
     it("isn't needed to read past chats, even with the keys gone", async () => {
       const b = browser();
       const calls = model();

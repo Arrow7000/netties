@@ -152,7 +152,6 @@ export function createChat(ed: Editor, models = createModelSettings()) {
   /** Change the model a chat uses. That isn't anything said, so it keeps its place in the list, and a reply going on in another tab carries on. */
   const choose = (t: Thread, choice: Choice) => {
     t.setChoice(choice);
-    models.remember(choice.provider, choice.model);
     const listing = chats().find((c) => c.id === t.id);
     if (listing) store?.write(listing, { entries: t.entries(), conversation: t.conversation, choice }).catch(trouble);
   };

@@ -22,8 +22,11 @@ const MOST_SHOWN = 100;
 export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
   const models = props.chat.models;
   const here = presetsHere();
-  /** The chat's provider, when it's the chat that needs setting up, or else the one last chosen. */
-  const start = props.chat.choice()?.provider ?? models.defaults()?.provider ?? here[0]!.id;
+  /**
+   * The chat's provider, when it's the chat that needs setting up. Asked for from
+   * the menu, it's the default's, or Save would move the default to wherever this chat happens to be.
+   */
+  const start = (props.chat.settings() ? models.defaults()?.provider : undefined) ?? props.chat.choice()?.provider ?? here[0]!.id;
   const [provider, setProvider] = createSignal(start);
   const saved = () => models.entry(provider());
   const preset = () => here.find((p) => p.id === provider());
@@ -43,7 +46,9 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
     setUrl(e?.url ?? (preset()?.local ? preset()!.url : ""));
     setWire(e?.wire ?? "openai");
     setKey(e?.key ?? "");
-    setModel(e?.model ?? "");
+    // What new chats really use, which a pick in a chat doesn't change.
+    const d = models.defaults();
+    setModel(d?.provider === provider() ? d.model : (e?.model ?? ""));
   };
   load();
 

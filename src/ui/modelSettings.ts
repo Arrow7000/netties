@@ -24,7 +24,7 @@ export interface ProviderEntry {
   /** Overrides the provider's own address: for a custom one, or a local server on another port. */
   url?: string;
   wire?: Wire;
-  /** The model last chosen from it. */
+  /** The model last saved for it. Picks in a chat stay with that chat. */
   model?: string;
 }
 
@@ -104,11 +104,6 @@ export function createModelSettings() {
       lists.delete(id);
       const left = stored().default?.provider === id ? undefined : stored().default;
       write({ providers, default: left });
-    },
-    /** Remember which model was last used from a provider. */
-    remember(id: string, model: string) {
-      const entry = stored().providers[id];
-      if (entry && entry.model !== model) write({ ...stored(), providers: { ...stored().providers, [id]: { ...entry, model } } });
     },
     /** What a provider that's set up has to offer, from a recent list if there is one. */
     models(id: string): Promise<ModelInfo[]> {
