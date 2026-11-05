@@ -106,9 +106,9 @@ export function createModelSettings() {
     /** The choice for new chats. If its provider has stopped being usable, it's a provider that still is, rather than asking all over again. */
     defaults: (): Choice | undefined => {
       const d = stored().default;
-      if (usable(d)) return d;
+      if (d && usable(d)) return d;
       const other = Object.keys(stored().providers).find((id) => connection(id) && stored().providers[id]!.model);
-      return other ? { provider: other, model: stored().providers[other]!.model!, effort: d?.effort ?? "default" } : d;
+      return other ? { provider: other, model: stored().providers[other]!.model!, effort: stored().default?.effort ?? "default" } : d;
     },
     usable,
     /** Keep what was filled in for a provider, and make this the choice for new chats unless told it's only being put right. */
