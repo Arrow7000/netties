@@ -289,6 +289,12 @@ function ProviderModels(props: { chat: Chat; provider: string; query: string; he
     return l.kind === "loaded" ? matching(l.models, props.query).slice(0, MOST_SHOWN) : [];
   });
   const current = () => props.chat.choice();
+  /** A name that was typed in, or is too far down to be shown, so the chat's model is still there to see. */
+  const unlisted = () => {
+    const c = current();
+    if (listing().kind === "loading" || c?.provider !== props.provider || !c.model || shown().some((m) => m.id === c.model)) return undefined;
+    return matching([{ id: c.model }], props.query).length ? c.model : undefined;
+  };
   return (
     <>
       <Show when={props.heading}>
@@ -301,6 +307,7 @@ function ProviderModels(props: { chat: Chat; provider: string; query: string; he
       <Show when={listing().kind === "loaded" && !props.query.trim() && !shown().length}>
         <div class="model-note">It didn't list any models. Type a name above to use one.</div>
       </Show>
+      <Show when={unlisted()}>{(m) => <MenuItem title={m()} current onClick={props.onPick} />}</Show>
       <For each={shown()}>
         {(m) => (
           <MenuItem

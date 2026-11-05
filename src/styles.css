@@ -492,6 +492,20 @@ kbd {
   background: var(--chrome-2);
 }
 
+.mi.current {
+  background: var(--accent-soft);
+}
+
+/* Reached with the arrow keys. A ring as well, to show on the current row too. */
+.mi.lit {
+  background: var(--chrome-2);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+
+.mi.current.lit {
+  background: var(--accent-soft);
+}
+
 .mi.danger {
   color: var(--stuck);
 }
