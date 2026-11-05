@@ -83,6 +83,8 @@ export function createModelSettings() {
     return entry ? connect(id, entry) : undefined;
   };
 
+  const usable = (c: Choice | undefined): c is Choice => !!c && !!c.model && !!connection(c.provider);
+
   const setupFor = (id: string) => (typeof location === "undefined" ? undefined : localSetup(id, location.origin));
 
   const lists = new Map<string, { at: number; url: string; key?: string; list: Promise<ModelInfo[]> }>();
@@ -92,19 +94,32 @@ export function createModelSettings() {
     connect,
     /** The providers set up so far. */
     ready: () => Object.keys(stored().providers).filter((id) => connection(id)),
-    defaults: () => stored().default,
-    usable: (c: Choice | undefined): c is Choice => !!c && !!c.model && !!connection(c.provider),
+    /** The choice for new chats. If its provider has stopped being usable, it's a provider that still is, rather than asking all over again. */
+    defaults: (): Choice | undefined => {
+      const d = stored().default;
+      if (usable(d)) return d;
+      const other = Object.keys(stored().providers).find((id) => connection(id) && stored().providers[id]!.model);
+      return other ? { provider: other, model: stored().providers[other]!.model!, effort: d?.effort ?? "default" } : d;
+    },
+    usable,
     /** Keep what was filled in for a provider, and make this the choice for new chats unless told it's only being put right. */
     save(id: string, entry: ProviderEntry, effort: Effort, asDefault = true) {
       const had = stored().default;
       write({ ...stored(), providers: { ...stored().providers, [id]: entry }, default: asDefault || !had ? { provider: id, model: entry.model ?? "", effort } : { ...had, effort } });
     },
-    /** Forget a provider, key and all. What was said with it stays. */
-    forget(id: string) {
+    /** Forget a provider's key, keeping its address and model for when there's another. */
+    forgetKey(id: string) {
+      const entry = stored().providers[id];
+      if (!entry) return;
+      const { key: _gone, ...kept } = entry;
+      lists.delete(id);
+      write({ ...stored(), providers: { ...stored().providers, [id]: kept } });
+    },
+    /** Remove a provider altogether, so a server that's gone doesn't stay in the menu. What was said with it stays. */
+    remove(id: string) {
       const { [id]: _gone, ...providers } = stored().providers;
       lists.delete(id);
-      const left = stored().default?.provider === id ? undefined : stored().default;
-      write({ providers, default: left });
+      write({ ...stored(), providers, default: stored().default?.provider === id ? undefined : stored().default });
     },
     /** What a provider that's set up has to offer, from a recent list if there is one. */
     models(id: string): Promise<ModelInfo[]> {

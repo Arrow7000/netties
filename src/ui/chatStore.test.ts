@@ -817,13 +817,55 @@ describe("chats", () => {
       expect(t.chat.models.entry("custom")?.model).toBeUndefined();
     });
 
+    describe("when a provider goes", () => {
+      /** OpenAI and a local server, with the default on OpenAI. */
+      const two = { providers: { openai: { key: "k", model: "gpt" }, ollama: { url: "http://localhost:11434/v1", model: "llama" } }, default: { provider: "openai", model: "gpt", effort: "high" } };
+
+      it("forgetting a key keeps the address and model, and a new chat falls back on what's still set up", async () => {
+        const b = browser();
+        model();
+        b.local.set("netties:models", JSON.stringify(two));
+        const t = b.open();
+        await ready(t);
+        t.chat.models.forgetKey("openai");
+        expect(t.chat.models.entry("openai")).toEqual({ model: "gpt" });
+        expect(t.chat.models.ready()).toEqual(["ollama"]);
+        expect(t.chat.models.defaults()).toEqual({ provider: "ollama", model: "llama", effort: "high" });
+        expect(t.chat.usable()).toBe(true);
+      });
+
+      it("removing one takes it off the list, and the default with it if it was there", async () => {
+        const b = browser();
+        model();
+        b.local.set("netties:models", JSON.stringify({ ...two, default: { provider: "ollama", model: "llama", effort: "default" } }));
+        const t = b.open();
+        await ready(t);
+        t.chat.models.remove("ollama");
+        expect(t.chat.models.entry("ollama")).toBeUndefined();
+        expect(t.chat.models.ready()).toEqual(["openai"]);
+        expect(t.chat.models.defaults()).toMatchObject({ provider: "openai", model: "gpt" });
+      });
+
+      it("asks all over again only when nothing's left", async () => {
+        const b = browser();
+        model();
+        b.local.set("netties:models", JSON.stringify({ providers: { openai: { key: "k", model: "gpt" } }, default: { provider: "openai", model: "gpt", effort: "default" } }));
+        const t = b.open();
+        await ready(t);
+        t.chat.models.forgetKey("openai");
+        expect(t.chat.usable()).toBe(false);
+        // Still knows where it was, to ask for the key there.
+        expect(t.chat.models.defaults()).toMatchObject({ provider: "openai", model: "gpt" });
+      });
+    });
+
     it("isn't needed to read past chats, even with the keys gone", async () => {
       const b = browser();
       const calls = model();
       const t = b.open();
       await ready(t);
       await say(t, calls, "kept", "Still here.");
-      t.chat.models.forget("custom");
+      t.chat.models.remove("custom");
       const again = b.open(t.session);
       await ready(again);
       expect(again.chat.entries()).toHaveLength(2);
@@ -837,7 +879,7 @@ describe("chats", () => {
       const t = b.open();
       await ready(t);
       await say(t, calls, "kept");
-      t.chat.models.forget("custom");
+      t.chat.models.remove("custom");
       let went = false;
       t.chat.withModel(() => (went = true));
       expect(t.chat.settings()).toBeDefined();
@@ -1073,7 +1115,7 @@ describe("chats", () => {
       await settled();
       calls[0]!.fail();
       await going;
-      t.chat.models.forget("custom");
+      t.chat.models.remove("custom");
       t.chat.resume();
       await settled();
       expect(calls).toHaveLength(1);

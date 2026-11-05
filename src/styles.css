@@ -4464,6 +4464,7 @@ button.select.open {
 
 .model-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }

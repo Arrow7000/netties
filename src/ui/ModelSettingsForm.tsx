@@ -36,7 +36,8 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
    */
   const onChat = props.chat.choice()?.provider;
   const onDefault = models.defaults()?.provider;
-  const start = (why()?.kind === "asked" ? onDefault : onChat) ?? onDefault ?? here[0]!.id;
+  // A chat left on a provider that has been removed is better off being offered what's still set up.
+  const start = (why()?.kind === "asked" || (why()?.kind !== "fixing" && onChat && !models.entry(onChat)) ? onDefault : onChat) ?? onChat ?? onDefault ?? here[0]!.id;
   const [provider, setProvider] = createSignal(start);
   const saved = () => models.entry(provider());
   const preset = () => here.find((p) => p.id === provider());
@@ -49,6 +50,8 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
   const [model, setModel] = createSignal("");
   const [effort, setEffort] = createSignal<Effort>(models.defaults()?.effort ?? "default");
   const [listing, setListing] = createSignal<Listing>({ kind: "idle" });
+  /** Having just forgotten the key, as nothing else on the form shows that it happened. */
+  const [forgot, setForgot] = createSignal(false);
 
   /** Fill in what's known for this provider. */
   const load = () => {
@@ -163,6 +166,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
           value={provider()}
           onChange={(e) => {
             setProvider(e.currentTarget.value);
+            setForgot(false);
             load();
           }}
         >
@@ -192,7 +196,10 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
         <span>
           API key <Show when={!preset()?.needsKey}><span class="optional">(optional)</span></Show>
         </span>
-        <input class="input" aria-label="API key" type="password" spellcheck={false} autocomplete="off" value={key()} onInput={(e) => setKey(e.currentTarget.value)} />
+        <input class="input" aria-label="API key" type="password" spellcheck={false} autocomplete="off" value={key()} onInput={(e) => (setKey(e.currentTarget.value), setForgot(false))} />
+        <Show when={forgot()}>
+          <span class="hint">Key forgotten. The address, model and your chats stay.</span>
+        </Show>
         <span class="hint">
           Kept in this browser, and sent only to {nameOf(provider())}.
           <Show when={preset()?.keysAt}>
@@ -238,17 +245,31 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
           </button>
         </Show>
         <span class="spacer" />
-        <Show when={saved()}>
+        <Show when={saved()?.key}>
           <button
             type="button"
             class="btn"
-            title={`Remove what's kept for ${nameOf(provider())}. Your chats stay.`}
+            title={`Forget the key kept for ${nameOf(provider())}, keeping the rest. Your chats stay.`}
             onClick={() => {
-              models.forget(provider());
-              load();
+              models.forgetKey(provider());
+              setKey("");
+              setForgot(true);
             }}
           >
             Forget this key
+          </button>
+        </Show>
+        <Show when={saved() && !preset()?.needsKey}>
+          <button
+            type="button"
+            class="btn"
+            title={`Remove ${nameOf(provider())} and all that's kept for it, so it's no longer in the model menu. Your chats stay.`}
+            onClick={() => {
+              models.remove(provider());
+              load();
+            }}
+          >
+            Remove this provider
           </button>
         </Show>
       </div>
