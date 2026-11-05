@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { type Ask, type Connection, type ReplyEvent, ModelError, isLocalAddress, listModels, normalizeUrl, streamReply, thinkSplitter } from "./provider";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type Ask, type Connection, type ReplyEvent, ModelError, isLocalAddress, listModels, localSetup, normalizeUrl, streamReply, thinkSplitter, troubleParts } from "./provider";
 
 const OPENAI: Connection = { name: "Test", url: "https://x.test/v1", wire: "openai", key: "k" };
 const ANTHROPIC: Connection = { name: "Claude", url: "https://a.test/v1", wire: "anthropic", key: "k", maxTokens: 1000 };
@@ -31,6 +31,70 @@ async function collect(a: Ask) {
     return { events, error: error as ModelError };
   }
 }
+
+describe("what a failure says", () => {
+  it("puts what's wrong first, with commands picked out of what to do", () => {
+    const { head, rest } = troubleParts(`Ollama is running, but isn't letting this site in.\n\n${localSetup("lmstudio", "https://x")}`);
+    expect(head).toBe("Ollama is running, but isn't letting this site in.");
+    expect(rest).toEqual([{ text: "In LM Studio, turn on Developer → Server Settings → Enable CORS, or run:" }, { command: "lms server start --cors" }]);
+    expect(troubleParts("Just this.")).toEqual({ head: "Just this.", rest: [] });
+  });
+
+  it("has no web page in it", async () => {
+    const page = "<!doctype html><html><head><title>x</title><style>h1{}</style></head><body><h1>nope</h1></body></html>";
+    const { f } = provider(new Response(page, { status: 500 }));
+    const { error } = await collect(ask(OPENAI, f));
+    expect(error?.message).toContain("nope");
+    expect(error?.message).not.toContain("<");
+    expect(error?.message).not.toContain("h1{}");
+  });
+
+  it("doesn't blame a model when an address doesn't list any", async () => {
+    const { f } = provider(new Response("<h1>nope</h1>", { status: 404 }));
+    const error = await listModels(OPENAI, { fetch: f }).catch((e: ModelError) => e);
+    expect((error as ModelError).message).toContain("Nothing at this address lists models");
+    expect((error as ModelError).message).not.toContain("nope");
+  });
+
+  describe("about a local server that isn't there", () => {
+    const LOCAL: Connection = { name: "Ollama", url: "http://localhost:11434/v1", wire: "openai" };
+    const gone = () => provider(new TypeError("Failed to fetch")).f;
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("only brings up phones on one", async () => {
+      vi.stubGlobal("matchMedia", () => ({ matches: false }));
+      expect((await collect(ask(LOCAL, gone()))).error?.message).not.toContain("phone");
+      vi.stubGlobal("matchMedia", () => ({ matches: true }));
+      expect((await collect(ask(LOCAL, gone()))).error?.message).toContain("phone");
+    });
+  });
+});
+
+describe("a provider with somewhere to check a key", () => {
+  const CHECKED: Connection = { ...OPENAI, keyCheck: "/key" };
+  const list = new Response(JSON.stringify({ data: [{ id: "a" }] }));
+
+  it("says so when the key is no good, though the list is public", async () => {
+    const { f, calls } = provider(new Response(JSON.stringify({ error: { message: "Missing Authentication header" } }), { status: 401 }), list);
+    const error = await listModels(CHECKED, { fetch: f }).catch((e: ModelError) => e);
+    expect(error).toMatchObject({ code: "key", message: "Test didn't accept the API key." });
+    expect(calls.map((c) => c.url)).toEqual(["https://x.test/v1/key"]);
+    expect(calls[0]!.init.headers).toMatchObject({ authorization: "Bearer k" });
+    expect(calls[0]!.init.method).toBeUndefined();
+  });
+
+  it("goes on to the list when it's fine, or when the check can't be made", async () => {
+    expect(await listModels(CHECKED, { fetch: provider(new Response("{}"), list).f })).toEqual([{ id: "a" }]);
+    expect(await listModels(CHECKED, { fetch: provider(new TypeError("Failed to fetch"), list).f })).toEqual([{ id: "a" }]);
+    expect(await listModels(CHECKED, { fetch: provider(new Response("", { status: 500 }), list).f })).toEqual([{ id: "a" }]);
+  });
+
+  it("doesn't check without a key", async () => {
+    const { f, calls } = provider(list);
+    await listModels({ ...CHECKED, key: undefined }, { fetch: f });
+    expect(calls).toHaveLength(1);
+  });
+});
 
 describe("normalizing an address", () => {
   it("takes however it was pasted", () => {

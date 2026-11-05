@@ -6,7 +6,7 @@ import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
 import * as I from "./icons";
 import { Menu, MenuItem } from "./Menu";
-import { EffortPicker, ModelPicker, ModelSettingsForm } from "./ModelSettingsForm";
+import { EffortPicker, ModelPicker, ModelSettingsForm, Trouble } from "./ModelSettingsForm";
 import { nameOf } from "./modelSettings";
 import { pieces } from "./pieces";
 
@@ -370,8 +370,8 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
             );
           case "failed":
             return (
-              <div class="chat-status bad">
-                {end.message}
+              <div class="chat-status">
+                <Trouble message={end.message} />
                 <Show when={latest()}>
                   <div class="chat-actions">
                     {/* Going again with a key that was turned down won't help, so changing it comes first. */}

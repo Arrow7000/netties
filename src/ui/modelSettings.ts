@@ -38,11 +38,16 @@ interface Stored {
 const modelKey = (provider: string, model: string) => `${provider}/${model}`;
 
 /** A pretend provider, with no cost, only under `npm run dev` (scripts/fakeModel.ts). */
-const devPresets = (): Preset[] => (import.meta.env.DEV && typeof location !== "undefined" ? [{ id: "fake", name: "Pretend model (dev only)", url: `${location.origin}/dev-model/v1`, wire: "openai", local: true }] : []);
+const devPresets = (): Preset[] => (import.meta.env.DEV && typeof location !== "undefined" ? [{ id: "fake", name: "Pretend model (dev only)", short: "Pretend model", url: `${location.origin}/dev-model/v1`, wire: "openai", local: true }] : []);
 
 export const presetsHere = (): Preset[] => [...PRESETS, ...devPresets()];
 
-export const nameOf = (id: string) => (id === CUSTOM ? "Custom provider" : (presetsHere().find((p) => p.id === id)?.name ?? id));
+/** What to call a provider in a sentence. */
+export const nameOf = (id: string) => {
+  if (id === CUSTOM) return "Custom address";
+  const p = presetsHere().find((x) => x.id === id);
+  return p?.short ?? p?.name ?? id;
+};
 
 function read(): Stored {
   try {
@@ -78,7 +83,7 @@ export function createModelSettings() {
     const url = normalizeUrl(entry?.url ?? preset?.url ?? "");
     if (!url) return undefined;
     if (preset?.needsKey && !entry?.key) return undefined;
-    return { name: nameOf(id), url: preset && !preset.local ? preset.url : url, wire: preset?.wire ?? entry?.wire ?? "openai", key: entry?.key || undefined, extra: preset?.extra, maxTokens: preset?.maxTokens };
+    return { name: nameOf(id), url: preset && !preset.local ? preset.url : url, wire: preset?.wire ?? entry?.wire ?? "openai", key: entry?.key || undefined, extra: preset?.extra, maxTokens: preset?.maxTokens, keyCheck: preset?.keyCheck };
   };
 
   /** A provider the visitor has set up, if this one is. */

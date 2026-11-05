@@ -4051,7 +4051,6 @@ button.select.open {
   }
 }
 
-.chat-status.bad,
 .chat-result.bad > div {
   color: var(--stuck);
 }
@@ -4395,10 +4394,6 @@ button.select.open {
   overflow-wrap: anywhere;
 }
 
-.model-note.bad {
-  color: var(--danger, #c33);
-}
-
 .model-form-wrap {
   flex: 1;
   min-height: 0;
@@ -4428,12 +4423,6 @@ button.select.open {
   color: var(--muted);
 }
 
-.model-form .model-why {
-  color: var(--stuck);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .model-form label {
   display: flex;
   flex-direction: column;
@@ -4457,10 +4446,6 @@ button.select.open {
   color: var(--muted);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.model-form .hint.bad {
-  color: var(--danger, #c33);
 }
 
 .model-form .hint a {
@@ -4507,9 +4492,46 @@ div.chat-seam {
   overflow-wrap: anywhere;
 }
 
-.chat-status.bad {
+/* A failure: one red sentence, then what to do about it. */
+.trouble {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.chat-status .trouble {
+  font-size: inherit;
+}
+
+.trouble-head {
+  color: var(--stuck);
+}
+
+.trouble-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 4px 4px 8px;
+  border-radius: var(--r-ctl);
+  background: var(--chrome-2);
+}
+
+.trouble-command code {
+  flex: 1;
+  min-width: 0;
+  padding-top: 5px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.trouble-command .btn {
+  flex: none;
+  background: var(--chrome);
 }
 
 .chat-actions {

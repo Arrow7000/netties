@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
-import { CUSTOM, EFFORTS, type Effort, type ModelInfo, type Wire, isLocalAddress, listModels, normalizeUrl } from "../create/provider";
+import { CUSTOM, EFFORTS, type Effort, type ModelInfo, type Wire, isLocalAddress, listModels, normalizeUrl, troubleParts } from "../create/provider";
 import type { Chat, Waiting } from "./chatStore";
+import { copyText } from "./clipboard";
 import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
 import { Menu, MenuItem } from "./Menu";
@@ -22,6 +23,38 @@ const WAITING: Record<Waiting, { head: string; note: string; button: string }> =
   resume: { head: "Choose a model to carry on with", note: "The reply picks up from where it got to as soon as you save.", button: "Save and resume" },
   retry: { head: "Choose a model to try again with", note: "The reply starts over as soon as you save.", button: "Save and try again" },
 };
+
+/** A command to run, ready to copy. */
+function Command(props: { text: string }) {
+  const [copied, setCopied] = createSignal(false);
+  return (
+    <div class="trouble-command">
+      <code>{props.text}</code>
+      <button
+        type="button"
+        class="btn small outline"
+        onClick={async () => {
+          if (!(await copyText(props.text))) return;
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+      >
+        {copied() ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+/** What went wrong in a sentence of red, then what to do about it in ordinary text. */
+export function Trouble(props: { message: string }) {
+  const parts = () => troubleParts(props.message);
+  return (
+    <div class="trouble">
+      <div class="trouble-head">{parts().head}</div>
+      <For each={parts().rest}>{(p) => ("command" in p ? <Command text={p.command} /> : <div>{p.text}</div>)}</For>
+    </div>
+  );
+}
 
 /**
  * Choosing a provider, its key and a model. The key stays in this browser. The
@@ -165,7 +198,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
           return (
             <>
               <h2>{w.code === "key" ? "Change the key" : "Check the settings"}</h2>
-              <p class="model-why">{w.message}</p>
+              <Trouble message={w.message} />
             </>
           );
         }
@@ -236,7 +269,6 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
         <Show when={listing().kind === "loading"}>
           <span class="hint">Asking {nameOf(provider())} what it has…</span>
         </Show>
-        <Show when={listing().kind === "failed" ? (listing() as { message: string }).message : undefined}>{(m) => <span class="hint bad">{m()}</span>}</Show>
         <Show when={listing().kind === "loaded" && !(listing() as { models: ModelInfo[] }).models.length}>
           <span class="hint">{nameOf(provider())} didn't list any models{local() ? ". If you haven't downloaded one yet, do that first" : ""}. You can still type a name here.</span>
         </Show>
@@ -249,6 +281,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
           </div>
         </Show>
       </label>
+      <Show when={listing().kind === "failed" ? (listing() as { message: string }).message : undefined}>{(m) => <Trouble message={m()} />}</Show>
       <label>
         Reasoning
         <select class="input" aria-label="Reasoning" value={effort()} onChange={(e) => setEffort(e.currentTarget.value as Effort)}>
@@ -323,7 +356,7 @@ function ProviderModels(props: { chat: Chat; provider: string; query: string; he
       <Show when={listing().kind === "loading"}>
         <div class="model-note">Asking what it has…</div>
       </Show>
-      <Show when={listing().kind === "failed" ? (listing() as { message: string }).message : undefined}>{(m) => <div class="model-note bad">{m()}</div>}</Show>
+      <Show when={listing().kind === "failed" ? (listing() as { message: string }).message : undefined}>{(m) => <div class="model-note"><Trouble message={m()} /></div>}</Show>
       <Show when={listing().kind === "loaded" && !props.query.trim() && !shown().length}>
         <div class="model-note">It didn't list any models. Type a name above to use one.</div>
       </Show>

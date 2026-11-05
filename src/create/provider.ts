@@ -24,6 +24,8 @@ export const EFFORTS: { id: Effort; name: string }[] = [
 export interface Preset {
   id: string;
   name: string;
+  /** What to call it in a sentence, where the name has more than that in it. */
+  short?: string;
   /** Empty for a provider whose address the visitor gives. */
   url: string;
   wire: Wire;
@@ -37,6 +39,8 @@ export interface Preset {
   extra?: Record<string, unknown>;
   /** A limit on a reply's length, for a provider whose own default is too short for a model's thinking. */
   maxTokens?: number;
+  /** Where to ask, at no cost, whether a key is any good, for a provider whose list of models would load with any key at all. */
+  keyCheck?: string;
 }
 
 export const CUSTOM = "custom";
@@ -44,7 +48,7 @@ export const CUSTOM = "custom";
 /** The cloud ones take requests from a browser, as checked 2026-11-05; see TODO.md for how far. A local one has to be told to let the site in. */
 export const PRESETS: Preset[] = [
   // By default OpenRouter favours cheap hosts, which can be 10× slower.
-  { id: "openrouter", name: "OpenRouter", url: "https://openrouter.ai/api/v1", wire: "openai", needsKey: true, keysAt: "https://openrouter.ai/keys", extra: { provider: { sort: "throughput" } } },
+  { id: "openrouter", name: "OpenRouter", url: "https://openrouter.ai/api/v1", wire: "openai", needsKey: true, keysAt: "https://openrouter.ai/keys", extra: { provider: { sort: "throughput" } }, keyCheck: "/key" },
   { id: "anthropic", name: "Anthropic", url: "https://api.anthropic.com/v1", wire: "anthropic", needsKey: true, keysAt: "https://platform.claude.com/settings/keys", maxTokens: 64_000 },
   { id: "openai", name: "OpenAI", url: "https://api.openai.com/v1", wire: "openai", needsKey: true, keysAt: "https://platform.openai.com/api-keys" },
   { id: "google", name: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai", wire: "openai", needsKey: true, keysAt: "https://aistudio.google.com/apikey" },
@@ -55,11 +59,11 @@ export const PRESETS: Preset[] = [
   { id: "together", name: "Together", url: "https://api.together.xyz/v1", wire: "openai", needsKey: true, keysAt: "https://api.together.ai/settings/api-keys" },
   { id: "fireworks", name: "Fireworks", url: "https://api.fireworks.ai/inference/v1", wire: "openai", needsKey: true, keysAt: "https://fireworks.ai/account/api-keys" },
   { id: "cerebras", name: "Cerebras", url: "https://api.cerebras.ai/v1", wire: "openai", needsKey: true, keysAt: "https://cloud.cerebras.ai" },
-  { id: "moonshot", name: "Moonshot (Kimi)", url: "https://api.moonshot.ai/v1", wire: "openai", needsKey: true, keysAt: "https://platform.moonshot.ai/console/api-keys" },
-  { id: "zai", name: "Z.ai (GLM)", url: "https://api.z.ai/api/paas/v4", wire: "openai", needsKey: true, keysAt: "https://z.ai/manage-apikey/apikey-list" },
-  { id: "qwen", name: "Alibaba (Qwen)", url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", wire: "openai", needsKey: true, keysAt: "https://modelstudio.console.alibabacloud.com" },
-  { id: "ollama", name: "Ollama (on this computer)", url: "http://localhost:11434/v1", wire: "openai", local: true },
-  { id: "lmstudio", name: "LM Studio (on this computer)", url: "http://localhost:1234/v1", wire: "openai", local: true },
+  { id: "moonshot", name: "Moonshot (Kimi)", short: "Moonshot", url: "https://api.moonshot.ai/v1", wire: "openai", needsKey: true, keysAt: "https://platform.moonshot.ai/console/api-keys" },
+  { id: "zai", name: "Z.ai (GLM)", short: "Z.ai", url: "https://api.z.ai/api/paas/v4", wire: "openai", needsKey: true, keysAt: "https://z.ai/manage-apikey/apikey-list" },
+  { id: "qwen", name: "Alibaba (Qwen)", short: "Alibaba", url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", wire: "openai", needsKey: true, keysAt: "https://modelstudio.console.alibabacloud.com" },
+  { id: "ollama", name: "Ollama (on this computer)", short: "Ollama", url: "http://localhost:11434/v1", wire: "openai", local: true },
+  { id: "lmstudio", name: "LM Studio (on this computer)", short: "LM Studio", url: "http://localhost:1234/v1", wire: "openai", local: true },
 ];
 
 export const presetOf = (id: string) => PRESETS.find((p) => p.id === id);
@@ -72,6 +76,7 @@ export interface Connection {
   key?: string;
   extra?: Record<string, unknown>;
   maxTokens?: number;
+  keyCheck?: string;
 }
 
 /** The address of an API, from however it was pasted in: with or without its scheme, its version, or the endpoint itself. */
@@ -102,9 +107,24 @@ export function isLocalAddress(url: string): boolean {
 
 /** How to let this site in, for the local servers that keep it out until told otherwise. */
 export function localSetup(id: string, origin: string): string | undefined {
-  if (id === "ollama") return `Ollama only lets in sites it's told about. Quit Ollama and run:\n\nOLLAMA_ORIGINS=${origin} ollama serve\n\nOr, to keep using the Ollama app on a Mac, run this and restart it:\n\nlaunchctl setenv OLLAMA_ORIGINS ${origin}`;
-  if (id === "lmstudio") return "In LM Studio, turn on Developer → Server Settings → Enable CORS, or run:\n\nlms server start --cors";
+  if (id === "ollama") return `Ollama only lets in sites it's told about. Quit Ollama and run:\n\n\`OLLAMA_ORIGINS=${origin} ollama serve\`\n\nOr, to keep using the Ollama app on a Mac, run this and restart it:\n\n\`launchctl setenv OLLAMA_ORIGINS ${origin}\``;
+  if (id === "lmstudio") return "In LM Studio, turn on Developer → Server Settings → Enable CORS, or run:\n\n`lms server start --cors`";
   return undefined;
+}
+
+/**
+ * What a failure's message is made of: what's wrong, then what to do about it.
+ * It's written as paragraphs, with a command alone in one between backticks.
+ */
+export function troubleParts(message: string): { head: string; rest: ({ text: string } | { command: string })[] } {
+  const [head, ...rest] = message.split("\n\n");
+  return {
+    head: head!,
+    rest: rest.map((p) => {
+      const command = /^`([^`]+)`$/.exec(p.trim());
+      return command ? { command: command[1]! } : { text: p };
+    }),
+  };
 }
 
 export type FailCode = "key" | "rate" | "model" | "refused" | "cut-off" | "dropped" | "unreachable" | "blocked" | "failed";
@@ -181,6 +201,15 @@ function request(a: Ask): { url: string; headers: Record<string, string>; body: 
   };
 }
 
+/** The words in what may be a web page, as an address that isn't an API often answers with one. */
+function plainText(raw: string): string {
+  if (!/<[a-z!/][^>]*>/i.test(raw)) return raw;
+  return raw
+    .replace(/<(script|style|head)\b[\s\S]*?<\/\1\s*>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ");
+}
+
 /** What a provider said went wrong, wherever it put it. */
 function saidIn(raw: string): string {
   try {
@@ -191,7 +220,7 @@ function saidIn(raw: string): string {
   } catch {
     // Not JSON: it's said in plain text, if at all.
   }
-  return raw.trim().slice(0, 200);
+  return plainText(raw).trim().slice(0, 200);
 }
 
 function refusedBy(c: Connection, model: string, status: number, raw: string): ModelError {
@@ -203,6 +232,9 @@ function refusedBy(c: Connection, model: string, status: number, raw: string): M
   return new ModelError("failed", `${c.name} said no (${status})${also}`);
 }
 
+/** Someone on a phone, for whom "localhost" isn't the computer the server's on. */
+const onPhone = () => typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
+
 /**
  * Why a request never got an answer. A browser only says "Failed to fetch"
  * whether it was refused permission, nothing's running or CORS kept it out, so
@@ -213,13 +245,13 @@ async function whyUnreachable(a: Ask, doFetch: typeof fetch): Promise<ModelError
   if (!isLocalAddress(c.url)) {
     const list = await doFetch(`${c.url}/models`, { headers: listHeaders(c), signal: a.signal }).catch(() => undefined);
     if (list?.status === 401 || list?.status === 403) return refusedBy(c, a.model, list.status, await list.text().catch(() => ""));
-    return new ModelError("unreachable", `Couldn't reach ${c.name}. Check your connection, and that the API key and address are right.`);
+    return new ModelError("unreachable", `Couldn't reach ${c.name}.\n\nCheck your connection, and that the API key and address are right.`);
   }
   const permission = await navigator.permissions?.query({ name: "local-network-access" as PermissionName }).then((p) => p.state, () => undefined);
-  if (permission === "denied") return new ModelError("blocked", `This browser isn't letting netties reach ${c.url}. Allow local network access for this site in its site settings, then try again.`);
+  if (permission === "denied") return new ModelError("blocked", `This browser isn't letting netties reach ${c.url}.\n\nAllow local network access for this site in its site settings, then try again.`);
   const up = await doFetch(`${c.url}/models`, { mode: "no-cors", signal: a.signal }).then(() => true, () => false);
-  if (!up) return new ModelError("unreachable", `Nothing's answering at ${c.url}. Check that ${c.name} is running. A phone can't reach a server on your computer as localhost.`);
-  return new ModelError("blocked", `${c.name} is running, but isn't letting this site in.${a.setup ? `\n\n${a.setup}` : " Allow this site's origin in its CORS settings."}`);
+  if (!up) return new ModelError("unreachable", `Nothing's answering at ${c.url}.\n\nCheck that ${c.name} is running.${onPhone() && /\/\/(localhost|127\.|\[::1\])/.test(c.url) ? " A phone can't reach a server on your computer as localhost." : ""}`);
+  return new ModelError("blocked", `${c.name} is running, but isn't letting this site in.\n\n${a.setup ?? "Allow this site's origin in its CORS settings."}`);
 }
 
 /** The lines of data in a stream of server-sent events. Keep-alive comments and event names are left out, since the data says what it is. */
@@ -436,6 +468,11 @@ const NOT_CHAT = /embed|whisper|tts|dall-e|image|moderation|rerank|transcri|audi
  */
 export async function listModels(c: Connection, opts: { signal?: AbortSignal; fetch?: typeof fetch; setup?: string } = {}): Promise<ModelInfo[]> {
   const doFetch = opts.fetch ?? fetch;
+  // A check that can't be made says nothing about the key: the list goes ahead, and a key that's no good shows up on sending.
+  if (c.keyCheck && c.key) {
+    const check = await doFetch(`${c.url}${c.keyCheck}`, { headers: listHeaders(c), signal: opts.signal }).catch(() => undefined);
+    if (check?.status === 401 || check?.status === 403) throw new ModelError("key", `${c.name} didn't accept the API key.`);
+  }
   let res: Response;
   try {
     res = await doFetch(`${c.url}/models${c.wire === "anthropic" ? "?limit=1000" : ""}`, { headers: listHeaders(c), signal: opts.signal });
@@ -443,6 +480,7 @@ export async function listModels(c: Connection, opts: { signal?: AbortSignal; fe
     if (opts.signal?.aborted) throw e;
     throw await whyUnreachable({ connection: c, model: "", effort: "default", system: "", messages: [], signal: opts.signal, setup: opts.setup }, doFetch);
   }
+  if (res.status === 404) throw new ModelError("failed", "Nothing at this address lists models. Check the path, which often ends in /v1.\n\nIf the address is right, you can still type a model's name.");
   if (!res.ok) throw refusedBy(c, "", res.status, await res.text().catch(() => ""));
   const j = (await res.json().catch(() => undefined)) as unknown;
   const box = j as { data?: unknown; models?: unknown } | null | undefined;
