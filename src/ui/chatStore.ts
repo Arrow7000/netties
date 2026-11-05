@@ -31,7 +31,7 @@ interface Thread {
   entries: Accessor<Entry[]>;
   setEntries: Setter<Entry[]>;
   conversation: Conversation;
-  /** What the model called it, once it has. */
+  /** What the model called it, once it has. Until then it goes by its first line. */
   title?: string;
   /** The reply going on, to stop it and to wait until it has. */
   running?: { stop: AbortController; done: Promise<void> };
@@ -100,10 +100,10 @@ export function createChat(ed: Editor) {
     const here = current().id === data.id;
     const t = here ? current() : live.get(data.id);
     // A new name isn't anything said, so a reply carries on.
-    if ("title" in data) return named(data.id, data.title, t);
+    if ("title" in data) return named(data.id, data.title);
     setChats((l) => ("gone" in data ? l.filter((c) => c.id !== data.id) : listed(l, data.listing)));
     if (!t) return;
-    if ("listing" in data) t.title = data.listing.title;
+    if ("listing" in data) t.title = data.listing.named ? data.listing.title : undefined;
     t.running?.stop.abort();
     setRunning(t, undefined);
     if (!here) return;
@@ -129,32 +129,48 @@ export function createChat(ed: Editor) {
   /** Save a chat, and tell other tabs. The tabs don't wait for the database, since a page on its way out might not see that finish. */
   const persist = (t: Thread, chat: Saved = { entries: t.entries(), conversation: t.conversation }) => {
     if (!chat.entries.length) return;
-    const listing: Listing = { id: t.id, title: t.title ?? titleOf(chat.entries), updated: Date.now() };
+    const listing: Listing = { id: t.id, title: t.title ?? titleOf(chat.entries), named: t.title !== undefined, updated: Date.now() };
     setChats((l) => listed(l, listing));
     store?.write(listing, chat).catch(trouble);
     news.postMessage({ id: t.id, listing, chat } satisfies News);
   };
 
-  const named = (chatId: string, title: string, t?: Thread) => {
+  /** The chat with this id, if this tab has it in hand. */
+  const threadOf = (chatId: string) => (current().id === chatId ? current() : live.get(chatId));
+
+  const named = (chatId: string, title: string) => {
+    const t = threadOf(chatId);
     if (t) t.title = title;
-    setChats((l) => l.map((c) => (c.id === chatId ? { ...c, title } : c)));
+    setChats((l) => l.map((c) => (c.id === chatId ? { ...c, title, named: true } : c)));
   };
 
-  /** Ask for a name for a chat that has just begun. If what was said has changed by the time it comes, it's no longer the right name. */
-  const name = async (t: Thread, text: string) => {
+  /** Ask for a name for a chat. If what was first said has changed by the time it comes, it's no longer the right name. Returns whether the model could be asked. */
+  const name = async (chatId: string, text: string) => {
     const title = await askTitle(text);
-    const first = t.entries().find((e) => e.kind === "user");
-    if (!title || first?.kind !== "user" || first.text !== text) return;
-    named(t.id, title, t);
-    store?.retitle(t.id, title).catch(trouble);
-    news.postMessage({ id: t.id, title } satisfies News);
+    if (!title) return false;
+    const first = threadOf(chatId)?.entries().find((e) => e.kind === "user");
+    if (first?.kind === "user" && first.text !== text) return true;
+    named(chatId, title);
+    store?.retitle(chatId, title).catch(trouble);
+    news.postMessage({ id: chatId, title } satisfies News);
+    return true;
+  };
+
+  /** Name the chats that have no name from the model yet: those from before it gave them, and any it couldn't name at the time. If that fails, the next page load tries again. */
+  const nameTheRest = async (list: Listing[]) => {
+    for (const c of list) {
+      if (c.named) continue;
+      const first = (await store?.read(c.id))?.entries.find((e) => e.kind === "user");
+      if (first?.kind === "user" && !(await name(c.id, first.text))) return;
+    }
   };
 
   /** Put a chat from storage on the screen. A reply that was going, or a document held back, stays off the canvas: it may be showing something else by now. */
   const show = (chatId: string, chat: Saved) => {
     const whole = settle(chat.entries.map(unhold), chat.conversation);
     const t = newThread(chatId, whole.entries, whole.conversation);
-    t.title = chats().find((c) => c.id === chatId)?.title;
+    const listing = chats().find((c) => c.id === chatId);
+    t.title = listing?.named ? listing.title : undefined;
     setCurrent(t);
     remember(chatId);
   };
@@ -176,6 +192,7 @@ export function createChat(ed: Editor) {
       const saved = want ? await store.read(want) : undefined;
       if (want && saved) show(want, saved);
       else fresh();
+      void nameTheRest(list).catch(trouble);
     } catch (e) {
       trouble(e);
     }
@@ -260,7 +277,7 @@ export function createChat(ed: Editor) {
     t.setEntries((es) => [...es.map(unhold), { kind: "user", text, at }, { kind: "turn", turn: newTurn(Date.now()) }]);
     if (first) {
       t.title = undefined;
-      void name(t, text);
+      void name(t.id, text);
     }
     persist(t);
     const ctrl = new AbortController();

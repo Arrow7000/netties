@@ -464,6 +464,94 @@ describe("chats", () => {
       expect(t.chat.chats()[0]!.title).toBe("Adding");
     });
 
+    describe("chats from before the model named them", () => {
+      const chat = (text: string) => ({ entries: [{ kind: "user" as const, text }, { kind: "turn" as const, turn: { tries: [], phase: { kind: "over" as const, end: { kind: "said" as const } }, since: 1 } }], conversation: { messages: [] } });
+      const put = async (id: string, title: string, updated: number, named?: boolean) => (await openChats()).write({ id, title, updated, named }, chat(title + " and the rest of it"));
+
+      it("get named when the page loads, keeping their place in the list", async () => {
+        const b = browser();
+        const said: string[] = [];
+        model((s) => (said.push(s), `About ${s.split(" ")[0]}`));
+        await put("newer", "cats", 2000);
+        await put("older", "dogs", 1000);
+        await put("done", "fish", 500, true);
+        const t = b.open();
+        await ready(t);
+        await vi.waitFor(() => expect(t.chat.chats().map((c) => c.title)).toEqual(["About cats", "About dogs", "fish"]));
+        expect(said).toEqual(["cats and the rest of it", "dogs and the rest of it"]);
+        expect((await (await openChats()).list()).map((c) => [c.id, c.title, c.updated])).toEqual([["newer", "About cats", 2000], ["older", "About dogs", 1000], ["done", "fish", 500]]);
+      });
+
+      it("the chat on the screen keeps its new name as it goes on, and nothing's asked twice", async () => {
+        const b = browser();
+        const said: string[] = [];
+        const calls = model((s) => (said.push(s), "Named"));
+        await put("it", "cats", 2000);
+        const t = b.open();
+        await ready(t);
+        await vi.waitFor(() => expect(t.chat.title()).toBe("Named"));
+        await say(t, calls, "more");
+        expect(t.chat.chats()[0]).toMatchObject({ id: "it", title: "Named", named: true });
+        const again = b.open();
+        await ready(again);
+        await settled();
+        expect(said).toHaveLength(1);
+      });
+
+      it("a reply going on when the name arrives isn't disturbed", async () => {
+        const b = browser();
+        let answer!: (t: string) => void;
+        const calls = model(() => new Promise((r) => (answer = r)));
+        await put("it", "cats", 2000);
+        const t = b.open();
+        await ready(t);
+        await vi.waitFor(() => expect(answer).toBeDefined());
+        void t.send("more");
+        await vi.waitFor(() => expect(calls).toHaveLength(1));
+        answer("Named");
+        await vi.waitFor(() => expect(t.chat.title()).toBe("Named"));
+        expect(calls[0]!.signal?.aborted).toBe(false);
+        expect(t.chat.busy()).toBe(true);
+      });
+
+      it("if naming fails it stops there, keeps their first lines, and tries again next time", async () => {
+        const b = browser();
+        const seen: string[] = [];
+        let up = false;
+        model((s) => {
+          seen.push(s);
+          if (!up) throw new Error("offline");
+          return "Named";
+        });
+        await put("one", "cats", 2000);
+        await put("two", "dogs", 1000);
+        const t = b.open();
+        await ready(t);
+        await settled();
+        expect(seen).toHaveLength(1);
+        expect(t.chat.chats().map((c) => c.title)).toEqual(["cats", "dogs"]);
+        up = true;
+        const next = b.open();
+        await ready(next);
+        await vi.waitFor(() => expect(next.chat.chats().map((c) => c.title)).toEqual(["Named", "Named"]));
+      });
+
+      it("a chat deleted while it's being named stays gone", async () => {
+        const b = browser();
+        let answer!: (t: string) => void;
+        model(() => new Promise((r) => (answer = r)));
+        await put("it", "cats", 2000);
+        const t = b.open();
+        await ready(t);
+        await vi.waitFor(() => expect(answer).toBeDefined());
+        await t.deleteChat("it");
+        answer("Late");
+        await settled();
+        expect(t.chat.chats()).toEqual([]);
+        expect(await (await openChats()).list()).toEqual([]);
+      });
+    });
+
     it("a chat stays by its first line if naming it fails", async () => {
       const b = browser();
       const calls = model();

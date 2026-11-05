@@ -174,8 +174,9 @@ Choices made along the way that you haven't confirmed yet:
        a reply has finished elsewhere yet, beyond the list and the Chat button.
      - Names: the model names a chat from its first message, through
        /api/chat/title, with no thinking (about 1 s and $0.00004 a title). Until
-       then, or if that fails, it goes by its first line. Chats from before this
-       keep their first line.
+       then, or if that fails, it goes by its first line. Any chat without a name
+       from the model gets one when the page loads, in order, stopping at the
+       first failure until the next load.
      - Examples: the prompt lists every example's name and description (a test keeps
        that the same as the app's), and the model asks to see some with a block
        marked `examples`; netties answers through the same loop as its feedback.

@@ -22,6 +22,8 @@ export interface Saved {
 export interface Listing {
   id: string;
   title: string;
+  /** Whether the model gave it that title, rather than it being the first line of what was said. */
+  named?: boolean;
   updated: number;
 }
 
@@ -113,7 +115,7 @@ export async function openChats(): Promise<ChatDb> {
       const listings = tx.objectStore(LISTINGS);
       const there = listings.get(id) as IDBRequest<Listing | undefined>;
       there.onsuccess = () => {
-        if (there.result) listings.put({ ...there.result, title });
+        if (there.result) listings.put({ ...there.result, title, named: true });
       };
       return finished(tx);
     },
