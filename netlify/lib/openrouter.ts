@@ -17,6 +17,8 @@ export interface OpenRouterOptions {
   system: string;
   maxTokens: number;
   messages: Anthropic.MessageParam[];
+  /** For a small job, where thinking would only cost time and money. */
+  noThinking?: boolean;
   fetch?: typeof fetch;
 }
 
@@ -58,7 +60,7 @@ export function callOpenRouter(o: OpenRouterOptions): ModelCall {
           stream: true,
           messages: [{ role: "system", content: o.system }, ...o.messages.map(plain)],
           max_tokens: o.maxTokens,
-          reasoning: { effort: "medium" },
+          reasoning: o.noThinking ? { enabled: false } : { effort: "medium" },
           provider: { sort: "throughput" },
           usage: { include: true },
         }),

@@ -63,11 +63,16 @@ function browser() {
   return { local, open };
 }
 
-/** The model, one call at a time, saying what it's told to. */
-function model() {
+/** The model, one call at a time, saying what it's told to. It names chats only if it's told how. */
+function model(title?: (said: string) => string | Promise<string>) {
   const calls: { body: { messages: { role: string; content: unknown }[] }; signal?: AbortSignal; say(ev: object): void; end(text: string): void }[] = [];
   const enc = new TextEncoder();
-  vi.stubGlobal("fetch", async (_: string, o: { body: string; signal?: AbortSignal }) => {
+  vi.stubGlobal("fetch", async (url: string, o: { body: string; signal?: AbortSignal }) => {
+    if (url.endsWith("/title")) {
+      if (!title) return new Response("Not found", { status: 404 });
+      const named = await title((JSON.parse(o.body) as { messages: { content: string }[] }).messages[0]!.content);
+      return new Response(JSON.stringify({ type: "text", text: named }) + "\n" + JSON.stringify({ type: "done", content: [] }) + "\n");
+    }
     let c!: ReadableStreamDefaultController<Uint8Array>;
     const body = new ReadableStream<Uint8Array>({ start: (x) => void (c = x) });
     o.signal?.addEventListener("abort", () => c.error(new DOMException("aborted", "AbortError")));
@@ -205,31 +210,163 @@ describe("chats", () => {
       await going;
     });
 
-    it("moving away stops a reply and keeps how far it got, and Continue can pick it up", async () => {
+    it("a reply carries on while its chat isn't on the screen, and is still there going on when you come back", async () => {
       const b = browser();
       const calls = model();
       const t = b.open();
       await ready(t);
       void t.send("long one");
       await vi.waitFor(() => expect(calls).toHaveLength(1));
-      calls[0]!.say({ type: "thinking", text: "Going along." });
+      calls[0]!.say({ type: "thinking", text: "Going along. " });
       await settled();
       const first = t.chat.id();
+
       await t.newChat();
-      expect(calls[0]!.signal?.aborted).toBe(true);
+      expect(calls[0]!.signal?.aborted).toBe(false);
       expect(t.chat.busy()).toBe(false);
+      expect(t.chat.replying().has(first)).toBe(true);
       expect(t.chat.entries()).toEqual([]);
 
+      calls[0]!.say({ type: "thinking", text: "Still going." });
       await settled();
-      const saved = await reading(first);
-      expect(saved?.entries.at(-1)).toMatchObject({ turn: { tries: [{ thinking: "Going along." }], phase: { end: { kind: "stopped", by: "stop" } } } });
+      await t.openChat(first);
+      expect(t.chat.busy()).toBe(true);
+      expect(t.chat.entries()[1]).toMatchObject({ turn: { tries: [{ thinking: "Going along. Still going." }] } });
+
+      calls[0]!.say({ type: "thinking", text: " And on." });
+      await settled();
+      expect(t.chat.entries()[1]).toMatchObject({ turn: { tries: [{ thinking: "Going along. Still going. And on." }] } });
+      t.chat.stop();
+      await vi.waitFor(() => expect(t.chat.busy()).toBe(false));
+      expect(t.chat.entries()[1]).toMatchObject({ turn: { phase: { end: { kind: "stopped", by: "stop" } } } });
+    });
+
+    it("a reply that finishes elsewhere waits for its Load button, and then says it's on the canvas", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      t.chat.setOpen(true);
+      const before = t.canvas();
+      const going = t.send("make it");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const first = t.chat.id();
+      await t.newChat();
+      calls[0]!.end("Here.\n\n```inet\n" + EXAMPLE + "\n```");
+      await going;
+      await settled();
+      expect(t.canvas()).toBe(before);
+      expect(t.chat.replying().size).toBe(0);
+      expect((await reading(first))?.entries.at(-1)).toMatchObject({ turn: { phase: { end: { kind: "applied" } } } });
 
       await t.openChat(first);
-      const going = t.send("Carry on.");
-      await vi.waitFor(() => expect(calls).toHaveLength(2));
-      expect(JSON.stringify(calls[1]!.body.messages)).toContain("Going along.");
-      calls[1]!.end("Done.");
+      expect(t.canvas()).toBe(before);
+      const end = () => {
+        const reply = t.chat.entries()[1];
+        if (reply?.kind !== "turn" || reply.turn.phase.kind !== "over") throw new Error("expected a finished reply");
+        return reply.turn.phase.end;
+      };
+      expect(t.chat.onCanvas(end())).toBe(false);
+      const code = end().kind === "applied" ? (end() as { code: string }).code : "";
+      t.chat.loadDocument(code);
+      expect(t.canvas()).not.toBe(before);
+      expect(t.chat.onCanvas(end())).toBe(true);
+    });
+
+    it("a reply that finishes after you've come back goes on the canvas as usual", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      t.chat.setOpen(true);
+      const before = t.canvas();
+      const going = t.send("make it");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const first = t.chat.id();
+      await t.newChat();
+      await t.openChat(first);
+      calls[0]!.end("Here.\n\n```inet\n" + EXAMPLE + "\n```");
       await going;
+      expect(t.canvas()).not.toBe(before);
+    });
+
+    it("replies can go on in several chats at once, each to its own", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      const one = t.send("one");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const first = t.chat.id();
+      await t.newChat();
+      const two = t.send("two");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      const second = t.chat.id();
+      expect(t.chat.replying().size).toBe(2);
+      calls[1]!.end("Reply two.");
+      calls[0]!.end("Reply one.");
+      await Promise.all([one, two]);
+      await settled();
+      expect(t.chat.replying().size).toBe(0);
+      expect(JSON.stringify((await reading(first))?.conversation)).toContain("Reply one.");
+      expect(JSON.stringify((await reading(first))?.conversation)).not.toContain("Reply two.");
+      expect(JSON.stringify((await reading(second))?.conversation)).toContain("Reply two.");
+    });
+
+    it("Stop only stops the chat on the screen", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      void t.send("one");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      await t.newChat();
+      void t.send("two");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      t.chat.stop();
+      await settled();
+      expect(calls[1]!.signal?.aborted).toBe(true);
+      expect(calls[0]!.signal?.aborted).toBe(false);
+    });
+
+    it("deleting a chat from the list stops a reply going on in it, and it doesn't come back", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      void t.send("doomed");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const doomed = t.chat.id();
+      await t.newChat();
+      await say(t, calls, "safe");
+      const safe = t.chat.id();
+      await t.deleteChat(doomed);
+      await settled();
+      expect(calls[0]!.signal?.aborted).toBe(true);
+      expect(t.chat.replying().size).toBe(0);
+      expect(t.chat.id()).toBe(safe);
+      expect(t.chat.chats().map((c) => c.title)).toEqual(["safe"]);
+      expect(await reading(doomed)).toBeUndefined();
+    });
+
+    it("leaving the page saves every reply that was going as cut off, on the screen or not", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      void t.send("one");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const first = t.chat.id();
+      calls[0]!.say({ type: "thinking", text: "Thought one." });
+      await settled();
+      await t.newChat();
+      void t.send("two");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      const second = t.chat.id();
+      t.leave();
+      await settled();
+      for (const id of [first, second]) expect((await reading(id))?.entries.at(-1)).toMatchObject({ turn: { phase: { end: { kind: "stopped", by: "reload" } } } });
+      expect(JSON.stringify((await reading(first))?.conversation)).toContain("Thought one.");
     });
 
     it("a reply held back for an open panel doesn't reach the canvas after moving to another chat", async () => {
@@ -292,6 +429,110 @@ describe("chats", () => {
       expect(t.chat.entries()).toEqual([]);
       expect(t.chat.chats()).toEqual([]);
       expect(await reading(doomed)).toBeUndefined();
+    });
+  });
+
+  describe("names", () => {
+    it("a chat goes by its first line until the model has named it, then by that, through a reload", async () => {
+      const b = browser();
+      let answer!: (t: string) => void;
+      const calls = model(() => new Promise((r) => (answer = r)));
+      const t = b.open();
+      await ready(t);
+      await say(t, calls, "can you make me an adder\nplease");
+      expect(t.chat.title()).toBe("can you make me an adder");
+      const updated = t.chat.chats()[0]!.updated;
+      now += 1000;
+      answer("\"Adding two numbers.\"");
+      await vi.waitFor(() => expect(t.chat.title()).toBe("Adding two numbers"));
+      await settled();
+      expect(t.chat.chats()[0]).toMatchObject({ title: "Adding two numbers", updated });
+      const reloaded = b.open(t.session);
+      await ready(reloaded);
+      expect(reloaded.chat.title()).toBe("Adding two numbers");
+    });
+
+    it("the name stays as the chat goes on, and is asked for only once", async () => {
+      const b = browser();
+      const said: string[] = [];
+      const calls = model((s) => (said.push(s), "Adding"));
+      const t = b.open();
+      await ready(t);
+      await say(t, calls, "one");
+      await say(t, calls, "two");
+      expect(said).toEqual(["one"]);
+      expect(t.chat.chats()[0]!.title).toBe("Adding");
+    });
+
+    it("a chat stays by its first line if naming it fails", async () => {
+      const b = browser();
+      const calls = model();
+      const t = b.open();
+      await ready(t);
+      await say(t, calls, "plain");
+      expect(t.chat.title()).toBe("plain");
+    });
+
+    it("changing the first message names the chat again, and a name for the old one is dropped", async () => {
+      const b = browser();
+      const answers: ((t: string) => void)[] = [];
+      const calls = model(() => new Promise((r) => answers.push(r)));
+      const t = b.open();
+      await ready(t);
+      await say(t, calls, "about cats");
+      await vi.waitFor(() => expect(answers).toHaveLength(1));
+      const going = t.chat.edit(0, "about dogs");
+      await vi.waitFor(() => expect(answers).toHaveLength(2));
+      answers[0]!("Cats");
+      await settled();
+      expect(t.chat.title()).toBe("about dogs");
+      answers[1]!("Dogs");
+      await vi.waitFor(() => expect(t.chat.title()).toBe("Dogs"));
+      calls.at(-1)!.end("Woof.");
+      await going;
+      await settled();
+      expect(t.chat.title()).toBe("Dogs");
+    });
+
+    it("a name reaches other tabs without stopping the reply going on there, and sticks when they save", async () => {
+      const b = browser();
+      let answer!: (t: string) => void;
+      const calls = model(() => new Promise((r) => (answer = r)));
+      const a = b.open();
+      await ready(a);
+      const first = a.send("first");
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      const other = b.open();
+      await ready(other);
+      await vi.waitFor(() => expect(answer).toBeDefined());
+      // The tab that asked goes elsewhere, and the name arrives while the other tab has a reply going.
+      calls[0]!.end("Hi.");
+      await first;
+      await settled();
+      const second = other.send("second");
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      answer("The name");
+      await vi.waitFor(() => expect(other.chat.title()).toBe("The name"));
+      expect(calls[1]!.signal?.aborted).toBe(false);
+      calls[1]!.end("Hi again.");
+      await second;
+      await settled();
+      expect((await (await openChats()).list())[0]!.title).toBe("The name");
+    });
+
+    it("a name that comes after the chat is deleted doesn't bring it back", async () => {
+      const b = browser();
+      let answer!: (t: string) => void;
+      const calls = model(() => new Promise((r) => (answer = r)));
+      const t = b.open();
+      await ready(t);
+      await say(t, calls, "doomed");
+      const doomed = t.chat.id();
+      await t.deleteChat(doomed);
+      answer("Late");
+      await settled();
+      expect(t.chat.chats()).toEqual([]);
+      expect(await (await openChats()).list()).toEqual([]);
     });
   });
 

@@ -508,7 +508,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
         <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
         <Show when={chat}>
           {(c) => (
-            <button class="btn chat-toggle" classList={{ busy: c().busy() }} aria-pressed={c().open()} onClick={() => setChatOpen(!c().open())} title={c().busy() ? "Chat: a reply is on its way" : "Chat"}>
+            <button class="btn chat-toggle" classList={{ busy: c().replying().size > 0 }} aria-pressed={c().open()} onClick={() => setChatOpen(!c().open())} title={c().replying().size ? "Chat: a reply is on its way" : "Chat"}>
               <I.Chat />
               <Show when={!compact()}>Chat</Show>
             </button>

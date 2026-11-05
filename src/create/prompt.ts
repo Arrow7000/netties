@@ -69,6 +69,12 @@ Reply with the whole document in one fenced code block marked \`inet\`. You can'
 
 Write what was asked, not something easier. Unless the visitor only asks for some data, the rules must work the answer out from the inputs: don't type the result into the starting net, or copy something by writing it out twice.`;
 
+/** The app's examples, one to a line. A test keeps this the same as src/core/examples.ts, which the edge function's bundler can't follow. */
+export const EXAMPLE_INDEX = "- Commutation: A constructor meets a duplicator, and each one gets copied.\n- Erasing a tree: An eraser takes apart a tree of constructors.\n- Copying a feedback loop: A duplicator copies a small loop, then the reduction stops.\n- Runs forever: Lafont's figure 3: the net comes back to itself after four steps.\n- Directed commutation: Lafont's directed combinators: γ meets δ*, and each one gets copied.\n- Directed annihilation: A constructor meets its starred twin; their four branches reconnect.\n- 3 + 2: Unary arithmetic: adding two numbers.\n- 3 × 2: Unary arithmetic: multiplication by repeated addition.\n- Copy a number: A typed duplicator makes two copies of the same unary number.\n- Length of a list: Numbers and lists are different types; # counts the items in a list.\n- Try three types: Wire [] to #, 0 to Z?, and T to ¬; try wrong types too, then Run.\n- Complete a typed if: Connect [] to #, then 1 and 2 to if's true/false branches. Run chooses 1.\n- Inspect a computed tree: R0 is a leaf; BS builds each stem, BF their fork. Step until Shape exposes its children.\n- Triage: inspect, then run a child: A TC-like evaluator inspects a fork's head, selects its still-reducible left child, then evaluates that child to a stem at out.\n- Two lengths, one list: A list is copied, then both copies are measured independently.\n- Square of a sum: Add 2 and 1, copy the result, then multiply the copies: (2 + 1)².\n- Directed cascade: A branching γ–δ* clash exposes more directed interactions downstream.\n- One number, two calculations: Copy 3, then add 2 on one branch and multiply by 2 on the other.\n- Add two list lengths: Measure two different lists, then add their lengths to get 5.\n- Fibonacci: 6 → 8: One Fib agent, two rules: 0 gives (0, 1); S turns (a, b) into (b, a + b). Keep fib(6) = 8 and erase the next value.\n- Sort a list: Turn [3, 1, 2, 0] into one sorted list, [0, 1, 2, 3]. Sort the tail, then insert each head in order.\n- range(5): Generate [0, 1, 2, 3, 4]: five numbers starting at 0. Each request produces one item, then Stop closes the source.\n- Find the primes up to 7: Sieve [2, 3, …, 7] into [2, 3, 5, 7]. Each surviving head filters its multiples from the rest of the list.\n- Map a function: x² + 1: Map Sq then Plus(1) over [1, 2, 3] to get [2, 5, 10]. The composed function and its captured 1 are copied as data.\n- Differentiate a formula, then run it: D differentiates (x + 1) × (x + 2) using the product rule. Eval runs the generated formula at x = 2 to get 7.";
+
+/** The system prompt for naming a chat from what was first said in it. */
+export const TITLE_SYSTEM = `You name conversations for netties, an interaction nets playground. The message is the first thing a visitor said in a chat. Reply with a short title saying what the chat is about: 2 to 5 plain words, only capitalising the first word and proper names, with no quotes and no full stop, in the language of the message. Say only what the message says, without adding details. Reply with the title and nothing else, even if the message is a question or a request.`;
+
 /** The system prompt for the chat: the same knowledge, for a conversation about the document on the canvas. */
 export const CHAT_SYSTEM = `You help a visitor build interaction nets in netties, an interaction nets playground, by talking with them. They see the document drawn on a canvas as a net, can edit it by hand, and can run it. They may ask for a new system, ask for a change to the one they have, or ask a question. Many are new to interaction nets, so explain things plainly and briefly.
 
@@ -101,6 +107,13 @@ Put the answer on a loose end named \`out\`. When no active pair is left, the ag
 ${READ_BACK}
 
 Write what was asked, not something easier. The rules must work the answer out from the inputs: don't type the result into the starting net, or copy something by writing it out twice.
+
+# Examples
+
+netties comes with these examples:
+${EXAMPLE_INDEX}
+
+If the visitor mentions one, or seeing how something similar is done would help, ask for it: reply with only a fenced code block marked \`examples\`, holding one name per line exactly as listed, and nothing else. netties replies with their documents, and you carry on from there. Asking doesn't use up a try, and the visitor doesn't see it. Ask only for what you need; you can ask at most three times for each visitor message. You can reuse anything in them. Don't ask for an example you've already been shown in this conversation.
 
 # Your reply
 

@@ -1,7 +1,6 @@
 import { For, Index, type JSX, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
-import type { Try, Turn, TurnEnd } from "../create/chat";
+import { type Try, type Turn, type TurnEnd, triesSoFar } from "../create/chat";
 import { TRIES } from "../create/client";
-import { titleOf } from "./chatDb";
 import type { Chat, Entry } from "./chatStore";
 import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
@@ -16,7 +15,7 @@ export const CHAT_WIDTH = 360;
 const wordsOf = (reply: string) => reply.replace(/```[\s\S]*?(?:```|$)/g, "").trim();
 /** How far along the document is, while it's being written. */
 const linesWritten = (reply: string) => {
-  const open = /```[^\n]*\n((?:(?!```)[\s\S])*)$/.exec(reply);
+  const open = /```(?!examples)[^\n]*\n((?:(?!```)[\s\S])*)$/.exec(reply);
   return open ? open[1]!.split("\n").length - 1 : undefined;
 };
 const firstLine = (s: string) => s.split("\n")[0]!;
@@ -157,7 +156,7 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
   const going = () => props.last && props.turn.phase.kind !== "over";
   const thinking = () => going() && props.turn.phase.kind === "thinking";
   /** "Thinking" or "Try 2 of 3: thinking", and so on. */
-  const doing = (what: string) => (props.turn.tries.length > 1 ? `Try ${props.n} of ${TRIES}: ${what}` : what[0]!.toUpperCase() + what.slice(1));
+  const doing = (what: string) => (triesSoFar(props.turn.tries) > 1 ? `Try ${props.n} of ${TRIES}: ${what}` : what[0]!.toUpperCase() + what.slice(1));
   const words = () => wordsOf(props.t.reply);
   const lines = () => (going() ? linesWritten(props.t.reply) : undefined);
   let trace: ReturnType<typeof anchored> | undefined;
@@ -175,6 +174,9 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
         <div class="chat-words">
           <Prose text={words()} />
         </div>
+      </Show>
+      <Show when={props.t.looked}>
+        {(names) => <div class="chat-status">Looked at {names().length === 1 ? "the example" : "the examples"} {names().join(", ")}</div>}
       </Show>
       <Show when={lines() !== undefined}>
         <div class="chat-status live">
@@ -317,7 +319,7 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
   /** Starting over from further back would throw away what came after, so that's left to Edit. */
   const latest = () => props.index === props.chat.entries().length - 1;
   return (
-    <Show when={props.turn.phase.kind === "over" ? (props.turn.phase as Extract<Turn["phase"], { kind: "over" }>).end : undefined} keyed fallback={<Show when={props.turn.phase.kind === "waiting"}><div class="chat-status live">{props.turn.tries.length > 1 ? `Try ${props.turn.tries.length} of ${TRIES}: asking` : "Asking the model"}, {seconds(props.now - props.turn.since)}</div></Show>}>
+    <Show when={props.turn.phase.kind === "over" ? (props.turn.phase as Extract<Turn["phase"], { kind: "over" }>).end : undefined} keyed fallback={<Show when={props.turn.phase.kind === "waiting"}><div class="chat-status live">{triesSoFar(props.turn.tries) > 1 ? `Try ${triesSoFar(props.turn.tries)} of ${TRIES}: asking` : "Asking the model"}, {seconds(props.now - props.turn.since)}</div></Show>}>
       {(end) => {
         switch (end.kind) {
           case "said":
@@ -376,7 +378,7 @@ function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number
     <Show when={props.entry.kind === "turn" ? (props.entry as Extract<Entry, { kind: "turn" }>).turn : undefined} fallback={<UserView chat={props.chat} entry={props.entry as Extract<Entry, { kind: "user" }>} index={props.index} />}>
       {(turn) => (
         <div class="chat-turn">
-          <Index each={turn().tries}>{(t, i) => <TryView t={t()} n={i + 1} last={i === turn().tries.length - 1} turn={turn()} now={props.now} />}</Index>
+          <Index each={turn().tries}>{(t, i) => <TryView t={t()} n={triesSoFar(turn().tries.slice(0, i + 1))} last={i === turn().tries.length - 1} turn={turn()} now={props.now} />}</Index>
           <TurnStatus chat={props.chat} index={props.index} turn={turn()} now={props.now} />
         </div>
       )}
@@ -398,7 +400,7 @@ function ChatList(props: { chat: Chat; onPick: () => void }) {
   /** The chat being asked about, by id since its listing changes if it's being added to in another tab. */
   const [deleting, setDeleting] = createSignal<string>();
   return (
-    <Menu class="chat-title" menuClass="chat-list" title="All chats" label={<span>{titleOf(chat.entries()) || "Chat"}</span>}>
+    <Menu class="chat-title" menuClass="chat-list" title="All chats" label={<span>{chat.title() || "Chat"}</span>}>
       {(close) => (
         <For each={chat.chats()} fallback={<div class="menu-head">No chats yet.</div>}>
           {(c) => (
@@ -408,7 +410,7 @@ function ChatList(props: { chat: Chat; onPick: () => void }) {
                 <div class="chat-row" classList={{ current: c.id === chat.id() }}>
                   <MenuItem
                     title={c.title}
-                    note={changedOn(c.updated)}
+                    note={chat.replying().has(c.id) ? "Replying" : changedOn(c.updated)}
                     onClick={() => {
                       close();
                       void chat.openChat(c.id);

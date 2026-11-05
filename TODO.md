@@ -165,9 +165,26 @@ Choices made along the way that you haven't confirmed yet:
        IndexedDB (`src/ui/chatDb.ts`), and the one chat from localStorage moves
        there by itself. Going to one leaves the canvas alone (you, 2026-11-04: "me
        navigating around past chats shouldn't mess with what i have in the
-       canvas"); a new reply still goes on the canvas straight away. Moving away
-       during a reply stops it, and Continue picks it up. Open question: whether
-       it should carry on in the background instead.
+       canvas"); a new reply still goes on the canvas straight away.
+     - Replies carry on in the background (you, 2026-11-05: "it shouldn't stop. it
+       should still stream in in the background. unless the user trashes the
+       chat."). One that finishes while its chat isn't on the screen waits for its
+       Load button rather than changing the canvas. They live in the tab, so
+       reloading or closing it cuts them all off, each with Continue. Nothing says
+       a reply has finished elsewhere yet, beyond the list and the Chat button.
+     - Names: the model names a chat from its first message, through
+       /api/chat/title, with no thinking (about 1 s and $0.00004 a title). Until
+       then, or if that fails, it goes by its first line. Chats from before this
+       keep their first line.
+     - Examples: the prompt lists every example's name and description (a test keeps
+       that the same as the app's), and the model asks to see some with a block
+       marked `examples`; netties answers through the same loop as its feedback.
+       That's rather than API tool calls, since DeepSeek needs reasoning sent back
+       with those, and this works on any model. Up to 3 looks a message, free of
+       tries. On "combine the range(5) and prime sieve examples", after fixing how
+       requests are recognised: 3 of 3 looked at the right two, 2 got working nets
+       ([2, 3, 5, 7] from a count of candidates, and a stream giving the first 5
+       primes), 1 hit the token limit.
      - Tabs: each is on a chat of its own choosing, and stays on it through a
        reload; a new tab starts on the chat last moved to. Tabs on the same chat
        follow each other (a reply going elsewhere shows in lumps every 2 s, with no

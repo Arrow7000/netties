@@ -1,4 +1,4 @@
-import { CHAT_SYSTEM } from "../../src/create/prompt.ts";
+import { CHAT_SYSTEM, TITLE_SYSTEM } from "../../src/create/prompt.ts";
 import { CHAT_LIMITS, type Counters, type Deps, handleCreate } from "./create.ts";
 import { callOpenRouter } from "./openrouter.ts";
 
@@ -16,9 +16,17 @@ export interface ChatServer {
   visitor: string;
   /** In place of the real model, for trying the page out without paying. */
   callModel?: Deps["callModel"];
+  callTitle?: Deps["callModel"];
 }
 
-/** POST /api/chat: a conversation with the model, on the same footing as /api/create but with its own limits. */
+/** A title is a few words, and takes no thinking. */
+const TITLE_MAX_TOKENS = 40;
+
+/**
+ * POST /api/chat: a conversation with the model, on the same footing as
+ * /api/create but with its own limits. POST /api/chat/title names a chat, on the
+ * same footing again, so it's counted in the same limits.
+ */
 export function handleChat(req: Request, s: ChatServer): Promise<Response> | Response {
   if (!s.model) return new Response("Not found", { status: 404 });
   const { model, apiKey } = s;
@@ -27,6 +35,8 @@ export function handleChat(req: Request, s: ChatServer): Promise<Response> | Res
     visitor: s.visitor,
     now: new Date(),
     limits: CHAT_LIMITS,
-    callModel: s.callModel ?? ((messages) => callOpenRouter({ apiKey: apiKey ?? "", model, system: CHAT_SYSTEM, maxTokens: CHAT_MAX_TOKENS, messages })),
+    callModel: new URL(req.url).pathname.endsWith("/title")
+      ? (s.callTitle ?? ((messages) => callOpenRouter({ apiKey: apiKey ?? "", model, system: TITLE_SYSTEM, maxTokens: TITLE_MAX_TOKENS, noThinking: true, messages })))
+      : (s.callModel ?? ((messages) => callOpenRouter({ apiKey: apiKey ?? "", model, system: CHAT_SYSTEM, maxTokens: CHAT_MAX_TOKENS, messages }))),
   });
 }

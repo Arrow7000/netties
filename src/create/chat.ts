@@ -1,5 +1,6 @@
 import { checkDocument, extractDocument } from "./check";
 import { type Block, type Message, TRIES, lines } from "./client";
+import { examplesReply, namesAskedFor } from "./exampleDocs";
 
 /**
  * One turn of the chat: send what the visitor said to /api/chat, check any
@@ -31,6 +32,8 @@ export interface Try {
   /** The problem doesn't rule the document out: the model was asked if it's meant to be like that. */
   soft?: boolean;
   code?: string;
+  /** The examples it asked to see. A call that's only that isn't a try at anything. */
+  looked?: string[];
 }
 
 /** What ended a reply early. */
@@ -66,6 +69,7 @@ export type TurnMsg =
   | { kind: "thinking"; text: string; at: number }
   | { kind: "writing"; text: string }
   | { kind: "checked"; code: string; problem?: string; soft?: boolean }
+  | { kind: "looked"; names: string[] }
   | { kind: "over"; end: TurnEnd; at: number };
 
 /** Where a message was sent from, to go back there if it's edited. */
@@ -119,6 +123,9 @@ export function cutShort(why: string, thinking: string, text: string): string {
   return parts.join("\n\n");
 }
 
+/** Which try this is, not counting calls that only asked to see examples. */
+export const triesSoFar = (tries: Try[]) => tries.filter((t) => !t.looked).length;
+
 export const newTurn = (since: number): Turn => ({ tries: [], phase: { kind: "waiting" }, since });
 
 /** How a turn moves along. */
@@ -139,6 +146,8 @@ export function updateTurn(t: Turn, msg: TurnMsg): Turn {
       return { ...last((x) => ({ ...x, reply: x.reply + msg.text })), phase: { kind: "writing" } };
     case "checked":
       return last((x) => ({ ...x, code: msg.code, problem: msg.problem, soft: msg.soft }));
+    case "looked":
+      return last((x) => ({ ...x, looked: msg.names }));
     case "over":
       return { ...t, phase: { kind: "over", end: msg.end }, took: msg.at - t.since };
   }
@@ -164,6 +173,32 @@ export interface TurnOptions {
 
 /** However it ended, what had come in so far. */
 type Asked = { thinking: string; text: string } & ({ kind: "reply"; content: Block[] } | { kind: "failed"; code: string; message: string } | { kind: "stopped" });
+
+/** How many times a model can ask to see examples for each visitor message. */
+const LOOKS = 3;
+
+/** A title for a chat, from what was first said in it. If it doesn't come, nothing's lost: the chat goes by its first line. */
+export async function askTitle(text: string, opts: Pick<TurnOptions, "fetch"> = {}): Promise<string | undefined> {
+  try {
+    const res = await (opts.fetch ?? fetch)("/api/chat/title", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: text.slice(0, 2000) }] }),
+    });
+    if (!res.ok || !res.body) return undefined;
+    let title = "";
+    for await (const line of lines(res.body)) {
+      const ev = JSON.parse(line) as { type: string; text?: string };
+      if (ev.type === "text") title += ev.text;
+      else if (ev.type === "error") return undefined;
+    }
+    return cleanTitle(title);
+  } catch {
+    return undefined;
+  }
+}
+
+export const cleanTitle = (raw: string) => raw.trim().split("\n")[0]!.replace(/^["'*#\s]+|["'*.\s]+$/g, "").slice(0, 80) || undefined;
 
 /** One call to the model. */
 async function ask(messages: Message[], opts: TurnOptions): Promise<Asked> {
@@ -225,6 +260,7 @@ export async function runTurn(c: Conversation, request: string, doc: string, opt
   let kept: { code: string; summary: string; note: string } | undefined;
   let lastProblem = "";
   let lastCode: string | undefined;
+  let looks = 0;
 
   for (let attempt = 1; attempt <= TRIES; attempt++) {
     opts.onMessage?.({ kind: "try" });
@@ -239,6 +275,16 @@ export async function runTurn(c: Conversation, request: string, doc: string, opt
       return over({ kind: "stopped", by });
     }
     messages.push({ role: "assistant", content: asked.content });
+
+    const names = namesAskedFor(asked.text);
+    if (names) {
+      opts.onMessage?.({ kind: "looked", names });
+      // Once it has had its looks, going on asking costs it a try, so this can't go on forever.
+      if (looks++ < LOOKS) attempt--;
+      else lastProblem = "It kept asking to see examples instead of replying.";
+      messages.push({ role: "user", content: looks <= LOOKS ? examplesReply(names) : "netties says: that's enough examples for this message. Reply now." });
+      continue;
+    }
 
     const code = extractDocument(asked.text);
     if (code === undefined) {
@@ -257,6 +303,7 @@ export async function runTurn(c: Conversation, request: string, doc: string, opt
     if (attempt < TRIES) messages.push({ role: "user", content: check.kind === "concern" ? orSaySo(check.feedback) : fixIt(check.feedback) });
   }
   // The model never got to hear about its last try.
+  if (messages.at(-1)?.role === "user" && messages.length > c.messages.length + 1) messages.pop();
   if (kept) return over({ kind: "ready", ...kept }, lastProblem);
   return over({ kind: "gave-up", feedback: lastProblem, code: lastCode }, lastProblem);
 }

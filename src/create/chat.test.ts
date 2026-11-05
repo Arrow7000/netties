@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type Deps, CHAT_LIMITS, handleCreate } from "../../netlify/lib/create";
-import { type Conversation, type Entry, type TurnMsg, newConversation, newTurn, runTurn, settle, updateTurn, userMessage } from "./chat";
+import { type Conversation, type Entry, type TurnMsg, askTitle, cleanTitle, newConversation, newTurn, runTurn, settle, triesSoFar, updateTurn, userMessage } from "./chat";
 import { EXAMPLE } from "./prompt";
 
 const doc = (s: string) => "```inet\n" + s + "\n```";
@@ -28,7 +28,54 @@ function proxy(replies: string[]) {
   return { f, seen };
 }
 
+describe("naming a chat", () => {
+  it("tidies what the model sends back", () => {
+    expect(cleanTitle('"Adding two numbers."\nAnd more')).toBe("Adding two numbers");
+    expect(cleanTitle("**Sorting**")).toBe("Sorting");
+    expect(cleanTitle("  \n")).toBeUndefined();
+    expect(cleanTitle("x".repeat(200))).toHaveLength(80);
+  });
+
+  it("comes to nothing, quietly, if it fails", async () => {
+    expect(await askTitle("hi", { fetch: (async () => new Response("no", { status: 404 })) as never })).toBeUndefined();
+    expect(await askTitle("hi", { fetch: (async () => { throw new Error("offline"); }) as never })).toBeUndefined();
+    expect(await askTitle("hi", { fetch: (async () => new Response(JSON.stringify({ type: "error", code: "failed", message: "x" }) + "\n")) as never })).toBeUndefined();
+  });
+});
+
 describe("a chat turn", () => {
+  describe("looking at examples", () => {
+    const ask = "```examples\nrange(5)\n```";
+
+    it("gets the documents back and carries on, without using up a try", async () => {
+      const { f, seen } = proxy([ask, doc(BAD), doc(BAD), `Doubles 2.\n\n${doc(EXAMPLE)}`]);
+      const msgs: TurnMsg[] = [];
+      const { end, conversation } = await runTurn(newConversation(), "Double 2.", "", { fetch: f, onMessage: (m) => msgs.push(m) });
+      expect(end.kind).toBe("ready");
+      expect(seen).toHaveLength(4);
+      expect(seen[1]!.at(-1)!.content).toContain("# range(5)");
+      expect(msgs).toContainEqual({ kind: "looked", names: ["range(5)"] });
+      expect(conversation.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant"]);
+    });
+
+    it("can't go on asking for ever: after three looks, asking costs tries, and the conversation stays fit to go on", async () => {
+      const { f, seen } = proxy([ask]);
+      const first = await runTurn(newConversation(), "Double 2.", "", { fetch: f });
+      expect(first.end.kind).toBe("gave-up");
+      expect(seen).toHaveLength(3 + 3);
+      expect(seen.at(-1)!.at(-1)!.content).toContain("that's enough examples");
+      expect(first.conversation.messages.at(-1)!.role).toBe("assistant");
+      const next = proxy([`Fine.\n\n${doc(EXAMPLE)}`]);
+      const second = await runTurn(first.conversation, "Well?", "", { fetch: next.f });
+      expect(second.end.kind).toBe("ready");
+    });
+
+    it("looks don't count as tries when it says how far along it is", () => {
+      const t = [{ thinking: "", reply: "", looked: ["range(5)"] }, { thinking: "", reply: "" }];
+      expect(triesSoFar(t)).toBe(1);
+    });
+  });
+
   it("hands over a document that checks out, saying how it ran", async () => {
     const { f } = proxy([`Doubles 2.\n\n${doc(EXAMPLE)}`]);
     const { end } = await runTurn(newConversation(), "Double 2.", "", { fetch: f });

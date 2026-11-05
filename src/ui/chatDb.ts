@@ -30,10 +30,12 @@ export interface ChatDb {
   list(): Promise<Listing[]>;
   read(id: string): Promise<Saved | undefined>;
   write(listing: Listing, chat: Saved): Promise<void>;
+  /** Change what a chat is called, if it's still there. It doesn't count as the chat changing. */
+  retitle(id: string, title: string): Promise<void>;
   remove(id: string): Promise<void>;
 }
 
-/** What a chat is called: the first line of what was first said. */
+/** What a chat is called until the model has named it, or if it can't: the first line of what was first said. */
 export function titleOf(entries: Entry[]): string {
   const first = entries.find((e) => e.kind === "user");
   return first?.kind === "user" ? first.text.trim().split("\n")[0]!.slice(0, 100) : "";
@@ -104,6 +106,15 @@ export async function openChats(): Promise<ChatDb> {
       tx.objectStore(CHATS).put(chat, listing.id);
       // Without this, a page on its way out might not get as far as committing.
       tx.commit();
+      return finished(tx);
+    },
+    async retitle(id, title) {
+      const tx = db.transaction(LISTINGS, "readwrite");
+      const listings = tx.objectStore(LISTINGS);
+      const there = listings.get(id) as IDBRequest<Listing | undefined>;
+      there.onsuccess = () => {
+        if (there.result) listings.put({ ...there.result, title });
+      };
       return finished(tx);
     },
     async remove(id) {

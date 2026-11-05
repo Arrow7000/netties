@@ -17,13 +17,14 @@ export function chatDev(env: Record<string, string | undefined>): Plugin {
   const serve: Connect.NextHandleFunction = async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
-    const request = new Request("http://localhost/api/chat", { method: req.method, body: req.method === "POST" ? Buffer.concat(chunks) : undefined });
+    const request = new Request(`http://localhost/api/chat${req.url === "/" ? "" : (req.url ?? "")}`, { method: req.method, body: req.method === "POST" ? Buffer.concat(chunks) : undefined });
     const reply = await handleChat(request, {
       model: env.CHAT_MODEL,
       apiKey: env.OPENROUTER_API_KEY,
       counters,
       visitor: "local",
       callModel: env.CHAT_MODEL === "fake" ? fakeModel : undefined,
+      callTitle: env.CHAT_MODEL === "fake" ? fakeTitle : undefined,
     });
     res.statusCode = reply.status;
     reply.headers.forEach((v, k) => res.setHeader(k, v));
@@ -56,11 +57,20 @@ const sleep = (ms: number, signal: AbortSignal) =>
 
 const inet = (doc: string) => "```inet\n" + doc + "\n```";
 
+/** A pretend title: the first few words of what was said. */
+const fakeTitle: Deps["callModel"] = (messages): ModelCall => {
+  const title = (messages[0]!.content as string).split(/\s+/).slice(0, 4).join(" ");
+  async function* text() {
+    yield title;
+  }
+  return { text: text(), final: Promise.resolve({ content: [{ type: "text", text: title, citations: null }] as never, stop: "stop", usage: { input_tokens: 0, output_tokens: 0 }, micros: 0 }), abort: () => {} };
+};
+
 /**
  * A pretend model. It reads the visitor's last message for a keyword: "bad"
  * gets a document that doesn't parse, then a good one; "hopeless" never gets
  * there; "stuck" gets a net with no rule for its pair; "question" gets words
- * only; "slow" thinks for a long time. Anything else gets the doubling example.
+ * only; "slow" thinks for a long time; "browse" asks to see an example first. Anything else gets the doubling example.
  */
 const fakeModel: Deps["callModel"] = (messages): ModelCall => {
   const ctrl = new AbortController();
@@ -70,7 +80,9 @@ const fakeModel: Deps["callModel"] = (messages): ModelCall => {
   const fixing = last.startsWith("netties says");
   const BAD = "agent D 1\nD(out) ~ ;";
   const STUCK = "agent 0 0\nagent D 1\n\nD(out) ~ 0;";
-  const reply = request.includes("hopeless")
+  const reply = request.includes("browse") && !fixing
+    ? "```examples\nrange(5)\nSort a list\n```"
+    : request.includes("hopeless")
     ? `Here it is.\n\n${inet(BAD)}`
     : request.includes("bad") && !fixing
       ? `Here it is, **doubling** with \`D\`.\n\n${inet(BAD)}`
