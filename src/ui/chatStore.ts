@@ -1,14 +1,16 @@
 import { type Accessor, type Setter, createEffect, createMemo, createSignal, on } from "solid-js";
 import { parseProgram, printProgram } from "../core/programText";
-import { type Conversation, type CutBy, type Entry, type Rewind, type Turn, type TurnEnd, type TurnMsg, askTitle, newConversation, newTurn, rewind, runTurn, settle, unhold, updateTurn } from "../create/chat";
+import { type Conversation, type CutBy, type Entry, type ModelTag, type Rewind, type Turn, type TurnEnd, type TurnMsg, askTitle, newConversation, newTurn, rewind, runTurn, settle, unhold, updateTurn } from "../create/chat";
+import { CHAT_SYSTEM, TITLE_SYSTEM } from "../create/prompt";
+import type { Effort } from "../create/provider";
 import type { Editor } from "../state/editor";
 import { decode } from "../state/persist";
 import { type ChatDb, type Listing, type Saved, openChats, titleOf } from "./chatDb";
+import { type Choice, createModelSettings } from "./modelSettings";
 
 /**
  * Whether there's a chat at all: the build's VITE_CHAT is "on" (in .env
- * locally). The server's CHAT_MODEL decides which model answers, and without
- * it /api/chat doesn't exist.
+ * locally). Which model answers is up to each visitor, with their own key.
  */
 export const CHAT = import.meta.env.VITE_CHAT === "on";
 
@@ -37,11 +39,15 @@ interface Thread {
   running?: { stop: AbortController; done: Promise<void> };
   /** What's about to end it. */
   cutBy: CutBy;
+  /** The model it uses. Until it has one of its own, it goes by the choice for new chats. */
+  choice: Accessor<Choice | undefined>;
+  setChoice: Setter<Choice | undefined>;
 }
 
-const newThread = (id: string, entries: Entry[] = [], conversation = newConversation()): Thread => {
+const newThread = (id: string, entries: Entry[] = [], conversation = newConversation(), chosen?: Choice): Thread => {
   const [got, set] = createSignal(entries);
-  return { id, entries: got, setEntries: set, conversation, cutBy: "stop" };
+  const [choice, setChoice] = createSignal(chosen);
+  return { id, entries: got, setEntries: set, conversation, cutBy: "stop", choice, setChoice };
 };
 
 /**
@@ -50,7 +56,7 @@ const newThread = (id: string, entries: Entry[] = [], conversation = newConversa
  * document. Moving between chats leaves the canvas as it is, and a reply that
  * finishes while its chat isn't on the screen doesn't touch it either.
  */
-export function createChat(ed: Editor) {
+export function createChat(ed: Editor, models = createModelSettings()) {
   /** The chat on the screen. */
   const [current, setCurrent] = createSignal(newThread(newId()));
   const id = () => current().id;
@@ -68,6 +74,12 @@ export function createChat(ed: Editor) {
     }
   };
   const [draft, setDraft] = createSignal("");
+  /** The settings on the screen, and what to carry on with after them if they were asked for by something that needs a model. */
+  const [settings, setSettings] = createSignal<{ then?: () => void } | undefined>();
+  const chosen = (t: Thread) => t.choice() ?? models.defaults();
+  const usable = () => models.usable(chosen(current()));
+  /** Do this if there's a model to do it with, and otherwise ask for one first. Reading what's been said never needs one. */
+  const withModel = (f: () => void) => (usable() ? f() : setSettings({ then: f }));
   let store: ChatDb | undefined;
   const news = new BroadcastChannel("netties:chat");
   /** The chats with a reply going on in this tab. */
@@ -109,6 +121,7 @@ export function createChat(ed: Editor) {
     if (!here) return;
     if ("gone" in data) return fresh();
     t.conversation = data.chat.conversation;
+    t.setChoice(data.chat.choice);
     // What hasn't changed stays as it is on the screen, so an open document doesn't close whenever the other tab saves.
     t.setEntries((old) => data.chat.entries.map(unhold).map((entry, i) => (JSON.stringify(entry) === JSON.stringify(old[i]) ? old[i]! : entry)));
   };
@@ -127,12 +140,26 @@ export function createChat(ed: Editor) {
   };
 
   /** Save a chat, and tell other tabs. The tabs don't wait for the database, since a page on its way out might not see that finish. */
-  const persist = (t: Thread, chat: Saved = { entries: t.entries(), conversation: t.conversation }) => {
-    if (!chat.entries.length) return;
+  const persist = (t: Thread, kept: Omit<Saved, "choice"> = { entries: t.entries(), conversation: t.conversation }) => {
+    if (!kept.entries.length) return;
+    const chat: Saved = { ...kept, choice: t.choice() };
     const listing: Listing = { id: t.id, title: t.title ?? titleOf(chat.entries), named: t.title !== undefined, updated: Date.now() };
     setChats((l) => listed(l, listing));
     store?.write(listing, chat).catch(trouble);
     news.postMessage({ id: t.id, listing, chat } satisfies News);
+  };
+
+  /** Change the model a chat uses. That isn't anything said, so it keeps its place in the list, and a reply going on in another tab carries on. */
+  const choose = (t: Thread, choice: Choice) => {
+    t.setChoice(choice);
+    models.remember(choice.provider, choice.model);
+    const listing = chats().find((c) => c.id === t.id);
+    if (listing) store?.write(listing, { entries: t.entries(), conversation: t.conversation, choice }).catch(trouble);
+  };
+
+  const tagOf = (t: Thread): ModelTag | undefined => {
+    const c = chosen(t);
+    return c ? { provider: c.provider, model: c.model, effort: c.effort } : undefined;
   };
 
   /** The chat with this id, if this tab has it in hand. */
@@ -144,31 +171,31 @@ export function createChat(ed: Editor) {
     setChats((l) => l.map((c) => (c.id === chatId ? { ...c, title, named: true } : c)));
   };
 
-  /** Ask for a name for a chat. If what was first said has changed by the time it comes, it's no longer the right name. Returns whether the model could be asked. */
-  const name = async (chatId: string, text: string) => {
-    const title = await askTitle(text);
-    if (!title) return false;
-    const first = threadOf(chatId)?.entries().find((e) => e.kind === "user");
-    if (first?.kind === "user" && first.text !== text) return true;
-    named(chatId, title);
-    store?.retitle(chatId, title).catch(trouble);
-    news.postMessage({ id: chatId, title } satisfies News);
-    return true;
-  };
+  /** Chats this tab has asked to name. If it didn't work, the next load gets another go when the chat is next added to. */
+  const askedToName = new Set<string>();
 
-  /** Name the chats that have no name from the model yet: those from before it gave them, and any it couldn't name at the time. If that fails, the next page load tries again. */
-  const nameTheRest = async (list: Listing[]) => {
-    for (const c of list) {
-      if (c.named) continue;
-      const first = (await store?.read(c.id))?.entries.find((e) => e.kind === "user");
-      if (first?.kind === "user" && !(await name(c.id, first.text))) return;
-    }
+  /**
+   * Ask for a name for a chat, on the visitor's key. So only when they've just
+   * sent something, which costs them anyway: never for chats merely sitting
+   * there. If what was first said has changed by the time it comes, it's no longer the right name.
+   */
+  const name = async (t: Thread, text: string) => {
+    const choice = chosen(t);
+    if (!models.usable(choice)) return;
+    askedToName.add(t.id);
+    const title = await askTitle(text, models.asker({ ...choice, effort: "off" }, TITLE_SYSTEM));
+    if (!title) return;
+    const first = threadOf(t.id)?.entries().find((e) => e.kind === "user");
+    if (first?.kind === "user" && first.text !== text) return;
+    named(t.id, title);
+    store?.retitle(t.id, title).catch(trouble);
+    news.postMessage({ id: t.id, title } satisfies News);
   };
 
   /** Put a chat from storage on the screen. A reply that was going, or a document held back, stays off the canvas: it may be showing something else by now. */
   const show = (chatId: string, chat: Saved) => {
     const whole = settle(chat.entries.map(unhold), chat.conversation);
-    const t = newThread(chatId, whole.entries, whole.conversation);
+    const t = newThread(chatId, whole.entries, whole.conversation, chat.choice);
     const listing = chats().find((c) => c.id === chatId);
     t.title = listing?.named ? listing.title : undefined;
     setCurrent(t);
@@ -192,7 +219,6 @@ export function createChat(ed: Editor) {
       const saved = want ? await store.read(want) : undefined;
       if (want && saved) show(want, saved);
       else fresh();
-      void nameTheRest(list).catch(trouble);
     } catch (e) {
       trouble(e);
     }
@@ -274,12 +300,22 @@ export function createChat(ed: Editor) {
     t.setEntries(before.entries);
     const index = t.entries().length + 1;
     const at: Rewind = { messages: t.conversation.messages.length, seen: t.conversation.seen, unsaid: t.conversation.unsaid, doc: printed() };
-    t.setEntries((es) => [...es.map(unhold), { kind: "user", text, at }, { kind: "turn", turn: newTurn(Date.now()) }]);
+    // From here on it has a model of its own, whatever becomes of the choice for new chats.
+    t.setChoice(chosen(t));
+    t.setEntries((es) => [...es.map(unhold), { kind: "user", text, at }, { kind: "turn", turn: newTurn(Date.now(), tagOf(t)) }]);
     if (first) {
       t.title = undefined;
-      void name(t.id, text);
+      void name(t, text);
+    } else if (t.title === undefined && !askedToName.has(t.id)) {
+      const said = t.entries().find((e) => e.kind === "user");
+      if (said?.kind === "user") void name(t, said.text);
     }
     persist(t);
+    return run(t, index, text);
+  };
+
+  /** Get a reply for the turn at this index, asking this. */
+  const run = async (t: Thread, index: number, request: string) => {
     const ctrl = new AbortController();
     let saved = Date.now();
     const onMessage = (m: TurnMsg) => {
@@ -291,7 +327,8 @@ export function createChat(ed: Editor) {
       }
     };
     const go = async () => {
-      const { end, conversation: next } = await runTurn(t.conversation, text, printed(), { onMessage, signal: ctrl.signal, cutBy: () => t.cutBy });
+      const ask = models.asker(chosen(t)!, CHAT_SYSTEM);
+      const { end, conversation: next } = await runTurn(t.conversation, request, printed(), { ask, onMessage, signal: ctrl.signal, cutBy: () => t.cutBy });
       // Started over while this was going, or deleted: it no longer belongs to anything.
       if (t.running?.stop !== ctrl || leaving) return;
       t.conversation = next;
@@ -339,6 +376,33 @@ export function createChat(ed: Editor) {
     replying,
     draft,
     setDraft,
+    models,
+    /** The model the chat on the screen uses, if there is one yet. */
+    choice: () => chosen(current()),
+    /** Whether the chat on the screen has a model it can use right now. */
+    usable,
+    setModel(provider: string, model: string) {
+      const c = chosen(current());
+      choose(current(), { provider, model, effort: c?.effort ?? "default" });
+    },
+    setEffort(effort: Effort) {
+      const c = chosen(current());
+      if (c) choose(current(), { ...c, effort });
+    },
+    /** The settings on the screen. */
+    settings,
+    openSettings: () => setSettings({}),
+    /** Leave the settings. Having saved them, a chat that needed a model takes the new choice, and whatever was waiting for it goes ahead. */
+    closeSettings(saved = false) {
+      const then = settings()?.then;
+      setSettings(undefined);
+      if (!saved) return;
+      const t = current();
+      const made = models.defaults();
+      if (made && (then || !models.usable(chosen(t)))) t.setChoice(made);
+      then?.();
+    },
+    withModel,
     send,
     stop() {
       const t = current();
@@ -378,10 +442,10 @@ export function createChat(ed: Editor) {
     retry(index: number) {
       const asked = entries()[index - 1];
       if (asked?.kind !== "user") return;
-      void (asked.at ? edit(index - 1, asked.text) : send(asked.text));
+      withModel(() => void (asked.at ? edit(index - 1, asked.text) : send(asked.text)));
     },
     /** Pick a reply back up: the history already has how far it got. */
-    carryOn: () => void send("Carry on from where you left off."),
+    carryOn: () => withModel(() => void send("Carry on from where you left off.")),
     /** Go back to a document from earlier in the chat. If it isn't what the model last saw, its next message shows it. */
     loadDocument(code: string) {
       if (ed.screen().kind !== "net") return ed.notify("Close what's open first.");

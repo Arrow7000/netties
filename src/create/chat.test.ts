@@ -1,32 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { type Deps, CHAT_LIMITS, handleCreate } from "../../netlify/lib/create";
-import { type Conversation, type Entry, type TurnMsg, askTitle, cleanTitle, newConversation, newTurn, runTurn, settle, triesSoFar, updateTurn, userMessage } from "./chat";
+import { type Asker, type Conversation, type Entry, type TurnMsg, askTitle, cleanTitle, newConversation, newTurn, plain, runTurn, settle, triesSoFar, updateTurn, userMessage } from "./chat";
 import { EXAMPLE } from "./prompt";
+import { ModelError, type ReplyEvent } from "./provider";
 
 const doc = (s: string) => "```inet\n" + s + "\n```";
 const BAD = "agent D 1\nD(out) ~ ;";
 const STUCK = "agent 0 0\nagent D 1\n\nD(out) ~ 0;";
 
-/** The real proxy, in memory, with a model giving scripted replies in turn. */
+/** A model giving scripted replies in turn, keeping what it was sent. */
 function proxy(replies: string[]) {
   const seen: { role: string; content: unknown }[][] = [];
-  const m = new Map<string, number>();
   let i = 0;
-  const callModel: Deps["callModel"] = (messages) => {
-    seen.push(structuredClone(messages) as never);
-    const text = replies[Math.min(i++, replies.length - 1)]!;
-    return {
-      text: (async function* () {
-        yield { thinking: "hmm" };
-        yield text;
-      })(),
-      final: Promise.resolve({ content: [{ type: "text", text, citations: null }] as never, stop: "stop", usage: { input_tokens: 1, output_tokens: 1 } }),
-    };
+  const f: Asker = async function* (messages) {
+    seen.push(structuredClone(messages));
+    yield { kind: "thinking", text: "hmm" };
+    yield { kind: "text", text: replies[Math.min(i++, replies.length - 1)]! };
   };
-  const f = (async (url: string, init: RequestInit) =>
-    handleCreate(new Request(`https://x${url}`, init), { callModel, limits: CHAT_LIMITS, counters: { get: async (k: string) => m.get(k) ?? 0, set: async (k: string, v: number) => void m.set(k, v) }, visitor: "v", now: new Date() })) as unknown as typeof fetch;
   return { f, seen };
 }
+
+/** A model that says these things, then goes on until it's stopped. */
+const goingOn = (ctrl: AbortController, ...events: ReplyEvent[]): Asker =>
+  async function* () {
+    yield* events;
+    await new Promise((_, reject) => {
+      const stop = () => reject(new DOMException("Aborted", "AbortError"));
+      if (ctrl.signal.aborted) stop();
+      else ctrl.signal.addEventListener("abort", stop);
+    });
+  };
 
 describe("naming a chat", () => {
   it("tidies what the model sends back", () => {
@@ -37,9 +39,15 @@ describe("naming a chat", () => {
   });
 
   it("comes to nothing, quietly, if it fails", async () => {
-    expect(await askTitle("hi", { fetch: (async () => new Response("no", { status: 404 })) as never })).toBeUndefined();
-    expect(await askTitle("hi", { fetch: (async () => { throw new Error("offline"); }) as never })).toBeUndefined();
-    expect(await askTitle("hi", { fetch: (async () => new Response(JSON.stringify({ type: "error", code: "failed", message: "x" }) + "\n")) as never })).toBeUndefined();
+    const failing: Asker = async function* () {
+      throw new ModelError("key", "no");
+    };
+    expect(await askTitle("hi", failing)).toBeUndefined();
+    const said: Asker = async function* () {
+      yield { kind: "thinking", text: "ignored" };
+      yield { kind: "text", text: "Saying hello." };
+    };
+    expect(await askTitle("hi", said)).toBe("Saying hello");
   });
 });
 
@@ -50,7 +58,7 @@ describe("a chat turn", () => {
     it("gets the documents back and carries on, without using up a try", async () => {
       const { f, seen } = proxy([ask, doc(BAD), doc(BAD), `Doubles 2.\n\n${doc(EXAMPLE)}`]);
       const msgs: TurnMsg[] = [];
-      const { end, conversation } = await runTurn(newConversation(), "Double 2.", "", { fetch: f, onMessage: (m) => msgs.push(m) });
+      const { end, conversation } = await runTurn(newConversation(), "Double 2.", "", { ask: f, onMessage: (m) => msgs.push(m) });
       expect(end.kind).toBe("ready");
       expect(seen).toHaveLength(4);
       expect(seen[1]!.at(-1)!.content).toContain("# range(5)");
@@ -60,13 +68,13 @@ describe("a chat turn", () => {
 
     it("can't go on asking for ever: after three looks, asking costs tries, and the conversation stays fit to go on", async () => {
       const { f, seen } = proxy([ask]);
-      const first = await runTurn(newConversation(), "Double 2.", "", { fetch: f });
+      const first = await runTurn(newConversation(), "Double 2.", "", { ask: f });
       expect(first.end.kind).toBe("gave-up");
       expect(seen).toHaveLength(3 + 3);
       expect(seen.at(-1)!.at(-1)!.content).toContain("that's enough examples");
       expect(first.conversation.messages.at(-1)!.role).toBe("assistant");
       const next = proxy([`Fine.\n\n${doc(EXAMPLE)}`]);
-      const second = await runTurn(first.conversation, "Well?", "", { fetch: next.f });
+      const second = await runTurn(first.conversation, "Well?", "", { ask: next.f });
       expect(second.end.kind).toBe("ready");
     });
 
@@ -78,74 +86,65 @@ describe("a chat turn", () => {
 
   it("hands over a document that checks out, saying how it ran", async () => {
     const { f } = proxy([`Doubles 2.\n\n${doc(EXAMPLE)}`]);
-    const { end } = await runTurn(newConversation(), "Double 2.", "", { fetch: f });
+    const { end } = await runTurn(newConversation(), "Double 2.", "", { ask: f });
     expect(end).toMatchObject({ kind: "ready", summary: "3 kinds of agent, 2 rules; runs to the end in 3 interactions" });
   });
 
   it("gets three tries for each message, not three overall", async () => {
     const { f, seen } = proxy([doc(BAD)]);
-    const first = await runTurn(newConversation(), "Double 2.", "", { fetch: f });
+    const first = await runTurn(newConversation(), "Double 2.", "", { ask: f });
     expect(first.end).toMatchObject({ kind: "gave-up" });
     expect(seen).toHaveLength(3);
-    const second = await runTurn(first.conversation, "Try again.", "", { fetch: f });
+    const second = await runTurn(first.conversation, "Try again.", "", { ask: f });
     expect(second.end).toMatchObject({ kind: "gave-up" });
     expect(seen).toHaveLength(6);
   });
 
   it("tells the model what was wrong with its last try, in the next message", async () => {
     const { f, seen } = proxy([doc(BAD), doc(BAD), doc(BAD), doc(EXAMPLE)]);
-    const { conversation } = await runTurn(newConversation(), "Double 2.", "", { fetch: f });
-    await runTurn(conversation, "Try again.", "", { fetch: f });
+    const { conversation } = await runTurn(newConversation(), "Double 2.", "", { ask: f });
+    await runTurn(conversation, "Try again.", "", { ask: f });
     expect(seen[3]!.at(-1)!.content).toMatch(/^netties said about your last document: The text didn't parse[\s\S]*\n\nTry again\./);
   });
 
   it("answers in words without touching anything", async () => {
     const { f } = proxy(["An active pair is two agents joined by their principal ports."]);
     const c: Conversation = { messages: [], seen: "agent Z 0\n" };
-    const { end, conversation } = await runTurn(c, "What's an active pair?", "agent Z 0\n", { fetch: f });
+    const { end, conversation } = await runTurn(c, "What's an active pair?", "agent Z 0\n", { ask: f });
     expect(end).toEqual({ kind: "said" });
     expect(conversation.seen).toBe("agent Z 0\n");
   });
 
   it("doesn't take a code block that isn't a document for one", async () => {
     const { f } = proxy(["Like this:\n```\nD(x) ~ y\n```"]);
-    expect((await runTurn(newConversation(), "Show me a net.", "", { fetch: f })).end).toEqual({ kind: "said" });
+    expect((await runTurn(newConversation(), "Show me a net.", "", { ask: f })).end).toEqual({ kind: "said" });
   });
 
   it("asks about a net that gets stuck, and takes the model's word that it's meant to", async () => {
     const { f, seen } = proxy([doc(STUCK), "Yes, the rule isn't written yet."]);
-    const { end } = await runTurn(newConversation(), "Start a system.", "", { fetch: f });
+    const { end } = await runTurn(newConversation(), "Start a system.", "", { ask: f });
     expect(end).toMatchObject({ kind: "ready", code: STUCK + "\n", note: expect.stringMatching(/got stuck/) });
     expect(seen[1]!.at(-1)!.content).toMatch(/If it is, say so and send no document/);
   });
 
   it("falls back on a stuck document when the fixes never parse", async () => {
     const { f } = proxy([doc(STUCK), doc(BAD), doc(BAD)]);
-    const { end, conversation } = await runTurn(newConversation(), "Start a system.", "", { fetch: f });
+    const { end, conversation } = await runTurn(newConversation(), "Start a system.", "", { ask: f });
     expect(end).toMatchObject({ kind: "ready", code: STUCK + "\n" });
     expect(conversation.unsaid).toMatch(/didn't parse/);
   });
 
   it("doesn't count a document as wrong for having no types", async () => {
     const { f } = proxy([doc("agent 0 0\nagent D 1\n\nD(x) >< 0 => x ~ 0;\n\nD(out) ~ 0;")]);
-    expect((await runTurn(newConversation(), "No types please.", "", { fetch: f })).end).toMatchObject({ kind: "ready" });
+    expect((await runTurn(newConversation(), "No types please.", "", { ask: f })).end).toMatchObject({ kind: "ready" });
   });
 
   it("can be stopped, leaving a conversation that can go on", async () => {
     const ctrl = new AbortController();
-    const enc = new TextEncoder();
-    const f = (async () =>
-      new Response(
-        new ReadableStream({
-          start(c) {
-            c.enqueue(enc.encode(JSON.stringify({ type: "text", text: "Here goes" }) + "\n"));
-            ctrl.signal.addEventListener("abort", () => c.error(new DOMException("Aborted", "AbortError")));
-          },
-        }),
-      )) as unknown as typeof fetch;
+    const f = goingOn(ctrl, { kind: "text", text: "Here goes" });
     const messages: TurnMsg[] = [];
     const going = runTurn(newConversation(), "Double 2.", "", {
-      fetch: f,
+      ask: f,
       signal: ctrl.signal,
       onMessage: (m) => {
         messages.push(m);
@@ -159,17 +158,19 @@ describe("a chat turn", () => {
     expect(conversation.seen).toBeUndefined();
   });
 
-  it("passes on what the proxy says when it says no, ready to go on", async () => {
-    const f = (async () => new Response(JSON.stringify({ error: { code: "budget", message: "Try again tomorrow." } }), { status: 503 })) as unknown as typeof fetch;
-    const { end, conversation } = await runTurn(newConversation(), "Double 2.", "", { fetch: f });
-    expect(end).toEqual({ kind: "failed", code: "budget", message: "Try again tomorrow." });
+  it("passes on what the provider says when it says no, ready to go on", async () => {
+    const f: Asker = async function* () {
+      throw new ModelError("rate", "Try again tomorrow.");
+    };
+    const { end, conversation } = await runTurn(newConversation(), "Double 2.", "", { ask: f });
+    expect(end).toEqual({ kind: "failed", code: "rate", message: "Try again tomorrow." });
     expect(conversation.messages.at(-1)!.role).toBe("assistant");
   });
 
-  it("alternates turns for the proxy over a whole conversation, whatever becomes of them", async () => {
+  it("alternates turns over a whole conversation, whatever becomes of them", async () => {
     const { f } = proxy([doc(BAD), doc(BAD), doc(BAD), "Just words.", doc(EXAMPLE)]);
     let c = newConversation();
-    for (const say of ["One.", "Two.", "Three."]) c = (await runTurn(c, say, "", { fetch: f })).conversation;
+    for (const say of ["One.", "Two.", "Three."]) c = (await runTurn(c, say, "", { ask: f })).conversation;
     expect(c.messages.map((m) => m.role).join(" ")).toMatch(/^(user assistant ?)+$/);
   });
 });
@@ -177,18 +178,8 @@ describe("a chat turn", () => {
 describe("a reply that was cut short", () => {
   it("goes back to the model with its reasoning and its words", async () => {
     const ctrl = new AbortController();
-    const enc = new TextEncoder();
-    const f = (async () =>
-      new Response(
-        new ReadableStream({
-          start(c) {
-            c.enqueue(enc.encode(JSON.stringify({ type: "thinking", text: "First the zero case." }) + "\n"));
-            c.enqueue(enc.encode(JSON.stringify({ type: "text", text: "Here goes" }) + "\n"));
-            ctrl.signal.addEventListener("abort", () => c.error(new DOMException("Aborted", "AbortError")));
-          },
-        }),
-      )) as unknown as typeof fetch;
-    const { end, conversation } = await runTurn(newConversation(), "Double 2.", "", { fetch: f, signal: ctrl.signal, cutBy: () => "message", onMessage: (m) => m.kind === "writing" && ctrl.abort() });
+    const f = goingOn(ctrl, { kind: "thinking", text: "First the zero case." }, { kind: "text", text: "Here goes" });
+    const { end, conversation } = await runTurn(newConversation(), "Double 2.", "", { ask: f, signal: ctrl.signal, cutBy: () => "message", onMessage: (m) => m.kind === "writing" && ctrl.abort() });
     expect(end).toEqual({ kind: "stopped", by: "message" });
     const said = JSON.stringify(conversation.messages[1]);
     expect(said).toContain("First the zero case.");
@@ -201,6 +192,14 @@ describe("a reply that was cut short", () => {
     for (const m of [{ kind: "try" }, { kind: "thinking", text: "Hmm.", at: 2 }] as TurnMsg[]) turn = updateTurn(turn, m);
     const { conversation } = settle([{ kind: "user", text: "Double 2." }, { kind: "turn", turn }], newConversation());
     expect(JSON.stringify(conversation.messages[1])).toContain("Hmm.");
+  });
+});
+
+describe("a message as a provider wants it", () => {
+  it("is plain text, never empty", () => {
+    expect(plain({ role: "user", content: "Hi." })).toEqual({ role: "user", content: "Hi." });
+    expect(plain({ role: "assistant", content: [{ type: "text", text: "a" }, { type: "thinking" }, { type: "text", text: "b" }] })).toEqual({ role: "assistant", content: "ab" });
+    expect(plain({ role: "assistant", content: [{ type: "text", text: "" }] })).toEqual({ role: "assistant", content: "(No reply.)" });
   });
 });
 

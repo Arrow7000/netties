@@ -1,11 +1,13 @@
 import { For, Index, type JSX, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
-import { type Try, type Turn, type TurnEnd, triesSoFar } from "../create/chat";
+import { type ModelTag, type Try, type Turn, type TurnEnd, triesSoFar } from "../create/chat";
 import { TRIES } from "../create/client";
 import type { Chat, Entry } from "./chatStore";
 import { fingers } from "./compact";
 import { closeOnEscape } from "./dismiss";
 import * as I from "./icons";
 import { Menu, MenuItem } from "./Menu";
+import { EffortPicker, ModelPicker, ModelSettingsForm } from "./ModelSettingsForm";
+import { nameOf } from "./modelSettings";
 import { pieces } from "./pieces";
 
 /** Width of the panel on a desktop, which the canvas leaves room for. */
@@ -162,6 +164,9 @@ function TryView(props: { t: Try; n: number; last: boolean; turn: Turn; now: num
   let trace: ReturnType<typeof anchored> | undefined;
   return (
     <>
+      <Show when={props.t.note}>
+        <div class="chat-status">{props.t.note}</div>
+      </Show>
       <Show when={props.t.thinking}>
         <details class="chat-thought" onToggle={(e) => e.currentTarget.open && trace?.toEnd()}>
           <summary classList={{ live: thinking() }}>{thinking() ? `${doing("thinking")}, ${seconds(props.now - (props.t.thoughtFrom ?? props.turn.since))}` : `Thought for ${seconds(props.t.thoughtMs ?? 0)}`}</summary>
@@ -314,6 +319,13 @@ function EditBox(props: { text: string; onCancel: () => void; onSend: (text: str
   );
 }
 
+/** What's wrong that the settings might put right. */
+const SETTINGS_CAN_FIX = ["key", "model", "unreachable", "blocked"];
+
+/** A model and how hard it was asked to think, as a few words. */
+const tagText = (b: ModelTag) => `${nameOf(b.provider)}: ${b.model}${b.effort === "default" ? "" : `, reasoning ${b.effort}`}`;
+const sameTag = (a: ModelTag | undefined, b: ModelTag | undefined) => a?.provider === b?.provider && a?.model === b?.model && a?.effort === b?.effort;
+
 /** How a turn stands, under what it has said. */
 function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number }) {
   /** Starting over from further back would throw away what came after, so that's left to Edit. */
@@ -340,9 +352,16 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
               <div class="chat-status bad">
                 {end.message}
                 <Show when={latest()}>
-                  <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
-                    Try again
-                  </button>
+                  <div class="chat-actions">
+                    <button class="btn chat-again" onClick={() => props.chat.retry(props.index)}>
+                      Try again
+                    </button>
+                    <Show when={SETTINGS_CAN_FIX.includes(end.code)}>
+                      <button class="btn chat-again" onClick={props.chat.openSettings}>
+                        Check settings
+                      </button>
+                    </Show>
+                  </div>
                 </Show>
               </div>
             );
@@ -374,10 +393,20 @@ function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number 
 }
 
 function EntryView(props: { chat: Chat; entry: Entry; index: number; now: number }) {
+  /** Which model a turn came from is only worth saying when it has changed in this chat. */
+  const changedTo = () => {
+    const by = props.entry.kind === "turn" ? props.entry.turn.by : undefined;
+    // A turn follows a message, so the one before is two back.
+    const before = props.chat.entries()[props.index - 2];
+    return by && before?.kind === "turn" && before.turn.by && !sameTag(before.turn.by, by) ? tagText(by) : undefined;
+  };
   return (
     <Show when={props.entry.kind === "turn" ? (props.entry as Extract<Entry, { kind: "turn" }>).turn : undefined} fallback={<UserView chat={props.chat} entry={props.entry as Extract<Entry, { kind: "user" }>} index={props.index} />}>
       {(turn) => (
         <div class="chat-turn">
+          <Show when={changedTo()}>
+            <div class="chat-by">{changedTo()}</div>
+          </Show>
           <Index each={turn().tries}>{(t, i) => <TryView t={t()} n={triesSoFar(turn().tries.slice(0, i + 1))} last={i === turn().tries.length - 1} turn={turn()} now={props.now} />}</Index>
           <TurnStatus chat={props.chat} index={props.index} turn={turn()} now={props.now} />
         </div>
@@ -459,7 +488,10 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
   const [atEnd, setAtEnd] = createSignal(true);
   let following: ReturnType<typeof anchored> | undefined;
 
-  closeOnEscape(() => props.onEscape());
+  /** A new chat that has no model to go to starts with setting one up. An old one is there to read until it's added to. */
+  const setting = () => !!chat.settings() || (chat.loaded() && !chat.entries().length && !chat.usable());
+
+  closeOnEscape(() => (chat.settings() ? chat.closeSettings() : props.onEscape()));
 
   /** Back to the box after a button, but not on a phone, where that brings up the keyboard. */
   const refocus = () => {
@@ -486,6 +518,20 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
     }
   });
 
+  // Back from the settings: the box is ready, and the chat is at its end.
+  createEffect(
+    on(
+      setting,
+      (now) => {
+        if (now) return;
+        following?.toEnd();
+        size();
+        refocus();
+      },
+      { defer: true },
+    ),
+  );
+
   // Another chat starts from its latest message, wherever this one was scrolled to.
   createEffect(on(chat.id, () => following?.toEnd(), { defer: true }));
 
@@ -497,6 +543,8 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
   const submit = () => {
     const text = chat.draft().trim();
     if (!text) return;
+    // What's typed stays in the box until there's a model to send it to.
+    if (!chat.usable()) return chat.withModel(submit);
     chat.setDraft("");
     area.value = "";
     size();
@@ -528,7 +576,13 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
           <I.Close />
         </button>
       </header>
-      <div class="chat-log-wrap">
+      <Show when={setting()}>
+        <div class="model-form-wrap">
+          <ModelSettingsForm chat={chat} first={!chat.entries().length && !chat.settings()} />
+        </div>
+      </Show>
+      {/* Hidden rather than taken away, so a chat comes back from the settings just as it was. */}
+      <div class="chat-log-wrap" style={{ display: setting() ? "none" : undefined }}>
         <div class="chat-log" ref={log}>
           {/* Keyed, so what's open or being edited in one chat doesn't carry over to the next. */}
           <Show when={chat.id()} keyed>
@@ -543,8 +597,13 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
           </button>
         </Show>
       </div>
+      <div class="chat-model" style={{ display: setting() ? "none" : undefined }}>
+        <ModelPicker chat={chat} />
+        <EffortPicker chat={chat} />
+      </div>
       <form
         class="chat-compose"
+        style={{ display: setting() ? "none" : undefined }}
         onSubmit={(e) => {
           e.preventDefault();
           submit();

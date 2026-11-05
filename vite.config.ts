@@ -1,12 +1,12 @@
 /// <reference types="vitest/config" />
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
-import { chatDev } from "./netlify/lib/chatDev";
+import { fakeModel } from "./scripts/fakeModel";
 
-export default defineConfig(({ mode }) => ({
-  plugins: [solid(), chatDev(loadEnv(mode, process.cwd(), ""))],
+export default defineConfig({
+  plugins: [solid(), fakeModel()],
   test: {
     // The core is plain TypeScript; UI tests can opt into jsdom per file.
     environment: "node",
   },
-}));
+});

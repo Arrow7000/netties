@@ -1,0 +1,308 @@
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
+import { CUSTOM, EFFORTS, type Effort, type ModelInfo, type Wire, isLocalAddress, listModels, normalizeUrl } from "../create/provider";
+import type { Chat } from "./chatStore";
+import { fingers } from "./compact";
+import { Menu, MenuItem } from "./Menu";
+import { nameOf, presetsHere } from "./modelSettings";
+
+/** How a provider's list of models stands. */
+type Listing = { kind: "idle" } | { kind: "loading" } | { kind: "loaded"; models: ModelInfo[] } | { kind: "failed"; message: string };
+
+/** Where to look through a list of models: a lot of them, on some providers. */
+const matching = (models: ModelInfo[], query: string) => {
+  const q = query.trim().toLowerCase();
+  return q ? models.filter((m) => m.id.toLowerCase().includes(q) || m.name?.toLowerCase().includes(q)) : models;
+};
+const MOST_SHOWN = 100;
+
+/**
+ * Choosing a provider, its key and a model. The key stays in this browser. The
+ * list of models comes from the provider itself as soon as there's enough to ask it with, which also shows whether the key works.
+ */
+export function ModelSettingsForm(props: { chat: Chat; first: boolean }) {
+  const models = props.chat.models;
+  const here = presetsHere();
+  /** The chat's provider, when it's the chat that needs setting up, or else the one last chosen. */
+  const start = props.chat.choice()?.provider ?? models.defaults()?.provider ?? here[0]!.id;
+  const [provider, setProvider] = createSignal(start);
+  const saved = () => models.entry(provider());
+  const preset = () => here.find((p) => p.id === provider());
+  const local = () => !!preset()?.local;
+  const custom = () => provider() === CUSTOM;
+
+  const [url, setUrl] = createSignal("");
+  const [wire, setWire] = createSignal<Wire>("openai");
+  const [key, setKey] = createSignal("");
+  const [model, setModel] = createSignal("");
+  const [effort, setEffort] = createSignal<Effort>(models.defaults()?.effort ?? "default");
+  const [listing, setListing] = createSignal<Listing>({ kind: "idle" });
+
+  /** Fill in what's known for this provider. */
+  const load = () => {
+    const e = saved();
+    setUrl(e?.url ?? (preset()?.local ? preset()!.url : ""));
+    setWire(e?.wire ?? "openai");
+    setKey(e?.key ?? "");
+    setModel(e?.model ?? "");
+  };
+  load();
+
+  const entry = () => ({ ...(key().trim() ? { key: key().trim() } : {}), ...(local() || custom() ? { url: url().trim() } : {}), ...(custom() ? { wire: wire() } : {}), model: model().trim() });
+  const connection = () => models.connect(provider(), entry());
+  const canSave = () => !!connection() && !!model().trim();
+
+  // What can be chosen from depends on the address and the key. Typing either in shouldn't ask at every letter.
+  createEffect(
+    on([provider, url, key, wire], () => {
+      setListing({ kind: "idle" });
+      const c = connection();
+      if (!c) return;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => {
+        setListing({ kind: "loading" });
+        listModels(c, { signal: ctrl.signal, setup: models.setupFor(provider()) }).then(
+          (list) => !ctrl.signal.aborted && setListing({ kind: "loaded", models: list }),
+          (e: Error) => !ctrl.signal.aborted && setListing({ kind: "failed", message: e.message }),
+        );
+      }, 400);
+      onCleanup(() => {
+        clearTimeout(timer);
+        ctrl.abort();
+      });
+    }),
+  );
+
+  const choices = () => {
+    const l = listing();
+    return l.kind === "loaded" ? matching(l.models, model()).slice(0, MOST_SHOWN) : [];
+  };
+
+  const save = () => {
+    if (!canSave()) return;
+    models.save(provider(), entry(), effort());
+    props.chat.closeSettings(true);
+  };
+
+  return (
+    <form
+      class="model-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+    >
+      <Show when={props.first} fallback={<h2>Model</h2>}>
+        <h2>Choose a model to chat with</h2>
+        <p>The chat runs on your own provider and API key, or on a model on your own computer.</p>
+      </Show>
+      <label>
+        Provider
+        <select
+          class="input"
+          aria-label="Provider"
+          value={provider()}
+          onChange={(e) => {
+            setProvider(e.currentTarget.value);
+            load();
+          }}
+        >
+          <For each={here}>{(p) => <option value={p.id}>{p.name}</option>}</For>
+          <option value={CUSTOM}>Custom address</option>
+        </select>
+      </label>
+      <Show when={local() || custom()}>
+        <label>
+          Address
+          <input class="input" aria-label="Address" spellcheck={false} autocomplete="off" placeholder="http://localhost:8080/v1" value={url()} onInput={(e) => setUrl(e.currentTarget.value)} />
+          <Show when={local() || isLocalAddress(normalizeUrl(url()))}>
+            <span class="hint">Your browser may ask to let this site reach your computer or network: say yes. It goes straight there, and nothing passes through netties.</span>
+          </Show>
+        </label>
+      </Show>
+      <Show when={custom()}>
+        <label>
+          API style
+          <select class="input" aria-label="API style" value={wire()} onChange={(e) => setWire(e.currentTarget.value as Wire)}>
+            <option value="openai">OpenAI (Chat Completions), the usual one</option>
+            <option value="anthropic">Anthropic (Messages)</option>
+          </select>
+        </label>
+      </Show>
+      <label>
+        <span>
+          API key <Show when={!preset()?.needsKey}><span class="optional">(optional)</span></Show>
+        </span>
+        <input class="input" aria-label="API key" type="password" spellcheck={false} autocomplete="off" value={key()} onInput={(e) => setKey(e.currentTarget.value)} />
+        <span class="hint">
+          Kept in this browser, and sent only to {nameOf(provider())}.
+          <Show when={preset()?.keysAt}>
+            {" "}
+            <a href={preset()!.keysAt} target="_blank" rel="noreferrer">
+              Get a key
+            </a>
+          </Show>
+        </span>
+      </label>
+      <label>
+        Model for new chats
+        <input class="input" aria-label="Model for new chats" spellcheck={false} autocomplete="off" placeholder={listing().kind === "loaded" ? "Search, or type a model's name" : "The model's name"} value={model()} onInput={(e) => setModel(e.currentTarget.value)} />
+        <Show when={listing().kind === "loading"}>
+          <span class="hint">Asking {nameOf(provider())} what it has…</span>
+        </Show>
+        <Show when={listing().kind === "failed" ? (listing() as { message: string }).message : undefined}>{(m) => <span class="hint bad">{m()}</span>}</Show>
+        <Show when={listing().kind === "loaded" && !(listing() as { models: ModelInfo[] }).models.length}>
+          <span class="hint">{nameOf(provider())} didn't list any models{local() ? ". If you haven't downloaded one yet, do that first" : ""}. You can still type a name here.</span>
+        </Show>
+        <Show when={choices().length && !choices().some((m) => m.id === model())}>
+          <div class="model-choices" role="listbox" aria-label="Models">
+            <For each={choices()}>{(m) => <MenuItem title={m.name ?? m.id} note={m.name ? m.id : undefined} onClick={() => setModel(m.id)} />}</For>
+          </div>
+        </Show>
+      </label>
+      <label>
+        Reasoning
+        <select class="input" aria-label="Reasoning" value={effort()} onChange={(e) => setEffort(e.currentTarget.value as Effort)}>
+          <For each={EFFORTS}>{(l) => <option value={l.id}>{l.name}</option>}</For>
+        </select>
+      </label>
+      <div class="model-actions">
+        <button type="submit" class="btn primary" disabled={!canSave()}>
+          Save
+        </button>
+        <Show when={props.chat.settings()}>
+          <button type="button" class="btn" onClick={() => props.chat.closeSettings()}>
+            Cancel
+          </button>
+        </Show>
+        <span class="spacer" />
+        <Show when={saved()}>
+          <button
+            type="button"
+            class="btn"
+            title={`Remove what's kept for ${nameOf(provider())}. Your chats stay.`}
+            onClick={() => {
+              models.forget(provider());
+              load();
+            }}
+          >
+            Forget this key
+          </button>
+        </Show>
+      </div>
+    </form>
+  );
+}
+
+/** What each provider that's set up has to offer, as it comes in. */
+function ProviderModels(props: { chat: Chat; provider: string; query: string; heading: boolean; onPick: () => void }) {
+  const [listing, setListing] = createSignal<Listing>({ kind: "loading" });
+  props.chat.models.models(props.provider).then(
+    (models) => setListing({ kind: "loaded", models }),
+    (e: Error) => setListing({ kind: "failed", message: e.message }),
+  );
+  const shown = createMemo(() => {
+    const l = listing();
+    return l.kind === "loaded" ? matching(l.models, props.query).slice(0, MOST_SHOWN) : [];
+  });
+  const current = () => props.chat.choice();
+  return (
+    <>
+      <Show when={props.heading}>
+        <div class="menu-head">{nameOf(props.provider)}</div>
+      </Show>
+      <Show when={listing().kind === "loading"}>
+        <div class="model-note">Asking what it has…</div>
+      </Show>
+      <Show when={listing().kind === "failed" ? (listing() as { message: string }).message : undefined}>{(m) => <div class="model-note bad">{m()}</div>}</Show>
+      <Show when={listing().kind === "loaded" && !props.query.trim() && !shown().length}>
+        <div class="model-note">It didn't list any models. Type a name above to use one.</div>
+      </Show>
+      <For each={shown()}>
+        {(m) => (
+          <MenuItem
+            title={m.name ?? m.id}
+            note={m.name ? m.id : undefined}
+            current={current()?.provider === props.provider && current()?.model === m.id}
+            onClick={() => {
+              props.chat.setModel(props.provider, m.id);
+              props.onPick();
+            }}
+          />
+        )}
+      </For>
+    </>
+  );
+}
+
+/** Which model this chat uses. It can change at any time, and the next reply goes by it. */
+export function ModelPicker(props: { chat: Chat }) {
+  const chat = props.chat;
+  const label = () => (chat.usable() ? chat.choice()!.model : "Choose a model");
+  return (
+    <Menu class="chat-model-button" menuClass="model-menu" title={chat.usable() ? `${nameOf(chat.choice()!.provider)}: ${chat.choice()!.model}` : "Choose a model"} label={<span>{label()}</span>}>
+      {(close) => {
+        const [query, setQuery] = createSignal("");
+        let box!: HTMLInputElement;
+        onMount(() => {
+          if (!fingers()) box.focus();
+        });
+        const typed = () => query().trim();
+        const providers = () => chat.models.ready();
+        /** A name that isn't on any list can still be used, on the provider this chat is on. */
+        const typedOn = () => (chat.usable() ? chat.choice()!.provider : providers()[0]);
+        return (
+          <>
+            <input ref={box} class="input" aria-label="Search models" placeholder="Search, or type a model's name" spellcheck={false} autocomplete="off" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+            <div class="model-scroll">
+              <For each={providers()}>{(id) => <ProviderModels chat={chat} provider={id} query={query()} heading={providers().length > 1} onPick={close} />}</For>
+              <Show when={typed() && typedOn()}>
+                <MenuItem
+                  title={`Use "${typed()}"`}
+                  note={nameOf(typedOn()!)}
+                  onClick={() => {
+                    chat.setModel(typedOn()!, typed());
+                    close();
+                  }}
+                />
+              </Show>
+            </div>
+            <hr />
+            <MenuItem
+              title="Providers and keys…"
+              onClick={() => {
+                close();
+                chat.openSettings();
+              }}
+            />
+          </>
+        );
+      }}
+    </Menu>
+  );
+}
+
+/** How hard the model should think, for this chat. */
+export function EffortPicker(props: { chat: Chat }) {
+  const chat = props.chat;
+  const now = () => chat.choice()?.effort ?? "default";
+  return (
+    <Menu class="chat-effort-button" title="How hard the model should think. Not every model takes this." label={<span>{now() === "default" ? "Reasoning" : `Reasoning: ${EFFORTS.find((e) => e.id === now())!.name}`}</span>}>
+      {(close) => (
+        <For each={EFFORTS}>
+          {(l) => (
+            <MenuItem
+              title={l.name}
+              note={l.id === "default" ? "Whatever the model does by itself" : l.id === "off" ? "Or as little as it allows" : undefined}
+              current={now() === l.id}
+              disabled={!chat.choice()}
+              onClick={() => {
+                chat.setEffort(l.id);
+                close();
+              }}
+            />
+          )}
+        </For>
+      )}
+    </Menu>
+  );
+}

@@ -1,13 +1,24 @@
 import { checkDocument, extractDocument } from "./check";
-import { type Block, type Message, TRIES, lines } from "./client";
+import { type Block, type Message, TRIES } from "./client";
 import { examplesReply, namesAskedFor } from "./exampleDocs";
+import { type Effort, ModelError, type PlainMessage, type ReplyEvent } from "./provider";
 
 /**
- * One turn of the chat: send what the visitor said to /api/chat, check any
+ * One turn of the chat: send what the visitor said to the model, check any
  * document that comes back, and feed problems back to the model. Each visitor
  * message gets three tries of its own. The canvas isn't touched here: a turn
  * that ends "ready" hands its document over to go on it.
  */
+
+/** A model to ask: which one is up to whoever passes this. */
+export type Asker = (messages: PlainMessage[], signal?: AbortSignal) => AsyncIterable<ReplyEvent>;
+
+/** Which model a reply came from, and how hard it was asked to think. */
+export interface ModelTag {
+  provider: string;
+  model: string;
+  effort: Effort;
+}
 
 /** The conversation so far, as the model sees it. */
 export interface Conversation {
@@ -34,6 +45,8 @@ export interface Try {
   code?: string;
   /** The examples it asked to see. A call that's only that isn't a try at anything. */
   looked?: string[];
+  /** Something the visitor should know about how the request was taken. */
+  note?: string;
 }
 
 /** What ended a reply early. */
@@ -50,7 +63,7 @@ export type TurnEnd =
   | { kind: "gave-up"; feedback: string; code?: string }
   /** It was cut short before it finished. */
   | { kind: "stopped"; by: CutBy }
-  /** The proxy or the network said no. */
+  /** The provider or the network said no, or the reply didn't finish. */
   | { kind: "failed"; code: string; message: string };
 
 export type Phase = { kind: "waiting" } | { kind: "thinking" } | { kind: "writing" } | { kind: "over"; end: TurnEnd };
@@ -62,10 +75,13 @@ export interface Turn {
   since: number;
   /** How long it took. */
   took?: number;
+  /** The model it came from, in chats saved since there was a choice. */
+  by?: ModelTag;
 }
 
 export type TurnMsg =
   | { kind: "try" }
+  | { kind: "note"; text: string }
   | { kind: "thinking"; text: string; at: number }
   | { kind: "writing"; text: string }
   | { kind: "checked"; code: string; problem?: string; soft?: boolean }
@@ -126,7 +142,7 @@ export function cutShort(why: string, thinking: string, text: string): string {
 /** Which try this is, not counting calls that only asked to see examples. */
 export const triesSoFar = (tries: Try[]) => tries.filter((t) => !t.looked).length;
 
-export const newTurn = (since: number): Turn => ({ tries: [], phase: { kind: "waiting" }, since });
+export const newTurn = (since: number, by?: ModelTag): Turn => ({ tries: [], phase: { kind: "waiting" }, since, ...(by ? { by } : {}) });
 
 /** How a turn moves along. */
 export function updateTurn(t: Turn, msg: TurnMsg): Turn {
@@ -134,6 +150,8 @@ export function updateTurn(t: Turn, msg: TurnMsg): Turn {
   switch (msg.kind) {
     case "try":
       return { ...t, phase: { kind: "waiting" }, tries: [...t.tries, { thinking: "", reply: "" }] };
+    case "note":
+      return last((x) => ({ ...x, note: msg.text }));
     case "thinking":
       return {
         ...last((x) => {
@@ -163,12 +181,11 @@ export function userMessage(request: string, doc: string, c: Conversation): stri
 }
 
 export interface TurnOptions {
+  ask: Asker;
   onMessage?: (m: TurnMsg) => void;
   signal?: AbortSignal;
   /** Why `signal` fired. */
   cutBy?: () => CutBy;
-  endpoint?: string;
-  fetch?: typeof fetch;
 }
 
 /** However it ended, what had come in so far. */
@@ -178,20 +195,10 @@ type Asked = { thinking: string; text: string } & ({ kind: "reply"; content: Blo
 const LOOKS = 3;
 
 /** A title for a chat, from what was first said in it. If it doesn't come, nothing's lost: the chat goes by its first line. */
-export async function askTitle(text: string, opts: Pick<TurnOptions, "fetch"> = {}): Promise<string | undefined> {
+export async function askTitle(text: string, ask: Asker): Promise<string | undefined> {
   try {
-    const res = await (opts.fetch ?? fetch)("/api/chat/title", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: text.slice(0, 2000) }] }),
-    });
-    if (!res.ok || !res.body) return undefined;
     let title = "";
-    for await (const line of lines(res.body)) {
-      const ev = JSON.parse(line) as { type: string; text?: string };
-      if (ev.type === "text") title += ev.text;
-      else if (ev.type === "error") return undefined;
-    }
+    for await (const ev of ask([{ role: "user", content: text.slice(0, 2000) }])) if (ev.kind === "text") title += ev.text;
     return cleanTitle(title);
   } catch {
     return undefined;
@@ -200,39 +207,34 @@ export async function askTitle(text: string, opts: Pick<TurnOptions, "fetch"> = 
 
 export const cleanTitle = (raw: string) => raw.trim().split("\n")[0]!.replace(/^["'*#\s]+|["'*.\s]+$/g, "").slice(0, 80) || undefined;
 
+/** A message as a provider wants it. Saved replies are lists of blocks, and some providers refuse an empty message. */
+export function plain(m: Message): PlainMessage {
+  if (m.role === "user") return m;
+  const text = m.content.flatMap((b) => (b.type === "text" && b.text ? [b.text] : [])).join("");
+  return { role: "assistant", content: text || "(No reply.)" };
+}
+
 /** One call to the model. */
 async function ask(messages: Message[], opts: TurnOptions): Promise<Asked> {
   let text = "";
   let thinking = "";
   try {
-    const res = await (opts.fetch ?? fetch)(opts.endpoint ?? "/api/chat", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages }),
-      signal: opts.signal,
-    });
-    if (!res.ok || !res.body) {
-      const err = (await res.json().catch(() => undefined)) as { error?: { code: string; message: string } } | undefined;
-      return { kind: "failed", thinking, text, code: err?.error?.code ?? `http-${res.status}`, message: err?.error?.message ?? "netties couldn't reach the model." };
-    }
-    let content: Block[] | undefined;
-    for await (const line of lines(res.body)) {
-      const ev = JSON.parse(line) as { type: "text"; text: string } | { type: "thinking"; text: string } | { type: "done"; content: Block[] } | { type: "error"; code: string; message: string };
-      if (ev.type === "thinking") {
+    for await (const ev of opts.ask(messages.map(plain), opts.signal)) {
+      if (ev.kind === "thinking") {
         thinking += ev.text;
         opts.onMessage?.({ kind: "thinking", text: ev.text, at: Date.now() });
-      } else if (ev.type === "text") {
+      } else if (ev.kind === "text") {
         text += ev.text;
         opts.onMessage?.({ kind: "writing", text: ev.text });
-      } else if (ev.type === "done") content = ev.content;
-      else return { kind: "failed", thinking, text, code: ev.code, message: ev.message };
+      } else opts.onMessage?.({ kind: "note", text: ev.text });
     }
     if (opts.signal?.aborted) return { kind: "stopped", thinking, text };
-    return content ? { kind: "reply", thinking, text, content } : { kind: "failed", thinking, text, code: "failed", message: "The reply stopped part way." };
+    return { kind: "reply", thinking, text, content: [{ type: "text", text }] };
   } catch (e) {
     if (opts.signal?.aborted) return { kind: "stopped", thinking, text };
+    if (e instanceof ModelError) return { kind: "failed", thinking, text, code: e.code, message: e.message };
     console.error("chat failed", e);
-    return { kind: "failed", thinking, text, code: "failed", message: "netties couldn't reach the model. Check your connection and try again." };
+    return { kind: "failed", thinking, text, code: "failed", message: "Something went wrong asking the model. Try again in a moment." };
   }
 }
 
@@ -251,7 +253,7 @@ const orSaySo = (feedback: string) => `netties says: ${feedback}\n\nIf that isn'
  * back is always ready for the next message, however this one ended: it has
  * the reply or a note saying what became of it, since a model's turns have to alternate.
  */
-export async function runTurn(c: Conversation, request: string, doc: string, opts: TurnOptions = {}): Promise<{ end: TurnEnd; conversation: Conversation }> {
+export async function runTurn(c: Conversation, request: string, doc: string, opts: TurnOptions): Promise<{ end: TurnEnd; conversation: Conversation }> {
   const messages: Message[] = [...c.messages, { role: "user", content: userMessage(request, doc, c) }];
   const close = (note: string): Message => ({ role: "assistant", content: [{ type: "text", text: note }] });
   /** Unless a document is accepted, the model and the canvas no longer agree. */

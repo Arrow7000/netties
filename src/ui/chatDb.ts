@@ -1,4 +1,5 @@
 import type { Conversation, Entry } from "../create/chat";
+import type { Choice } from "./modelSettings";
 
 /**
  * Where chats are kept: IndexedDB, since one chat can run to most of a megabyte
@@ -17,6 +18,8 @@ const MOVED = "moved-from-localstorage";
 export interface Saved {
   entries: Entry[];
   conversation: Conversation;
+  /** The model this chat uses. Without one, it goes by the choice for new chats. */
+  choice?: Choice;
 }
 
 export interface Listing {

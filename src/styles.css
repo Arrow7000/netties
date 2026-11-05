@@ -4304,3 +4304,188 @@ button.select.open {
 .app:has(.chat:focus-within) .chat {
   z-index: 31;
 }
+
+/* Choosing a model (src/ui/ModelSettingsForm.tsx). */
+
+.chat-model {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.chat-model .menu-wrap {
+  min-width: 0;
+}
+
+.chat-model .menu-wrap:first-child {
+  flex: 0 1 auto;
+}
+
+.chat-model .btn {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chat-model .btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-model .btn svg {
+  flex: none;
+}
+
+.chat-model .menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+
+.chat-model .menu-wrap:last-child .menu {
+  left: auto;
+  right: 0;
+  min-width: 150px;
+}
+
+.model-menu {
+  width: 344px;
+  max-width: calc(100vw - 40px);
+}
+
+.model-menu .input {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.model-scroll {
+  max-height: min(320px, calc(100dvh - 300px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.model-scroll .mi-text > span {
+  overflow-wrap: anywhere;
+}
+
+.model-note {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.model-note.bad {
+  color: var(--danger, #c33);
+}
+
+.model-form-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 12px;
+}
+
+.model-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px;
+}
+
+.model-form h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.model-form p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.model-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.model-form label .optional {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.model-form .input {
+  width: 100%;
+  font-weight: 400;
+}
+
+.model-form .hint {
+  font-weight: 400;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.model-form .hint.bad {
+  color: var(--danger, #c33);
+}
+
+.model-form .hint a {
+  color: inherit;
+}
+
+.model-choices {
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  font-weight: 400;
+}
+
+.model-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-actions .spacer {
+  flex: 1;
+}
+
+.chat-by {
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.chat-status.bad {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.chat-actions .chat-again {
+  margin: 0;
+  color: var(--ink);
+}
