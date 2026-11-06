@@ -261,13 +261,11 @@
   transform: none;
 }
 
-@media (max-height: 500px) and (orientation: landscape) {
-  .action-sheet {
-    left: 50%;
-    right: auto;
-    width: 420px;
-    margin-left: -210px;
-  }
+:root[data-sideways] .action-sheet {
+  left: 50%;
+  right: auto;
+  width: 420px;
+  margin-left: -210px;
 }
 
 .action-sheet-title {
@@ -793,13 +791,11 @@
   top: auto;
 }
 
-@media (max-height: 500px) and (orientation: landscape) {
-  .app:has(.sheet.side) .top-right {
-    right: calc(316px + env(safe-area-inset-right));
-  }
+:root[data-sideways] .app:has(.sheet.side) .top-right {
+  right: calc(316px + env(safe-area-inset-right));
+}
 
-  .sheet-view .menu {
-    right: -7px;
-    max-height: calc(100dvh - 90px);
-  }
+:root[data-sideways] .sheet-view .menu {
+  right: -7px;
+  max-height: calc(100dvh - 90px);
 }

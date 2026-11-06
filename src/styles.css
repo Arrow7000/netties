@@ -3819,6 +3819,11 @@ button.select.open {
   outline: none;
 }
 
+/* A menu can need more height than the panel has, on a small phone. */
+.chat:has(.menu) {
+  overflow: visible;
+}
+
 .app:has(.chat) .panel-stack {
   left: 384px;
 }
@@ -4114,7 +4119,7 @@ button.select.open {
   min-width: 0;
   resize: none;
   height: auto;
-  max-height: 140px;
+  max-height: min(140px, calc(var(--visible, 100dvh) * 0.4));
 }
 
 /* Phones: the lower part of the screen, so the net stays in sight above it; sideways, the left half. */
@@ -4129,11 +4134,24 @@ button.select.open {
     left: 0;
     right: 0;
     width: auto;
-    bottom: var(--chat-keyboard, 0px);
-    height: min(58dvh, calc(100dvh - var(--chat-keyboard, 0px) - 64px));
+    bottom: var(--keyboard, 0px);
+    height: min(58dvh, calc(100dvh - 64px));
     border-width: 1px 0 0;
     border-radius: var(--r-island) var(--r-island) 0 0;
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* The keyboard leaves no room for the net anyway, and the settings have a lot to fill in: all that can be seen goes to them. */
+  :root[data-keyboard] .chat,
+  .chat:has(.model-form-wrap) {
+    height: var(--visible, 100dvh);
+    border-width: 0;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+
+  :root[data-keyboard] .chat {
+    padding-bottom: 0;
   }
 
   .chat-compose textarea {
@@ -4143,22 +4161,46 @@ button.select.open {
   }
 }
 
-@media (max-height: 500px) {
-  .chat {
-    top: 0;
-    bottom: 0;
-    right: auto;
-    width: 50vw;
-    height: auto;
-    border-width: 0 1px 0 0;
-    border-radius: 0;
-  }
+:root[data-sideways] .chat {
+  border-width: 0 1px 0 0;
+  border-radius: 0;
+  right: auto;
+  width: 50vw;
+  height: var(--visible, 100dvh);
+}
 
-  /* No room for the bars beside it: the panel has its own way out. */
-  .app:has(.chat) .top-left,
-  .app:has(.chat) .top-right {
-    display: none;
-  }
+/* No room for the bars beside it: the panel has its own way out. */
+:root[data-sideways] .app:has(.chat) .top-left,
+:root[data-sideways] .app:has(.chat) .top-right {
+  display: none;
+}
+
+/* Sideways with the keyboard up, what's being said and the box are all that fit. */
+:root[data-sideways][data-keyboard] .chat-head:not(:focus-within),
+:root[data-sideways][data-keyboard] .chat-model:not(:focus-within),
+:root[data-sideways][data-keyboard] .model-menu-foot {
+  display: none;
+}
+
+/* A short phone on its side leaves about one line above the keyboard, so the box comes down to fit. */
+:root[data-sideways][data-keyboard] .chat-compose {
+  padding: 2px 6px;
+  border-top: 0;
+}
+
+:root[data-sideways][data-keyboard] .chat-compose .chat-field textarea {
+  min-height: 36px;
+  padding-block: 6px;
+}
+
+:root[data-sideways][data-keyboard] .chat-compose .btn.icon.primary {
+  height: 36px;
+}
+
+:root[data-sideways][data-keyboard] .btn.chat-stop {
+  right: 2px;
+  bottom: 2px;
+  height: 32px;
 }
 
 /* The chat's messages and results */
@@ -4340,6 +4382,11 @@ button.select.open {
   flex: 0 1 auto;
 }
 
+/* However long a model's name, this keeps its words. */
+.chat-model .menu-wrap + .menu-wrap {
+  flex: none;
+}
+
 .chat-model .btn {
   min-width: 0;
   max-width: 100%;
@@ -4361,6 +4408,8 @@ button.select.open {
   top: auto;
   bottom: calc(100% + 6px);
   left: 0;
+  max-height: calc(var(--visible, 100dvh) - 60px);
+  overflow-y: auto;
 }
 
 .chat-model .menu-wrap + .menu-wrap .menu {
@@ -4380,7 +4429,8 @@ button.select.open {
 }
 
 .model-scroll {
-  max-height: min(320px, calc(100dvh - 300px));
+  /* What's left of the screen after the search box, the way to the settings and the row it opens from. */
+  max-height: max(56px, min(320px, calc(var(--visible, 100dvh) - 170px)));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -4603,19 +4653,77 @@ div.chat-seam {
   }
 }
 
-/* A phone upright: settings get the whole height, since there's a lot to fill in and the on-screen keyboard takes much of it. */
-@media (max-width: 760px) and (min-height: 501px) {
-  .chat:has(.model-form-wrap) {
-    height: calc(100dvh - var(--chat-keyboard, 0px));
-    border-width: 0;
-    border-radius: 0;
-    padding-top: env(safe-area-inset-top);
+/* A finger needs more to aim at than the eye needs to see, and the room is better spent on what's been said: these reach further than they look. */
+@media (pointer: coarse) {
+  .chat-head .btn,
+  .chat-model .btn,
+  .chat-row .btn {
+    position: relative;
+  }
+
+  .chat-head .btn::after,
+  .chat-model .btn::after,
+  .chat-row .btn::after,
+  .model-close::after,
+  .chat-load::after,
+  .chat-edit::after {
+    content: "";
+    position: absolute;
+    inset: -6px -4px;
+  }
+
+  .chat-model .btn::after {
+    inset: -4px -2px;
+  }
+
+  .chat-edit::after {
+    inset: -10px -8px;
+  }
+
+  /* These clip what's outside them, so they grow into the space around them instead. Only as wide as its words, to keep clear of Edit in the message above. */
+  .chat-thought summary {
+    width: fit-content;
+    padding-block: 11px;
+    margin-block: -11px;
+  }
+
+  .chat-doc summary {
+    padding-block: 6px;
+    margin-block: -6px;
+  }
+
+  .model-form .input,
+  .model-actions .btn {
+    height: 40px;
   }
 }
 
 @media (max-width: 760px), (max-height: 500px) {
   /* Anything smaller and iOS zooms the page on focus. */
+  .chat-editing textarea,
+  .model-menu .input,
   .model-form .input {
     font-size: 16px;
+  }
+
+  /* Save stays in reach, however long the form or however little the keyboard leaves of it. */
+  .model-form-wrap {
+    padding-bottom: 0;
+    scroll-padding-bottom: 64px;
+  }
+
+  .model-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 0 -14px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--chrome);
+  }
+
+  /* Not while filling it in: they'd take up a second row of what little there is. */
+  :root[data-keyboard] .model-actions .danger {
+    display: none;
   }
 }

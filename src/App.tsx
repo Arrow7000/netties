@@ -4,7 +4,7 @@ import { type Doc, arrival, fromShareHash, loadInitialDoc, SHARE_LOAD_ERROR, sha
 import { Canvas, type Pad, createCamera } from "./ui/Canvas";
 import { CHAT_WIDTH, ChatPanel } from "./ui/Chat";
 import { CHAT, createChat } from "./ui/chatStore";
-import { compact, fingers, sideways } from "./ui/compact";
+import { compact, fingers, heightAtRest, sideways } from "./ui/compact";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { ExamplesMenu } from "./ui/ExamplesMenu";
 import { FEEDBACK, FeedbackDialog, FeedbackNudge } from "./ui/Feedback";
@@ -247,17 +247,14 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
       setViewport((n) => n + 1);
     };
     window.addEventListener("resize", resized);
-    // Turning the phone refits the net, once the canvas has its new size.
-    const turn = matchMedia("(orientation: portrait)");
-    const turned = () => compact() && requestAnimationFrame(() => requestAnimationFrame(() => camera.fit()));
-    turn.addEventListener("change", turned);
+    // Turning the phone refits the net, once the canvas has its new size. The keyboard coming up doesn't.
+    createEffect(on(sideways, () => compact() && requestAnimationFrame(() => requestAnimationFrame(() => camera.fit())), { defer: true }));
     // Safari zooms the whole page on a pinch, whatever touch-action says.
     const noPinch = (e: Event) => e.preventDefault();
     document.addEventListener("gesturestart", noPinch);
     onCleanup(() => {
       bar.disconnect();
       window.removeEventListener("resize", resized);
-      turn.removeEventListener("change", turned);
       document.removeEventListener("gesturestart", noPinch);
     });
   });
@@ -269,7 +266,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
     const room = { t: top.bottom + 12, r: sheet.r + 8, b: sheet.b + 12, l: top.left + 8 };
     if (!chat?.open()) return room;
     // The same share of the screen as the panel takes in styles.css.
-    return sideways() ? { ...room, l: innerWidth * 0.5 + 8 } : { ...room, b: innerHeight * 0.58 + 12 };
+    return sideways() ? { ...room, l: innerWidth * 0.5 + 8 } : { ...room, b: heightAtRest() * 0.58 + 12 };
   };
 
   /** Clicking a pair with no rule opens the rule editor for it. */

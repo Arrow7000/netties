@@ -262,7 +262,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
       <Show when={local() || custom()}>
         <label>
           Address
-          <input class="input" aria-label="Address" spellcheck={false} autocomplete="off" placeholder="http://localhost:8080/v1" value={url()} onInput={(e) => setUrl(e.currentTarget.value)} />
+          <input class="input" aria-label="Address" inputmode="url" autocapitalize="off" spellcheck={false} autocomplete="off" placeholder="http://localhost:8080/v1" value={url()} onInput={(e) => setUrl(e.currentTarget.value)} />
           <Show when={local() || isLocalAddress(normalizeUrl(url()))}>
             <span class="hint">Your browser may ask to let this site reach your computer or network: say yes. It goes straight there, and nothing passes through netties.</span>
           </Show>
@@ -297,7 +297,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
       </label>
       <label>
         {modelLabel()}
-        <input class="input" aria-label={modelLabel()} spellcheck={false} autocomplete="off" placeholder={nameHint(provider())} value={model()} onInput={(e) => setModel(e.currentTarget.value)} />
+        <input class="input" aria-label={modelLabel()} autocapitalize="off" spellcheck={false} autocomplete="off" placeholder={nameHint(provider())} value={model()} onInput={(e) => setModel(e.currentTarget.value)} />
         <Show when={preset()?.needsKey && !preset()?.openList && !key().trim()}>
           <span class="hint">Paste your key to see the models.</span>
         </Show>
@@ -449,7 +449,7 @@ export function ModelPicker(props: { chat: Chat }) {
           const typedOn = () => (chat.usable() ? chat.choice()!.provider : providers()[0]);
           return (
             <>
-              <input ref={box} class="input" aria-label="Search models" placeholder={typedOn() ? `Search, or type ${nameHint(typedOn()!)}` : "Search, or type a model's name"} spellcheck={false} autocomplete="off" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
+              <input ref={box} class="input" aria-label="Search models" placeholder={typedOn() ? `Search, or type ${nameHint(typedOn()!)}` : "Search, or type a model's name"} autocapitalize="off" spellcheck={false} autocomplete="off" value={query()} onInput={(e) => setQuery(e.currentTarget.value)} />
               <div class="model-scroll">
                 <For each={providers()}>{(id) => <ProviderModels chat={chat} provider={id} query={query()} onPick={close} />}</For>
                 <Show when={typed() && typedOn()}>
@@ -463,14 +463,16 @@ export function ModelPicker(props: { chat: Chat }) {
                   />
                 </Show>
               </div>
-              <hr />
-              <MenuItem
-                title="Providers and keys…"
-                onClick={() => {
-                  close();
-                  chat.openSettings();
-                }}
-              />
+              <div class="model-menu-foot">
+                <hr />
+                <MenuItem
+                  title="Providers and keys…"
+                  onClick={() => {
+                    close();
+                    chat.openSettings();
+                  }}
+                />
+              </div>
             </>
           );
         }}

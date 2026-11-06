@@ -545,17 +545,13 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
     following = anchored(log, setAtEnd);
     following.toEnd();
     size();
-    // A phone's keyboard covers the page rather than shrinking it: stay above it.
-    const vv = window.visualViewport;
-    if (vv) {
-      const fit = () => panel.style.setProperty("--chat-keyboard", `${Math.max(0, innerHeight - vv.height - vv.offsetTop)}px`);
-      vv.addEventListener("resize", fit);
-      vv.addEventListener("scroll", fit);
-      onCleanup(() => {
-        vv.removeEventListener("resize", fit);
-        vv.removeEventListener("scroll", fit);
-      });
-    }
+    // The panel changes size as the keyboard comes up, which can leave the field being typed in out of sight.
+    const reveal = new ResizeObserver(() => {
+      const on = document.activeElement;
+      if (panel.contains(on) && on?.matches("input, textarea")) on.scrollIntoView({ block: "nearest" });
+    });
+    reveal.observe(panel);
+    onCleanup(() => reveal.disconnect());
   });
 
   // Back from the settings: the chat is at its end, and the keyboard is back where it came from if that's still there, or else in the box.
