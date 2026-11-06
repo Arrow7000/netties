@@ -8,7 +8,7 @@ import * as I from "./icons";
 import { Menu, MenuItem } from "./Menu";
 import { effortName } from "../create/provider";
 import { EffortPicker, ModelPicker, ModelSettingsForm, Trouble } from "./ModelSettingsForm";
-import { nameOf } from "./modelSettings";
+import { nameOf, searchFor } from "./modelSettings";
 import { pieces } from "./pieces";
 
 /** Width of the panel on a desktop, which the canvas leaves room for. */
@@ -545,6 +545,11 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
   let panel!: HTMLDivElement;
   let files!: HTMLInputElement;
   const [imageError, setImageError] = createSignal("");
+  const [draggingFiles, setDraggingFiles] = createSignal(false);
+  // Enter/leave also fire for children: count them so crossing the composer or
+  // a thumbnail doesn't flicker the drop target.
+  let dragDepth = 0;
+  const resetDrag = () => { dragDepth = 0; setDraggingFiles(false); };
   const attach = (incoming: File[]) => {
     setImageError("");
     for (const file of incoming) {
@@ -644,6 +649,33 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
     <div
       class="chat"
       ref={panel}
+      onDragEnter={(e) => {
+        if (!e.dataTransfer?.types.includes("Files")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepth++;
+        setDraggingFiles(true);
+      }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer?.types.includes("Files")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={(e) => {
+        if (!dragDepth) return;
+        e.stopPropagation();
+        if (--dragDepth === 0) setDraggingFiles(false);
+      }}
+      onDragEnd={resetDrag}
+      onDrop={(e) => {
+        resetDrag();
+        if (!e.dataTransfer?.types.includes("Files")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        attach(Array.from(e.dataTransfer.files));
+        refocus();
+      }}
       role="complementary"
       aria-label="Chat"
       // So a click anywhere in it keeps the keyboard here, not on the canvas.
@@ -655,6 +687,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
         }
       }}
     >
+      <Show when={draggingFiles()}><div class="chat-drop-hint" aria-hidden="true">Drop images to attach</div></Show>
       <header class="chat-head">
         <ChatList chat={chat} onPick={refocus} />
         <button class="btn" onClick={() => (void chat.newChat(), refocus())} disabled={!chat.entries().length} title="Start a new conversation">
@@ -736,7 +769,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
       <div class="chat-model" style={{ display: setting() ? "none" : undefined }}>
         <ModelPicker chat={chat} />
         <EffortPicker chat={chat} />
-        <button class="btn" disabled={!["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "")} aria-pressed={!!chat.choice()?.webSearch && ["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "")} onClick={() => chat.setWebSearch(!chat.choice()?.webSearch)} title={["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "") ? "Let the model search the web. Searches are billed by your provider." : "Web search is available with Anthropic and OpenRouter."}>Web</button>
+        <button class="btn" disabled={!["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "")} aria-pressed={!!searchFor(chat.choice())} onClick={() => chat.setWebSearch(!searchFor(chat.choice()))} title={["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "") ? "Let the model search the web. Searches are billed by your provider." : "Web search is available with Anthropic and OpenRouter."}>Web</button>
         <button class="btn icon chat-settings" onClick={() => chat.openSettings()} title="Providers and keys" aria-label="Providers and keys">
           <I.Gear />
         </button>

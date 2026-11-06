@@ -14,10 +14,17 @@ const LIST_MS = 10 * 60_000;
 
 /** A model to use, and how hard it should think. */
 export interface Choice {
+  /** Enabled unless explicitly switched off, where the provider supplies search. */
   webSearch?: boolean;
   provider: string;
   model: string;
   effort: Effort;
+}
+
+/** The hosted search tool to offer; an absent preference means on. */
+export function searchFor(choice: Choice | undefined): "anthropic" | "openrouter" | undefined {
+  if (choice?.webSearch === false) return undefined;
+  return choice?.provider === "anthropic" || choice?.provider === "openrouter" ? choice.provider : undefined;
 }
 
 export interface ProviderEntry {
@@ -178,7 +185,7 @@ export function createModelSettings() {
     asker(choice: Choice, system: string): Asker {
       return (messages, signal) => {
         const c = connection(choice.provider);
-        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, webSearch: choice.webSearch && (choice.provider === "anthropic" || choice.provider === "openrouter") ? choice.provider : undefined, setup: setupFor(choice.provider) });
+        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, webSearch: searchFor(choice), setup: setupFor(choice.provider) });
       };
     },
     setupFor,

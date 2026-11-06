@@ -68,7 +68,7 @@ function browser() {
 
 /** The model, one call at a time, saying what it's told to. It names chats only if it's told how. */
 function model(title?: (said: string) => string | Promise<string>) {
-  const calls: { url: string; headers: Record<string, string>; body: { model: string; reasoning_effort?: string; messages: { role: string; content: unknown }[] }; signal?: AbortSignal; say(ev: { type: "thinking" | "text"; text: string }): void; end(text: string): void; fail(): void; finish(reason: string): void }[] = [];
+  const calls: { url: string; headers: Record<string, string>; body: { model: string; tools?: unknown[]; reasoning_effort?: string; messages: { role: string; content: unknown }[] }; signal?: AbortSignal; say(ev: { type: "thinking" | "text"; text: string }): void; end(text: string): void; fail(): void; finish(reason: string): void }[] = [];
   const enc = new TextEncoder();
   const data = (o: object | string) => enc.encode(`data: ${typeof o === "string" ? o : JSON.stringify(o)}\n\n`);
   const delta = (d: object, finish_reason: string | null = null) => data({ choices: [{ delta: d, finish_reason }] });
@@ -161,6 +161,27 @@ describe("chats", () => {
     await editing;
     await say(loaded, calls, "what did you see?");
     expect(JSON.stringify(calls.at(-1)!.body.messages)).toContain("data:image/png;base64,cGljdHVyZQ==");
+  });
+
+  it("enables hosted search by default and remembers an explicit opt-out after reload", async () => {
+    const b = browser();
+    b.local.set("netties:models", JSON.stringify({ providers: { openrouter: { key: "test-key" } }, default: { provider: "openrouter", model: "m", effort: "default" } }));
+    const calls = model();
+    const t = b.open();
+    await ready(t);
+    await say(t, calls, "find a reference");
+    expect(calls[0]!.body.tools).toEqual([{ type: "openrouter:web_search", parameters: { max_uses: 3 } }]);
+    t.chat.setWebSearch(false);
+    await say(t, calls, "answer without search");
+    expect(calls[1]!.body).not.toHaveProperty("tools");
+    const loaded = b.open(t.session);
+    await ready(loaded);
+    expect(loaded.chat.choice()?.webSearch).toBe(false);
+    await say(loaded, calls, "still without search");
+    expect(calls[2]!.body).not.toHaveProperty("tools");
+    loaded.chat.setWebSearch(true);
+    await say(loaded, calls, "search again");
+    expect(calls[3]!.body.tools).toBeDefined();
   });
 
   describe("the chat from before there was a list", () => {

@@ -488,7 +488,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
       const made = models.defaults();
       const had = t.choice();
       if (made && why?.kind !== "waiting" && had && models.usable(had)) {
-        if (takes.model || takes.level) choose(t, { ...(takes.model ? made : had), effort: takes.level ? made.effort : had.effort });
+        if (takes.model || takes.level) choose(t, { ...(takes.model ? made : had), effort: takes.level ? made.effort : had.effort, webSearch: had.webSearch });
       } else if (made && (why?.kind === "waiting" || !models.usable(chosen(t)))) t.setChoice(made);
       if (why?.kind !== "asked") why?.then();
     },

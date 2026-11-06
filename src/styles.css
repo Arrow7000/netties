@@ -3960,6 +3960,19 @@ button.select.open {
 .chat-log > * { flex-shrink: 0; }
 
 .chat-sources { display: flex; flex-direction: column; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.chat-drop-hint {
+  position: absolute;
+  inset: 4px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--chrome) 92%, transparent);
+  color: var(--text);
+  pointer-events: none;
+}
+
 .chat-images { display: flex; flex-wrap: wrap; gap: 6px; }
 .chat-images > div { position: relative; }
 .chat-images img { display: block; width: 72px; height: 72px; object-fit: contain; border-radius: 6px; }
