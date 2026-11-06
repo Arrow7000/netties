@@ -197,6 +197,11 @@ function TryView(props: { t: ShownTry; n: number; last: boolean; turn: Turn; now
           <Prose text={words()} seams={props.t.seams.map(seamText)} />
         </div>
       </Show>
+      <Show when={props.t.sources?.length}>
+        <div class="chat-sources" aria-label="Sources">
+          <For each={props.t.sources}>{(source) => <Show when={/^https?:\/\//i.test(source.url)}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title || source.url}</a></Show>}</For>
+        </div>
+      </Show>
       <Show when={props.t.looked}>
         {(names) => <div class="chat-status">Looked at {names().length === 1 ? "the example" : "the examples"} {names().join(", ")}</div>}
       </Show>
@@ -270,7 +275,10 @@ function UserView(props: { chat: Chat; entry: Extract<Entry, { kind: "user" }>; 
       when={editing()}
       fallback={
         <div class="chat-said">
-          <div class="chat-user">{props.entry.text}</div>
+          <div class="chat-user">
+            <ImagePreviews images={props.entry.images ?? []} />
+            {props.entry.text}
+          </div>
           <Show when={props.entry.at}>
             <button class="chat-edit" onClick={() => setEditing(true)} title="Change this message and send it again">
               Edit
@@ -514,12 +522,38 @@ function ChatList(props: { chat: Chat; onPick: () => void }) {
   );
 }
 
+/** Object URLs last only as long as their thumbnails; the saved data is the Blob. */
+function ImagePreview(props: { image: Blob }) {
+  const [url, setUrl] = createSignal("");
+  createEffect(() => {
+    const next = URL.createObjectURL(props.image);
+    setUrl(next);
+    onCleanup(() => URL.revokeObjectURL(next));
+  });
+  return <a href={url()} target="_blank" rel="noopener noreferrer"><img src={url()} alt="Attached image" /></a>;
+}
+
+function ImagePreviews(props: { images: Blob[]; remove?: (index: number) => void }) {
+  return <Show when={props.images.length}><div class="chat-images"><For each={props.images}>{(image, index) => <div><ImagePreview image={image} /><Show when={props.remove}><button type="button" class="btn" aria-label={`Remove image ${index() + 1}`} onClick={() => props.remove?.(index())}>×</button></Show></div>}</For></div></Show>;
+}
+
 /** The chat, beside the net on a desktop and in the lower part of a phone's screen. */
 export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: () => void }) {
   const chat = props.chat;
   let log!: HTMLDivElement;
   let area!: HTMLTextAreaElement;
   let panel!: HTMLDivElement;
+  let files!: HTMLInputElement;
+  const [imageError, setImageError] = createSignal("");
+  const attach = (incoming: File[]) => {
+    setImageError("");
+    for (const file of incoming) {
+      if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) { setImageError("Choose PNG, JPEG, WebP or GIF images."); continue; }
+      if (file.size > 5 * 1024 * 1024) { setImageError("Each image must be under 5 MB."); continue; }
+      if (chat.draftImages().length >= 4) { setImageError("Attach up to four images per message."); break; }
+      chat.setDraftImages((images) => [...images, file]);
+    }
+  };
   const [now, setNow] = createSignal(Date.now());
   const [atEnd, setAtEnd] = createSignal(true);
   let following: ReturnType<typeof anchored> | undefined;
@@ -593,14 +627,17 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
 
   const submit = () => {
     const text = chat.draft().trim();
-    if (!text) return;
+    const images = chat.draftImages();
+    if (!text && !images.length) return;
     // What's typed stays in the box until there's a model to send it to.
     if (!chat.usable()) return chat.withModel(submit);
     chat.setDraft("");
+    chat.setDraftImages([]);
+    setImageError("");
     area.value = "";
     size();
     following?.toEnd();
-    void chat.send(text);
+    void chat.send(text || "Please look at the attached images.", images);
   };
 
   return (
@@ -648,6 +685,10 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
           </button>
         </Show>
       </div>
+      <div class="chat-attachments" style={{ display: setting() ? "none" : undefined }}>
+        <ImagePreviews images={chat.draftImages()} remove={(i) => chat.setDraftImages((images) => images.filter((_, n) => n !== i))} />
+        <Show when={imageError()}><p role="alert" class="chat-note">{imageError()}</p></Show>
+      </div>
       <form
         class="chat-compose"
         style={{ display: setting() ? "none" : undefined }}
@@ -656,6 +697,8 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
           submit();
         }}
       >
+        <input ref={files} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={(e) => { attach(Array.from(e.currentTarget.files ?? [])); e.currentTarget.value = ""; }} />
+        <button type="button" class="btn" onClick={() => files.click()} title="Attach images (up to four, 5 MB each). Choose a model that accepts images." aria-label="Attach images">+</button>
         <div class="chat-field">
         <textarea
           ref={area}
@@ -664,6 +707,10 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
           placeholder="Message"
           aria-label="Message"
           value={chat.draft()}
+          onPaste={(e) => {
+            const images = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+            if (images.length) { e.preventDefault(); attach(images); }
+          }}
           onInput={(e) => {
             chat.setDraft(e.currentTarget.value);
             size();
@@ -682,13 +729,14 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
           </button>
         </Show>
         </div>
-        <button type="submit" class="btn icon primary" disabled={!chat.draft().trim()} title={chat.busy() ? "Stop this reply and send" : "Send"} aria-label="Send">
+        <button type="submit" class="btn icon primary" disabled={!chat.draft().trim() && !chat.draftImages().length} title={chat.busy() ? "Stop this reply and send" : "Send"} aria-label="Send">
           <I.Send />
         </button>
       </form>
       <div class="chat-model" style={{ display: setting() ? "none" : undefined }}>
         <ModelPicker chat={chat} />
         <EffortPicker chat={chat} />
+        <button class="btn" disabled={!["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "")} aria-pressed={!!chat.choice()?.webSearch && ["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "")} onClick={() => chat.setWebSearch(!chat.choice()?.webSearch)} title={["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "") ? "Let the model search the web. Searches are billed by your provider." : "Web search is available with Anthropic and OpenRouter."}>Web</button>
         <button class="btn icon chat-settings" onClick={() => chat.openSettings()} title="Providers and keys" aria-label="Providers and keys">
           <I.Gear />
         </button>

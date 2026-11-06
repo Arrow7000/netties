@@ -446,3 +446,63 @@ describe("listing models", () => {
     await expect(listModels(OPENAI, { fetch: f })).rejects.toMatchObject({ code: "failed" });
   });
 });
+
+describe("images and provider-run search", () => {
+  it("encodes image blobs for Chat Completions without leaking attachment fields", async () => {
+    const { f, calls } = provider(new Response(sse(piece({ content: "seen" }, "stop"), "[DONE]")));
+    await collect(ask(OPENAI, f, { messages: [{ role: "user", content: "look", images: [new Blob(["image"], { type: "image/png" })] }] }));
+    expect(calls[0]!.body.messages).toEqual([{ role: "system", content: "S" }, { role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,aW1hZ2U=" } }, { type: "text", text: "look" }] }]);
+    expect(calls[0]!.body).not.toHaveProperty("tools");
+  });
+
+  it("uses Anthropic image blocks, limits searches, and surfaces streamed citations", async () => {
+    const source = { url: "https://example.org/reference", title: "Reference" };
+    const { f, calls } = provider(new Response(sse(
+      { type: "content_block_start", content_block: { type: "server_tool_use", name: "web_search" } },
+      { type: "content_block_delta", delta: { type: "text_delta", text: "Answer" } },
+      { type: "content_block_delta", delta: { type: "citations_delta", citation: { type: "web_search_result_location", ...source } } },
+      { type: "message_delta", delta: { stop_reason: "end_turn" } }, { type: "message_stop" },
+    )));
+    const result = await collect(ask(ANTHROPIC, f, { webSearch: "anthropic", messages: [{ role: "user", content: "look", images: [new Blob(["image"], { type: "image/png" })] }] }));
+    expect(result.error).toBeUndefined();
+    expect(result.events).toContainEqual({ kind: "note", text: "Searching the web" });
+    expect(result.events).toContainEqual({ kind: "source", source: { type: "web_search_result_location", ...source } });
+    expect(calls[0]!.body.tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 3 }]);
+    expect(calls[0]!.body.messages).toEqual([{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "aW1hZ2U=" } }, { type: "text", text: "look" }] }]);
+  });
+
+  it("opts into OpenRouter's server tool and reads source annotations", async () => {
+    const source = { url: "https://example.org/", title: "Source" };
+    const { f, calls } = provider(new Response(sse(piece({ content: "Answer", annotations: [{ type: "url_citation", url_citation: source }] }, "stop"), "[DONE]")));
+    const result = await collect(ask(OPENAI, f, { webSearch: "openrouter" }));
+    expect(result.events).toContainEqual({ kind: "source", source });
+    expect(calls[0]!.body.tools).toEqual([{ type: "openrouter:web_search", parameters: { max_uses: 3 } }]);
+  });
+
+  it("doesn't silently retry without requested search when the provider refuses it", async () => {
+    const { f, calls } = provider(new Response('{"error":{"message":"tools not supported"}}', { status: 400 }));
+    expect((await collect(ask(OPENAI, f, { webSearch: "openrouter" }))).error).toBeInstanceOf(ModelError);
+    expect(calls).toHaveLength(1);
+  });
+});
+
+it("continues an Anthropic search pause with the original tool blocks", async () => {
+  const block = { type: "server_tool_use", id: "search_1", name: "web_search", input: {} };
+  const { f, calls } = provider(
+    new Response(sse(
+      { type: "content_block_start", index: 0, content_block: block },
+      { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":"nets"}' } },
+      { type: "content_block_stop", index: 0 },
+      { type: "message_delta", delta: { stop_reason: "pause_turn" } }, { type: "message_stop" },
+    )),
+    new Response(sse(
+      { type: "content_block_delta", delta: { type: "text_delta", text: "Found it." } },
+      { type: "message_delta", delta: { stop_reason: "end_turn" } }, { type: "message_stop" },
+    )),
+  );
+  const result = await collect(ask(ANTHROPIC, f, { webSearch: "anthropic" }));
+  expect(result.error).toBeUndefined();
+  expect(calls).toHaveLength(2);
+  expect((calls[1]!.body.messages as unknown[]).at(-1)).toEqual({ role: "assistant", content: [{ ...block, input: { query: "nets" } }] });
+  expect(result.events).toContainEqual({ kind: "text", text: "Found it." });
+});

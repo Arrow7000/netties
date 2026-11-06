@@ -364,3 +364,15 @@ describe("a chat brought back after a reload", () => {
     expect(settle(entries, c)).toEqual({ entries, conversation: c });
   });
 });
+
+it("keeps streamed source URLs in history and on the turn for follow-up questions", async () => {
+  const source = { url: "https://example.org/nets", title: "Nets" };
+  const ask: Asker = async function* () {
+    yield { kind: "text", text: "Found a reference." };
+    yield { kind: "source", source };
+  };
+  let turn = newTurn(0);
+  const result = await runTurn(newConversation(), "find a reference", "", { ask, onMessage: (m) => { turn = updateTurn(turn, m); } });
+  expect(turn.tries[0]?.sources).toEqual([source]);
+  expect(JSON.stringify(result.conversation.messages)).toContain(source.url);
+});

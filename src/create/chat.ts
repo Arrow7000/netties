@@ -1,7 +1,7 @@
 import { checkDocument, extractDocument } from "./check";
 import { type Block, type Message, TRIES } from "./client";
 import { examplesReply, namesAskedFor } from "./exampleDocs";
-import { type Effort, ModelError, type PlainMessage, type ReplyEvent } from "./provider";
+import { type Effort, ModelError, type PlainMessage, type ReplyEvent, type Source } from "./provider";
 
 /**
  * One turn of the chat: send what the visitor said to the model, check any
@@ -33,6 +33,7 @@ export const newConversation = (): Conversation => ({ messages: [] });
 
 /** One call to the model, as it unfolds. */
 export interface Try {
+  sources?: Source[];
   thinking: string;
   reply: string;
   /** When the thinking began, and how long it went on. */
@@ -90,7 +91,8 @@ export type TurnMsg =
   | { kind: "writing"; text: string }
   | { kind: "checked"; code: string; problem?: string; soft?: boolean }
   | { kind: "looked"; names: string[] }
-  | { kind: "over"; end: TurnEnd; at: number };
+  | { kind: "over"; end: TurnEnd; at: number }
+  | { kind: "source"; source: Source };
 
 /** Where a message was sent from, to go back there if it's edited. */
 export interface Rewind {
@@ -102,7 +104,7 @@ export interface Rewind {
 }
 
 /** What the chat shows: what was said, and what became of it. */
-export type Entry = { kind: "user"; text: string; at?: Rewind } | { kind: "turn"; turn: Turn };
+export type Entry = { kind: "user"; text: string; images?: Blob[]; at?: Rewind } | { kind: "turn"; turn: Turn };
 
 /** The conversation as it was just before that message. */
 export const rewind = (c: Conversation, at: Rewind): Conversation => ({ messages: c.messages.slice(0, at.messages), seen: at.seen, unsaid: at.unsaid });
@@ -120,13 +122,14 @@ export function settle(entries: Entry[], c: Conversation, by: CutBy = "reload"):
   if (last?.kind !== "turn" || last.turn.phase.kind === "over" || asked?.kind !== "user") return { entries, conversation: c };
   const cut = last.turn.tries.at(-1);
   // A reply that was picking up an earlier one was asked for by that, not by what the visitor said: that's already in the history.
-  const said = last.turn.tries.some((x) => x.resumed) ? RESUME : asked.text;
+  const resuming = last.turn.tries.some((x) => x.resumed);
+  const said = resuming ? RESUME : asked.text;
   return {
     entries: [...entries.slice(0, -1), { kind: "turn", turn: { ...last.turn, phase: { kind: "over", end: { kind: "stopped", by } } } }],
     conversation: {
       ...c,
       seen: undefined,
-      messages: [...c.messages, { role: "user", content: said }, { role: "assistant", content: [{ type: "text", text: cutShort(WHY[by], cut?.thinking ?? "", cut?.reply ?? "") }] }],
+      messages: [...c.messages, { role: "user", content: said, ...(!resuming && asked.images?.length ? { images: asked.images } : {}) }, { role: "assistant", content: [{ type: "text", text: cutShort(WHY[by], cut?.thinking ?? "", cut?.reply ?? "") }] }],
     },
   };
 }
@@ -216,6 +219,7 @@ export function joinResumed(tries: Try[]): ShownTry[] {
       ...t,
       thinking: [before.thinking, t.thinking].filter(Boolean).join("\n\n"),
       ...(before.thinking || t.thinking ? { thoughtMs: thought, thoughtFrom: t.thoughtFrom === undefined ? before.thoughtFrom : t.thoughtFrom - (before.thoughtMs ?? 0) } : {}),
+      sources: [...(before.sources ?? []), ...(t.sources ?? [])].filter((s, i, all) => all.findIndex((x) => x.url === s.url) === i),
       note: before.note ?? t.note,
       // The mark goes right after the last word, ahead of any line breaks, so whatever comes next still starts its own line.
       words: said ? said + String.fromCharCode(SEAM_MARK + before.seams.length) + before.words.slice(said.length) + words : words,
@@ -238,6 +242,8 @@ export function updateTurn(t: Turn, msg: TurnMsg): Turn {
   switch (msg.kind) {
     case "try":
       return { ...t, phase: { kind: "waiting" }, tries: [...t.tries, { thinking: "", reply: "", ...(msg.resumed ? { resumed: true } : {}), ...(t.by ? { by: t.by } : {}) }] };
+    case "source":
+      return last((x) => ({ ...x, sources: [...(x.sources ?? []).filter((s) => s.url !== msg.source.url), msg.source] }));
     case "note":
       return last((x) => ({ ...x, note: msg.text }));
     case "thinking":
@@ -270,6 +276,7 @@ export function userMessage(request: string, doc: string, c: Conversation): stri
 
 export interface TurnOptions {
   ask: Asker;
+  images?: Blob[];
   onMessage?: (m: TurnMsg) => void;
   signal?: AbortSignal;
   /** Why `signal` fired. */
@@ -308,6 +315,7 @@ export function plain(m: Message): PlainMessage {
 async function ask(messages: Message[], opts: TurnOptions): Promise<Asked> {
   let text = "";
   let thinking = "";
+  const sources = new Map<string, Source>();
   try {
     for await (const ev of opts.ask(messages.map(plain), opts.signal)) {
       if (ev.kind === "thinking") {
@@ -316,10 +324,14 @@ async function ask(messages: Message[], opts: TurnOptions): Promise<Asked> {
       } else if (ev.kind === "text") {
         text += ev.text;
         opts.onMessage?.({ kind: "writing", text: ev.text });
-      } else opts.onMessage?.({ kind: "note", text: ev.text });
+      } else if (ev.kind === "source") {
+        sources.set(ev.source.url, ev.source);
+        opts.onMessage?.(ev);
+      }
+      else opts.onMessage?.({ kind: "note", text: ev.text });
     }
     if (opts.signal?.aborted) return { kind: "stopped", thinking, text };
-    return { kind: "reply", thinking, text, content: [{ type: "text", text }] };
+    return { kind: "reply", thinking, text, content: [{ type: "text", text: text + (sources.size ? "\n\nSources:\n" + [...sources.values()].map((s) => `${s.title}: ${s.url}`).join("\n") : "") }] };
   } catch (e) {
     if (opts.signal?.aborted) return { kind: "stopped", thinking, text };
     if (e instanceof ModelError) return { kind: "failed", thinking, text, code: e.code, message: e.message };
@@ -344,7 +356,7 @@ const orSaySo = (feedback: string) => `netties says: ${feedback}\n\nIf that isn'
  * the reply or a note saying what became of it, since a model's turns have to alternate.
  */
 export async function runTurn(c: Conversation, request: string, doc: string, opts: TurnOptions): Promise<{ end: TurnEnd; conversation: Conversation }> {
-  const messages: Message[] = [...c.messages, { role: "user", content: userMessage(request, doc, c) }];
+  const messages: Message[] = [...c.messages, { role: "user", content: userMessage(request, doc, c), ...(opts.images?.length ? { images: opts.images } : {}) }];
   const close = (note: string): Message => ({ role: "assistant", content: [{ type: "text", text: note }] });
   /** Unless a document is accepted, the model and the canvas no longer agree. */
   const over = (end: TurnEnd, unsaid?: string) => ({ end, conversation: { messages, unsaid, seen: end.kind === "said" ? c.seen : undefined } });

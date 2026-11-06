@@ -14,6 +14,7 @@ const LIST_MS = 10 * 60_000;
 
 /** A model to use, and how hard it should think. */
 export interface Choice {
+  webSearch?: boolean;
   provider: string;
   model: string;
   effort: Effort;
@@ -177,7 +178,7 @@ export function createModelSettings() {
     asker(choice: Choice, system: string): Asker {
       return (messages, signal) => {
         const c = connection(choice.provider);
-        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, setup: setupFor(choice.provider) });
+        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, webSearch: choice.webSearch && (choice.provider === "anthropic" || choice.provider === "openrouter") ? choice.provider : undefined, setup: setupFor(choice.provider) });
       };
     },
     setupFor,

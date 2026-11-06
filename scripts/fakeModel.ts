@@ -83,7 +83,7 @@ const serveChat: Connect.NextHandleFunction = async (req, res) => {
   const send = (delta: object, finish_reason: string | null = null) => res.write(`data: ${JSON.stringify({ choices: [{ delta, finish_reason }] })}\n\n`);
 
   const system = body.messages[0]!;
-  const talk = body.messages.slice(1);
+  const talk = body.messages.slice(1).map((m) => ({ ...m, content: Array.isArray(m.content) ? (m.content as { type: string; text?: string }[]).filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n") : m.content }));
   if (system.content === TITLE_SYSTEM) {
     send({ content: talk[0]!.content.split(/\s+/).slice(0, 6).join(" ") }, "stop");
     res.end("data: [DONE]\n\n");

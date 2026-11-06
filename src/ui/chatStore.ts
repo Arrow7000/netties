@@ -94,6 +94,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     }
   };
   const [draft, setDraft] = createSignal("");
+  const [draftImages, setDraftImages] = createSignal<Blob[]>([]);
   /** The settings on the screen, and why. */
   const [settings, setSettings] = createSignal<SettingsWhy | undefined>();
   const chosen = (t: Thread) => t.choice() ?? models.defaults();
@@ -143,7 +144,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     t.conversation = data.chat.conversation;
     t.setChoice(data.chat.choice);
     // What hasn't changed stays as it is on the screen, so an open document doesn't close whenever the other tab saves.
-    t.setEntries((old) => data.chat.entries.map(unhold).map((entry, i) => (JSON.stringify(entry) === JSON.stringify(old[i]) ? old[i]! : entry)));
+    t.setEntries((old) => data.chat.entries.map(unhold).map((entry, i) => (!(entry.kind === "user" && entry.images?.length) && JSON.stringify(entry) === JSON.stringify(old[i]) ? old[i]! : entry)));
   };
 
   const printed = () => printProgram(decode(ed.toDoc()));
@@ -202,7 +203,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     const choice = chosen(t);
     if (!models.usable(choice)) return;
     askedToName.add(t.id);
-    const title = await askTitle(text, models.asker({ ...choice, effort: "off" }, TITLE_SYSTEM));
+    const title = await askTitle(text, models.asker({ ...choice, effort: "off", webSearch: false }, TITLE_SYSTEM));
     if (!title) return;
     const first = threadOf(t.id)?.entries().find((e) => e.kind === "user");
     if (first?.kind === "user" && first.text !== text) return;
@@ -304,14 +305,14 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     await t.running.done;
   };
 
-  const send = async (text: string) => {
+  const send = async (text: string, images?: Blob[]) => {
     await moving;
     const t = current();
     await interrupt(t, "message");
-    return begin(t, text);
+    return begin(t, text, images);
   };
 
-  const begin = async (t: Thread, text: string) => {
+  const begin = async (t: Thread, text: string, images?: Blob[]) => {
     // A reply going on in another tab ends here: that tab stops when it hears about this.
     const first = !t.entries().length;
     const before = settle(t.entries(), t.conversation, "message");
@@ -321,7 +322,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     const at: Rewind = { messages: t.conversation.messages.length, seen: t.conversation.seen, unsaid: t.conversation.unsaid, doc: printed() };
     // From here on it has a model of its own, whatever becomes of the choice for new chats.
     t.setChoice(chosen(t));
-    t.setEntries((es) => [...es.map(unhold), { kind: "user", text, at }, { kind: "turn", turn: newTurn(Date.now(), tagOf(t)) }]);
+    t.setEntries((es) => [...es.map(unhold), { kind: "user", text, at, ...(images?.length ? { images } : {}) }, { kind: "turn", turn: newTurn(Date.now(), tagOf(t)) }]);
     if (first) {
       t.title = undefined;
       void name(t, text);
@@ -330,11 +331,11 @@ export function createChat(ed: Editor, models = createModelSettings()) {
       if (said?.kind === "user") void name(t, said.text);
     }
     persist(t);
-    return run(t, index, text, false);
+    return run(t, index, text, false, images);
   };
 
   /** Get a reply for the turn at this index, asking this. */
-  const run = async (t: Thread, index: number, request: string, resuming: boolean) => {
+  const run = async (t: Thread, index: number, request: string, resuming: boolean, images?: Blob[]) => {
     const ctrl = new AbortController();
     let saved = Date.now();
     const choice = chosen(t)!;
@@ -350,7 +351,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     };
     const go = async () => {
       const ask = models.asker(choice, CHAT_SYSTEM);
-      const { end, conversation: next } = await runTurn(t.conversation, request, printed(), { ask, onMessage, signal: ctrl.signal, cutBy: () => t.cutBy, resuming });
+      const { end, conversation: next } = await runTurn(t.conversation, request, printed(), { ask, images, onMessage, signal: ctrl.signal, cutBy: () => t.cutBy, resuming });
       // Started over while this was going, or deleted: it no longer belongs to anything.
       if (t.running?.stop !== ctrl || leaving) return;
       t.conversation = next;
@@ -404,14 +405,14 @@ export function createChat(ed: Editor, models = createModelSettings()) {
       console.error("couldn't restore the net", err);
       ed.notify("Couldn't put the net back as it was, so it's staying as it is.");
     }
-    return begin(t, text);
+    return begin(t, text, e.images);
   };
 
   /** Ask again what this turn was asked. A message saved before edits existed has nowhere to go back to, so it's simply sent again. */
   const retry = (index: number) => {
     const asked = entries()[index - 1];
     if (asked?.kind !== "user") return;
-    withModel(() => void (asked.at ? edit(index - 1, asked.text) : send(asked.text)), "retry");
+    withModel(() => void (asked.at ? edit(index - 1, asked.text) : send(asked.text, asked.images)), "retry");
   };
 
   return {
@@ -429,6 +430,8 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     replying,
     draft,
     setDraft,
+    draftImages,
+    setDraftImages,
     models,
     /** The model the chat on the screen uses, if there is one yet. */
     choice: () => chosen(current()),
@@ -436,7 +439,11 @@ export function createChat(ed: Editor, models = createModelSettings()) {
     usable,
     setModel(provider: string, model: string) {
       const c = chosen(current());
-      choose(current(), { provider, model, effort: c?.effort ?? "default" });
+      choose(current(), { provider, model, effort: c?.effort ?? "default", webSearch: c?.webSearch });
+    },
+    setWebSearch(webSearch: boolean) {
+      const c = chosen(current());
+      if (c) choose(current(), { ...c, webSearch });
     },
     setEffort(effort: Effort) {
       const c = chosen(current());

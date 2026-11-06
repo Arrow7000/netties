@@ -7,4 +7,4 @@ export const feedbackMessage = (feedback: string) => `netties says: ${feedback}\
 
 /** A content block of the model's reply. */
 export type Block = { type: string; text?: string };
-export type Message = { role: "user"; content: string } | { role: "assistant"; content: Block[] };
+export type Message = { role: "user"; content: string; images?: Blob[] } | { role: "assistant"; content: Block[] };

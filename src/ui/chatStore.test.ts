@@ -137,6 +137,32 @@ describe("chats", () => {
     await settled();
   };
 
+  it("keeps image blobs across reload, sends them in later context, and preserves them when editing", async () => {
+    const b = browser();
+    const calls = model();
+    const t = b.open();
+    await ready(t);
+    const image = new Blob(["picture"], { type: "image/png" });
+    const sent = t.chat.send("look", [image]);
+    await vi.waitFor(() => expect(calls.length).toBe(1));
+    calls[0]!.end("Seen.");
+    await sent;
+    await settled();
+    const loaded = b.open(t.session);
+    await ready(loaded);
+    const entry = loaded.chat.entries()[0];
+    expect(entry?.kind).toBe("user");
+    if (entry?.kind !== "user") throw new Error("missing message");
+    expect(await entry.images?.[0]?.text()).toBe("picture");
+    const editing = loaded.chat.edit(0, "look again");
+    await vi.waitFor(() => expect(calls.length).toBe(2));
+    expect(JSON.stringify(calls[1]!.body.messages)).toContain("data:image/png;base64,cGljdHVyZQ==");
+    calls[1]!.end("Seen again.");
+    await editing;
+    await say(loaded, calls, "what did you see?");
+    expect(JSON.stringify(calls.at(-1)!.body.messages)).toContain("data:image/png;base64,cGljdHVyZQ==");
+  });
+
   describe("the chat from before there was a list", () => {
     const old = { entries: [{ kind: "user", text: "kept\nand more" }, { kind: "turn", turn: { tries: [], phase: { kind: "over", end: { kind: "said" } }, since: 1 } }], conversation: { messages: [] } };
 

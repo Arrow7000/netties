@@ -154,10 +154,13 @@ export class ModelError extends Error {
 }
 
 /** What a model sent, as it comes. A note is something the visitor should know about how the request was taken. */
-export type ReplyEvent = { kind: "text"; text: string } | { kind: "thinking"; text: string } | { kind: "note"; text: string };
+export type ReplyEvent = { kind: "text"; text: string } | { kind: "thinking"; text: string } | { kind: "note"; text: string } | { kind: "source"; source: Source };
+
+export interface Source { url: string; title: string }
 
 export interface Ask {
   connection: Connection;
+  webSearch?: "anthropic" | "openrouter";
   model: string;
   effort: Effort;
   system: string;
@@ -171,6 +174,7 @@ export interface Ask {
 export interface PlainMessage {
   role: "user" | "assistant";
   content: string;
+  images?: Blob[];
 }
 
 /** The settings that a model might refuse, one at a time, and what the visitor is told if it does. */
@@ -183,10 +187,24 @@ interface Optional {
 /** Said when a model turns down a reasoning level, which may only be that one. */
 export const levelRefused = (e: Effort) => (e === "off" ? "This model can't turn reasoning off, so it's using its own level." : `This model doesn't take the reasoning level ${effortName(e)}, so it's using its own.`);
 
-function request(a: Ask): { url: string; headers: Record<string, string>; body: Record<string, unknown>; optional: Optional[] } {
+async function request(a: Ask): Promise<{ url: string; headers: Record<string, string>; body: Record<string, unknown>; optional: Optional[] }> {
   const c = a.connection;
+  const messages = await Promise.all(a.messages.map(async (m) => {
+    if (!m.images?.length) return { role: m.role, content: m.content };
+    const images = await Promise.all(m.images.map(async (blob) => {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      const data = btoa(binary);
+      return c.wire === "anthropic"
+        ? { type: "image", source: { type: "base64", media_type: blob.type, data } }
+        : { type: "image_url", image_url: { url: `data:${blob.type};base64,${data}` } };
+    }));
+    return { role: m.role, content: [...images, { type: "text", text: m.content || "Describe this image." }] };
+  }));
   if (c.wire === "anthropic") {
-    const body: Record<string, unknown> = { model: a.model, stream: true, max_tokens: c.maxTokens ?? 64_000, system: a.system, messages: a.messages, cache_control: { type: "ephemeral" }, thinking: { type: "adaptive", display: "summarized" }, ...c.extra };
+    const body: Record<string, unknown> = { model: a.model, stream: true, max_tokens: c.maxTokens ?? 64_000, system: a.system, messages, cache_control: { type: "ephemeral" }, thinking: { type: "adaptive", display: "summarized" }, ...c.extra };
+    if (a.webSearch === "anthropic") body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }];
     // Newer models always think, and refuse to be told not to, so "off" is as little as they'll do.
     if (a.effort === "off") delete body.thinking;
     if (a.effort !== "default") body.output_config = { effort: a.effort === "off" || a.effort === "minimal" ? "low" : a.effort };
@@ -201,7 +219,8 @@ function request(a: Ask): { url: string; headers: Record<string, string>; body: 
       ],
     };
   }
-  const body: Record<string, unknown> = { model: a.model, stream: true, messages: [{ role: "system", content: a.system }, ...a.messages], ...c.extra };
+  const body: Record<string, unknown> = { model: a.model, stream: true, messages: [{ role: "system", content: a.system }, ...messages], ...c.extra };
+  if (a.webSearch === "openrouter") body.tools = [{ type: "openrouter:web_search", parameters: { max_uses: 3 } }];
   if (a.effort !== "default") body.reasoning_effort = a.effort === "off" ? "none" : a.effort;
   if (c.maxTokens) body.max_tokens = c.maxTokens;
   return {
@@ -292,7 +311,7 @@ async function* dataLines(body: ReadableStream<Uint8Array>): AsyncGenerator<stri
 }
 
 /** How a reply stands after a piece of the stream. */
-type Piece = { events: ReplyEvent[]; finished?: "done" | "cut-off" | "refused" };
+type Piece = { events: ReplyEvent[]; finished?: "done" | "cut-off" | "refused" | "pause" };
 
 /**
  * Local models often write their thinking into the reply between <think> tags.
@@ -363,7 +382,7 @@ function openAiReader(c: Connection) {
       if (data === "[DONE]") return { events: tags.flush(), finished: "done" };
       const chunk = JSON.parse(data) as {
         error?: { message?: string } | string;
-        choices?: { delta?: { content?: string | null; reasoning?: string | null; reasoning_content?: string | null }; finish_reason?: string | null }[];
+        choices?: { delta?: { content?: string | null; annotations?: { url_citation?: Source }[]; reasoning?: string | null; reasoning_content?: string | null }; finish_reason?: string | null }[];
       };
       if (chunk.error) throw new ModelError("failed", `${c.name}: ${typeof chunk.error === "string" ? chunk.error : (chunk.error.message ?? "the model reported an error")}`);
       const choice = chunk.choices?.[0];
@@ -371,6 +390,9 @@ function openAiReader(c: Connection) {
       const thinking = choice?.delta?.reasoning ?? choice?.delta?.reasoning_content;
       if (thinking) events.push({ kind: "thinking", text: thinking });
       if (choice?.delta?.content) events.push(...tags.push(choice.delta.content));
+      for (const annotation of choice?.delta?.annotations ?? []) {
+        if (annotation.url_citation) events.push({ kind: "source", source: annotation.url_citation });
+      }
       const stop = choice?.finish_reason;
       if (!stop) return { events };
       events.push(...tags.flush());
@@ -384,9 +406,14 @@ function anthropicReader(c: Connection) {
   let stop: string | undefined;
   return {
     read(data: string): Piece {
-      const ev = JSON.parse(data) as { type: string; delta?: { type?: string; text?: string; thinking?: string; stop_reason?: string }; error?: { message?: string } };
+      const ev = JSON.parse(data) as { type: string; delta?: { type?: string; text?: string; thinking?: string; stop_reason?: string; citation?: Source }; content_block?: { type?: string; name?: string; content?: { type?: string; error_code?: string } }; error?: { message?: string } };
       switch (ev.type) {
+        case "content_block_start":
+          if (ev.content_block?.type === "server_tool_use" && ev.content_block.name === "web_search") return { events: [{ kind: "note", text: "Searching the web" }] };
+          if (ev.content_block?.content?.type === "web_search_tool_result_error") return { events: [{ kind: "note", text: `Web search failed: ${ev.content_block.content.error_code ?? "unknown error"}` }] };
+          return { events: [] };
         case "content_block_delta":
+          if (ev.delta?.type === "citations_delta" && ev.delta.citation?.url) return { events: [{ kind: "source", source: ev.delta.citation }] };
           if (ev.delta?.type === "text_delta" && ev.delta.text) return { events: [{ kind: "text", text: ev.delta.text }] };
           if (ev.delta?.type === "thinking_delta" && ev.delta.thinking) return { events: [{ kind: "thinking", text: ev.delta.thinking }] };
           return { events: [] };
@@ -394,7 +421,7 @@ function anthropicReader(c: Connection) {
           stop = ev.delta?.stop_reason ?? stop;
           return { events: [] };
         case "message_stop":
-          return { events: [], finished: stop === "max_tokens" ? "cut-off" : stop === "refusal" ? "refused" : "done" };
+          return { events: [], finished: stop === "pause_turn" ? "pause" : stop === "max_tokens" ? "cut-off" : stop === "refusal" ? "refused" : "done" };
         case "error":
           throw new ModelError("failed", `${c.name}: ${ev.error?.message ?? "the model reported an error"}`);
         default:
@@ -405,8 +432,9 @@ function anthropicReader(c: Connection) {
 }
 
 /** Send the request, going again without any setting the model turns down. */
-async function send(a: Ask, doFetch: typeof fetch, onNote: (text: string) => void): Promise<Response> {
-  const { url, headers, body, optional } = request(a);
+async function send(a: Ask, doFetch: typeof fetch, onNote: (text: string) => void, continuation: unknown[] = []): Promise<Response> {
+  const { url, headers, body, optional } = await request(a);
+  if (continuation.length) body.messages = [...(body.messages as unknown[]), ...continuation];
   for (;;) {
     let res: Response;
     try {
@@ -431,35 +459,61 @@ async function send(a: Ask, doFetch: typeof fetch, onNote: (text: string) => voi
 
 /** A reply as it comes. It ends normally only when the reply is whole; anything else throws a ModelError, or the abort if it was stopped. */
 export async function* streamReply(a: Ask): AsyncGenerator<ReplyEvent, void> {
-  const notes: string[] = [];
-  const res = await send(a, a.fetch ?? fetch, (t) => notes.push(t));
-  for (const text of notes) yield { kind: "note", text };
-  const reader = a.connection.wire === "anthropic" ? anthropicReader(a.connection) : openAiReader(a.connection);
-  let finished: Piece["finished"];
-  try {
-    for await (const data of dataLines(res.body!)) {
-      let piece: Piece;
-      try {
-        piece = reader.read(data);
-      } catch (e) {
-        if (e instanceof SyntaxError) continue;
-        throw e;
+  const continuation: unknown[] = [];
+  for (let round = 0; ; round++) {
+    const notes: string[] = [];
+    const res = await send(a, a.fetch ?? fetch, (t) => notes.push(t), continuation);
+    for (const text of notes) yield { kind: "note", text };
+    const reader = a.connection.wire === "anthropic" ? anthropicReader(a.connection) : openAiReader(a.connection);
+    let finished: Piece["finished"];
+    // Keep the server's blocks intact when Anthropic pauses a long tool turn.
+    const blocks: Record<string, unknown>[] = [];
+    const inputs = new Map<number, string>();
+    try {
+      for await (const data of dataLines(res.body!)) {
+        let piece: Piece;
+        try {
+          piece = reader.read(data);
+          if (a.connection.wire === "anthropic") {
+            const ev = JSON.parse(data);
+            if (ev.type === "content_block_start") blocks[ev.index] = ev.content_block;
+            if (ev.type === "content_block_delta") {
+              const block = blocks[ev.index];
+              const d = ev.delta;
+              if (block && d.type === "text_delta") block.text = String(block.text ?? "") + d.text;
+              if (block && d.type === "thinking_delta") block.thinking = String(block.thinking ?? "") + d.thinking;
+              if (block && d.type === "signature_delta") block.signature = String(block.signature ?? "") + d.signature;
+              if (d.type === "input_json_delta") inputs.set(ev.index, (inputs.get(ev.index) ?? "") + d.partial_json);
+              if (block && d.type === "citations_delta") block.citations = [...(block.citations as unknown[] ?? []), d.citation];
+            }
+            if (ev.type === "content_block_stop" && inputs.has(ev.index)) blocks[ev.index]!.input = JSON.parse(inputs.get(ev.index)!);
+          }
+        } catch (e) {
+          if (e instanceof SyntaxError) continue;
+          throw e;
+        }
+        yield* piece.events;
+        if (piece.finished) {
+          // The [DONE] after a reply that was cut off doesn't make it whole.
+          finished ??= piece.finished;
+          if (data === "[DONE]" || a.connection.wire === "anthropic") break;
+        }
       }
-      yield* piece.events;
-      if (piece.finished) {
-        // The [DONE] after a reply that was cut off doesn't make it whole.
-        finished ??= piece.finished;
-        if (data === "[DONE]" || a.connection.wire === "anthropic") break;
-      }
+    } catch (e) {
+      if (e instanceof ModelError || a.signal?.aborted) throw e;
+      throw new ModelError("dropped", `The connection to ${a.connection.name} dropped part way through the reply.`);
     }
-  } catch (e) {
-    if (e instanceof ModelError || a.signal?.aborted) throw e;
-    throw new ModelError("dropped", `The connection to ${a.connection.name} dropped part way through the reply.`);
+    if (a.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    if (finished === "pause") {
+      if (round >= 2) throw new ModelError("failed", "The provider kept pausing the web search. Try again with a narrower question.");
+      continuation.push({ role: "assistant", content: blocks });
+      continue;
+    }
+    if (finished === "cut-off") throw new ModelError("cut-off", "The reply hit its length limit and got cut off.");
+    if (finished === "refused") throw new ModelError("refused", "The model declined that request.");
+    if (!finished) throw new ModelError("dropped", `The connection to ${a.connection.name} dropped part way through the reply.`);
+    return;
   }
-  if (a.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-  if (finished === "cut-off") throw new ModelError("cut-off", "The reply hit its length limit and got cut off.");
-  if (finished === "refused") throw new ModelError("refused", "The model declined that request.");
-  if (!finished) throw new ModelError("dropped", `The connection to ${a.connection.name} dropped part way through the reply.`);
 }
 
 export interface ModelInfo {

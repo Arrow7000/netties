@@ -3955,6 +3955,17 @@ button.select.open {
   gap: 12px;
 }
 
+/* Rows must retain their full height inside the scrolling flex column. Otherwise
+   a long reply can shrink earlier rows and paint over their collapse controls. */
+.chat-log > * { flex-shrink: 0; }
+
+.chat-sources { display: flex; flex-direction: column; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.chat-images { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-images > div { position: relative; }
+.chat-images img { display: block; width: 72px; height: 72px; object-fit: contain; border-radius: 6px; }
+.chat-images button { position: absolute; right: 0; top: 0; background: var(--chrome); padding: 0 5px; }
+.chat-attachments:has(.chat-images), .chat-attachments:has([role="alert"]) { padding: 6px 14px; }
+
 .chat-empty {
   margin: 0;
   color: var(--muted);
@@ -4024,9 +4035,18 @@ button.select.open {
   overflow-wrap: anywhere;
 }
 
+.chat-thought summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--chrome);
+}
+
+.chat-model .btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+
 .chat-thought > div {
   margin-top: 6px;
-  max-height: 200px;
+  max-height: min(50dvh, 480px);
   overflow-y: auto;
   overscroll-behavior: contain;
   color: var(--muted);
