@@ -162,20 +162,32 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
   };
   const level = () => (levels().some((l) => l.id === effort()) ? effort() : "default");
 
-  /** Whether saving only puts a failed chat's key or address right: the same provider, and the model field left alone. Then it's on the model it was on, and new chats are too. */
+  /** The level the form started on, to tell if it has been changed. */
+  const startLevel = effort();
+
+  /**
+   * Whether the chat on the screen stays on its model when this is saved: the same
+   * provider and the model field left alone, as in only changing a key. Changing the
+   * model moves the chat too, as that's what someone changing it in a chat is after.
+   */
   const keepsChat = () => {
     const w = why();
-    return w?.kind === "fixing" && w.code !== "model" && props.chat.choice()?.provider === provider() && model().trim() === filled();
+    return !(w?.kind === "fixing" && w.code === "model") && provider() === start && model().trim() === filled();
   };
 
-  /** What the chat being put right is on, if that isn't what's in the model field. */
-  const chatOnOther = () => (why()?.kind === "fixing" && props.chat.choice()?.model !== model().trim() ? props.chat.choice()?.model : undefined);
+  /** What the chat on the screen is on, if it's in the middle of something and that isn't what's in the form. */
+  const chatOnOther = () => {
+    const c = props.chat.choice();
+    return why()?.kind !== "waiting" && props.chat.entries().length && c && (c.provider !== provider() || c.model !== model().trim()) ? c.model : undefined;
+  };
 
   const save = () => {
     if (!canSave()) return;
     const keep = keepsChat();
-    models.save(provider(), entry(), level(), !keep);
-    props.chat.closeSettings(true, keep);
+    const takes = { model: !keep, level: effort() !== startLevel };
+    // Only a chat being put right can keep new chats where they were: from the settings, this is what they're being set to.
+    models.save(provider(), entry(), level(), !(keep && why()?.kind === "fixing"));
+    props.chat.closeSettings(true, takes);
     props.onSaved();
   };
 

@@ -36,6 +36,12 @@ export type SettingsWhy =
   /** A reply failed in a way the settings might put right, and goes again after them. */
   | { kind: "fixing"; code: string; message: string; action: "resume" | "retry"; then: () => void };
 
+/** What saving the settings changes for the chat on the screen. */
+export interface ChatTakes {
+  model: boolean;
+  level: boolean;
+}
+
 /** What tabs tell each other. Tabs on the same chat follow each other; others just keep their lists up to date. */
 type News = { id: string; listing: Listing; chat: Saved } | { id: string; gone: true } | { id: string; title: string };
 
@@ -462,18 +468,20 @@ export function createChat(ed: Editor, models = createModelSettings()) {
       });
     },
     /**
-     * Leave the settings. Having saved them, a chat that needed a model or was
-     * being put right takes the new choice, and whatever was waiting goes ahead.
-     * `keepChoice` is for a chat that only needed its key or address changed, which stays on its model.
+     * Leave the settings. Having saved them, a chat that needed a model takes the new
+     * choice, one that already has a model takes the parts of it that `takes` says were
+     * changed, and whatever was waiting goes ahead. A chat that goes by the choice for
+     * new chats has nothing to change.
      */
-    closeSettings(saved = false, keepChoice = false) {
+    closeSettings(saved = false, takes: ChatTakes = { model: true, level: false }) {
       const why = settings();
       setSettings(undefined);
       if (!saved) return;
       const t = current();
       const made = models.defaults();
-      if (made && why?.kind === "fixing") {
-        if (!keepChoice) choose(t, { ...made, effort: t.choice()?.effort ?? made.effort });
+      const had = t.choice();
+      if (made && why?.kind !== "waiting" && had && models.usable(had)) {
+        if (takes.model || takes.level) choose(t, { ...(takes.model ? made : had), effort: takes.level ? made.effort : had.effort });
       } else if (made && (why?.kind === "waiting" || !models.usable(chosen(t)))) t.setChoice(made);
       if (why?.kind !== "asked") why?.then();
     },

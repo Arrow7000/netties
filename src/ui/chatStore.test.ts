@@ -958,7 +958,7 @@ describe("chats", () => {
         t.chat.setModel("custom", "picked");
         t.chat.fixSettings(1);
         t.chat.models.save("custom", { url: "https://model.test/v1", key: "new", model: "m" }, "default", false);
-        t.chat.closeSettings(true, true);
+        t.chat.closeSettings(true, { model: false, level: false });
         expect(t.chat.choice()).toMatchObject({ model: "picked" });
         expect(t.chat.models.defaults()).toMatchObject({ model: "m" });
         await vi.waitFor(() => expect(calls).toHaveLength(1));
@@ -1039,6 +1039,73 @@ describe("chats", () => {
       expect(t.chat.choice()?.model).toBe("m");
       await t.newChat();
       expect(t.chat.choice()?.model).toBe("later");
+    });
+
+    describe("changed in the settings during a chat", () => {
+      const started = async () => {
+        const b = browser();
+        const calls = model();
+        const t = b.open();
+        await ready(t);
+        await say(t, calls, "one");
+        return { t, calls };
+      };
+
+      it("moves the chat to the new model, and the next reply goes there", async () => {
+        const { t, calls } = await started();
+        t.chat.openSettings();
+        t.chat.models.save("custom", { url: "https://model.test/v1", model: "smaller" }, "default");
+        t.chat.closeSettings(true, { model: true, level: false });
+        expect(t.chat.choice()).toMatchObject({ model: "smaller" });
+        await say(t, calls, "two");
+        expect(calls.at(-1)!.body).toMatchObject({ model: "smaller" });
+      });
+
+      it("keeps the chat's own reasoning level when only the model changed", async () => {
+        const { t } = await started();
+        t.chat.setEffort("high");
+        t.chat.openSettings();
+        t.chat.models.save("custom", { url: "https://model.test/v1", model: "smaller" }, "default");
+        t.chat.closeSettings(true, { model: true, level: false });
+        expect(t.chat.choice()).toMatchObject({ model: "smaller", effort: "high" });
+      });
+
+      it("takes a new reasoning level and stays on its model when that's all that changed", async () => {
+        const { t } = await started();
+        t.chat.setModel("custom", "picked");
+        t.chat.openSettings();
+        t.chat.models.save("custom", { url: "https://model.test/v1", model: "m" }, "high");
+        t.chat.closeSettings(true, { model: false, level: true });
+        expect(t.chat.choice()).toMatchObject({ model: "picked", effort: "high" });
+      });
+
+      it("stays as it is when neither changed, as with only a new key", async () => {
+        const { t } = await started();
+        t.chat.setModel("custom", "picked");
+        t.chat.openSettings();
+        t.chat.models.save("custom", { url: "https://model.test/v1", key: "new", model: "m" }, "default");
+        t.chat.closeSettings(true, { model: false, level: false });
+        expect(t.chat.choice()).toMatchObject({ model: "picked" });
+      });
+
+      it("stays as it is on Cancel", async () => {
+        const { t } = await started();
+        t.chat.openSettings();
+        t.chat.closeSettings();
+        expect(t.chat.choice()).toMatchObject({ model: "m" });
+      });
+
+      it("leaves a chat with nothing in it going by the choice for new chats", async () => {
+        const b = browser();
+        model();
+        const t = b.open();
+        await ready(t);
+        t.chat.openSettings();
+        t.chat.models.save("custom", { url: "https://model.test/v1", model: "later" }, "default");
+        t.chat.closeSettings(true, { model: true, level: false });
+        t.chat.models.save("custom", { url: "https://model.test/v1", model: "later still" }, "default");
+        expect(t.chat.choice()).toMatchObject({ model: "later still" });
+      });
     });
 
     it("keeps the key out of what's saved with the chats", async () => {
