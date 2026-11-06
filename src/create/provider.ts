@@ -598,6 +598,8 @@ export async function* streamReply(a: Ask): AsyncGenerator<ReplyEvent, void> {
 }
 
 export interface ModelInfo {
+  /** Undefined when the provider does not report input capabilities. */
+  images?: boolean;
   id: string;
   name?: string;
   /** The reasoning levels it takes, when its provider says. */
@@ -624,12 +626,12 @@ interface Listed {
   type?: string;
   /** OpenRouter's: where it can be used. A batch-only entry has no way to chat. */
   endpoints?: string[];
-  architecture?: { output_modalities?: string[] };
+  architecture?: { input_modalities?: string[]; output_modalities?: string[] };
   /** OpenRouter's. With no list, it takes them all. */
   reasoning?: { supported_efforts?: string[] | null } | null;
   supported_parameters?: string[];
   /** Anthropic's. */
-  capabilities?: { effort?: Record<string, unknown> } | null;
+  capabilities?: { effort?: Record<string, unknown>; image_input?: { supported?: boolean } | null } | null;
 }
 
 /** The reasoning levels a model takes, if its provider says. */
@@ -685,6 +687,7 @@ export async function listModels(c: Connection, opts: { signal?: AbortSignal; fe
     .sort((a, b) => when(b) - when(a))
     .map((m) => {
       const levels = levelsIn(m);
-      return { id: m.id!.replace(/^models\//, ""), name: m.display_name ?? m.name, ...(levels ? { levels } : {}) };
+      const images = m.architecture?.input_modalities ? m.architecture.input_modalities.includes("image") : m.capabilities?.image_input?.supported;
+      return { ...(images !== undefined ? { images } : {}), id: m.id!.replace(/^models\//, ""), name: m.display_name ?? m.name, ...(levels ? { levels } : {}) };
     });
 }

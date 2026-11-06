@@ -208,6 +208,31 @@ describe("chats", () => {
     expect(loaded.chat.models.searchMode({ provider: "openrouter", model: "m", effort: "default" })).toBe("openrouter");
   });
 
+  it("refuses images for a known text-only model, including images from earlier messages", async () => {
+    const b = browser();
+    const calls = model();
+    const previous = fetch;
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => url.endsWith("/models")
+      ? Promise.resolve(new Response(JSON.stringify({ data: [{ id: "m", architecture: { input_modalities: ["text"] } }, { id: "vision", architecture: { input_modalities: ["text", "image"] } }] })))
+      : previous(url, init));
+    const t = b.open();
+    await ready(t);
+    await t.chat.models.models("custom");
+    expect(t.chat.models.imageSupport(t.chat.choice())).toBe(false);
+    const image = new Blob(["picture"], { type: "image/png" });
+    await t.chat.send("look", [image]);
+    expect(calls).toHaveLength(0);
+    const failed = t.chat.entries().at(-1);
+    expect(failed).toMatchObject({ kind: "turn", turn: { phase: { kind: "over", end: { kind: "failed", code: "model", message: expect.stringContaining("doesn't accept images") } } } });
+    t.chat.setModel("custom", "vision");
+    expect(t.chat.models.imageSupport(t.chat.choice())).toBe(true);
+    await say(t, calls, "what do you see?");
+    t.chat.setModel("custom", "m");
+    await t.chat.send("and now?");
+    expect(calls).toHaveLength(1);
+    expect(t.chat.entries().at(-1)).toMatchObject({ kind: "turn", turn: { phase: { kind: "over", end: { code: "model" } } } });
+  });
+
   describe("the chat from before there was a list", () => {
     const old = { entries: [{ kind: "user", text: "kept\nand more" }, { kind: "turn", turn: { tries: [], phase: { kind: "over", end: { kind: "said" } }, since: 1 } }], conversation: { messages: [] } };
 

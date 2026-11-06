@@ -587,3 +587,17 @@ describe("browser-run tools", () => {
     ]);
   });
 });
+
+it("reads image input support without guessing when a provider omits it", async () => {
+  const { f } = provider(new Response(JSON.stringify({ data: [
+    { id: "vision", architecture: { input_modalities: ["text", "image"], output_modalities: ["text"] } },
+    { id: "text-only", architecture: { input_modalities: ["text"] } },
+    { id: "claude", capabilities: { image_input: { supported: true } } },
+    { id: "blocked", capabilities: { image_input: { supported: false } } },
+    { id: "unknown" },
+  ] })));
+  expect(await listModels(OPENAI, { fetch: f })).toEqual([
+    { id: "vision", images: true }, { id: "text-only", images: false },
+    { id: "claude", images: true }, { id: "blocked", images: false }, { id: "unknown" },
+  ]);
+});

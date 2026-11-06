@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { webSearchTool } from "../create/search";
 import type { Asker } from "../create/chat";
-import { CUSTOM, type Connection, type Effort, type ModelInfo, type Preset, PRESETS, type Wire, listModels, localSetup, normalizeUrl, streamReply } from "../create/provider";
+import { CUSTOM, type Connection, type Effort, type ModelInfo, ModelError, type Preset, PRESETS, type Wire, listModels, localSetup, normalizeUrl, streamReply } from "../create/provider";
 
 /**
  * The visitor's own providers and keys, kept in this browser and sent only to the
@@ -116,6 +116,7 @@ export function createModelSettings() {
   const lists = new Map<string, { at: number; url: string; key?: string; list: Promise<ModelInfo[]> }>();
   /** What the lists that have come in said, to know what a model takes without asking again. */
   const [listed, setListed] = createSignal<Record<string, ModelInfo[]>>({});
+  const imageSupport = (choice: Choice | undefined) => choice ? listed()[choice.provider]?.find((m) => m.id === choice.model)?.images : undefined;
   const levels = (provider: string, model: string) => listed()[provider]?.find((m) => m.id === model)?.levels;
   const refusesLevel = (provider: string, model: string, effort: Effort) => !!stored().noLevel?.includes(levelKey(provider, model, effort));
 
@@ -127,6 +128,7 @@ export function createModelSettings() {
   };
 
   return {
+    imageSupport,
     searchKey: () => stored().searchKey ?? "",
     saveSearchKey: (key: string) => write({ ...stored(), searchKey: key.trim() || undefined }),
     searchMode: (choice: Choice | undefined) => searchFor(choice, !!stored().searchKey),
@@ -188,10 +190,11 @@ export function createModelSettings() {
     },
     /** What to ask for a chat's replies: this choice with these instructions. Only for a choice that's usable. */
     asker(choice: Choice, system: string): Asker {
-      return (messages, signal) => {
+      return async function* (messages, signal) {
+        if (messages.some((m) => m.images?.length) && imageSupport(choice) === false) throw new ModelError("model", `${choice.model} doesn't accept images. Choose a model that accepts images, or start a text-only chat.`);
         const c = connection(choice.provider);
         const search = searchFor(choice, !!stored().searchKey);
-        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, webSearch: search === "tavily" ? undefined : search, tools: search === "tavily" ? [webSearchTool(stored().searchKey!)] : undefined, setup: setupFor(choice.provider) });
+        yield* streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, webSearch: search === "tavily" ? undefined : search, tools: search === "tavily" ? [webSearchTool(stored().searchKey!)] : undefined, setup: setupFor(choice.provider) });
       };
     },
     setupFor,

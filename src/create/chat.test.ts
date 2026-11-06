@@ -293,7 +293,7 @@ describe("resuming a reply", () => {
     expect(JSON.stringify(seen[0]![1])).toContain("First the zero case.");
     expect(JSON.stringify(seen[0]![1])).toContain("Here go");
     expect(seen[0]!.at(-1)!.content).toContain(RESUME);
-    expect(msgs[0]).toEqual({ kind: "try", resumed: true });
+    expect(msgs[0]).toEqual({ kind: "try", resumed: true, at: expect.any(Number) });
     expect(conversation.messages.map((m) => m.role).join(" ")).toMatch(/^(user assistant ?)+$/);
   });
 
@@ -375,4 +375,14 @@ it("keeps streamed source URLs in history and on the turn for follow-up question
   const result = await runTurn(newConversation(), "find a reference", "", { ask, onMessage: (m) => { turn = updateTurn(turn, m); } });
   expect(turn.tries[0]?.sources).toEqual([source]);
   expect(JSON.stringify(result.conversation.messages)).toContain(source.url);
+});
+
+it("restarts the waiting timer when an example lookup needs another model call", () => {
+  let turn = updateTurn(newTurn(1000), { kind: "try", at: 1100 });
+  turn = updateTurn(turn, { kind: "thinking", text: "Need examples", at: 1200 });
+  turn = updateTurn(turn, { kind: "looked", names: ["Copy"] });
+  turn = updateTurn(turn, { kind: "try", at: 6000 });
+  expect(turn.since).toBe(1000);
+  expect(turn.phase).toEqual({ kind: "waiting", since: 6000 });
+  expect(turn.tries[0]?.looked).toEqual(["Copy"]);
 });

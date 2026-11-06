@@ -362,8 +362,9 @@ const tagText = (chat: Chat, b: ModelTag) => `${nameOf(b.provider)}: ${b.model}$
 function TurnStatus(props: { chat: Chat; index: number; turn: Turn; now: number }) {
   /** Starting over from further back would throw away what came after, so that's left to Edit. */
   const latest = () => props.index === props.chat.entries().length - 1;
+  const waitingSince = () => props.turn.phase.kind === "waiting" ? props.turn.phase.since ?? props.turn.since : props.turn.since;
   return (
-    <Show when={props.turn.phase.kind === "over" ? (props.turn.phase as Extract<Turn["phase"], { kind: "over" }>).end : undefined} keyed fallback={<Show when={props.turn.phase.kind === "waiting"}><div class="chat-status live">{triesSoFar(props.turn.tries) > 1 ? `Try ${triesSoFar(props.turn.tries)} of ${TRIES}: asking` : "Asking the model"}, {seconds(props.now - props.turn.since)}</div></Show>}>
+    <Show when={props.turn.phase.kind === "over" ? (props.turn.phase as Extract<Turn["phase"], { kind: "over" }>).end : undefined} keyed fallback={<Show when={props.turn.phase.kind === "waiting"}><div class="chat-status live">{triesSoFar(props.turn.tries) > 1 ? `Try ${triesSoFar(props.turn.tries)} of ${TRIES}: waiting for the model` : "Waiting for the model"}, {seconds(props.now - waitingSince())}</div></Show>}>
       {(end) => {
         switch (end.kind) {
           case "said":
@@ -550,8 +551,11 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
   // a thumbnail doesn't flicker the drop target.
   let dragDepth = 0;
   const resetDrag = () => { dragDepth = 0; setDraggingFiles(false); };
+  const imageSupport = () => chat.models.imageSupport(chat.choice());
+  const incompatibleImages = () => imageSupport() === false && (chat.draftImages().length > 0 || chat.entries().some((e) => e.kind === "user" && e.images?.length));
   const attach = (incoming: File[]) => {
     setImageError("");
+    if (imageSupport() === false) { setImageError("This model doesn't accept images. Choose a model that does before attaching them."); return; }
     for (const file of incoming) {
       if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) { setImageError("Choose PNG, JPEG, WebP or GIF images."); continue; }
       if (file.size > 5 * 1024 * 1024) { setImageError("Each image must be under 5 MB."); continue; }
@@ -608,6 +612,13 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
     ),
   );
 
+  // Fetch capabilities on opening a chat too, rather than only after opening
+  // the model picker. Missing metadata stays unknown, never guessed from names.
+  createEffect(() => {
+    const c = chat.choice();
+    if (c) void chat.models.models(c.provider).catch(() => {});
+  });
+
   // Having chosen a model or a level, what comes next is saying something.
   createEffect(
     on(
@@ -634,6 +645,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
     const text = chat.draft().trim();
     const images = chat.draftImages();
     if (!text && !images.length) return;
+    if (incompatibleImages()) return;
     // What's typed stays in the box until there's a model to send it to.
     if (!chat.usable()) return chat.withModel(submit);
     chat.setDraft("");
@@ -720,6 +732,8 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
       </div>
       <div class="chat-attachments" style={{ display: setting() ? "none" : undefined }}>
         <ImagePreviews images={chat.draftImages()} remove={(i) => chat.setDraftImages((images) => images.filter((_, n) => n !== i))} />
+        <Show when={incompatibleImages()}><p role="alert" class="chat-note">This model doesn't accept the images in this chat. Choose an image-capable model, remove unsent images, or start a text-only chat.</p></Show>
+        <Show when={chat.draftImages().length > 0 && imageSupport() === undefined}><p class="chat-note">The provider hasn't confirmed whether this model accepts images.</p></Show>
         <Show when={imageError()}><p role="alert" class="chat-note">{imageError()}</p></Show>
       </div>
       <form
@@ -731,7 +745,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
         }}
       >
         <input ref={files} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={(e) => { attach(Array.from(e.currentTarget.files ?? [])); e.currentTarget.value = ""; }} />
-        <button type="button" class="btn" onClick={() => files.click()} title="Attach images (up to four, 5 MB each). Choose a model that accepts images." aria-label="Attach images">+</button>
+        <button type="button" class="btn" disabled={imageSupport() === false} onClick={() => files.click()} title={imageSupport() === false ? "This model does not accept images. Choose an image-capable model." : "Attach images (up to four, 5 MB each)."} aria-label="Attach images">+</button>
         <div class="chat-field">
         <textarea
           ref={area}
@@ -762,7 +776,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
           </button>
         </Show>
         </div>
-        <button type="submit" class="btn icon primary" disabled={!chat.draft().trim() && !chat.draftImages().length} title={chat.busy() ? "Stop this reply and send" : "Send"} aria-label="Send">
+        <button type="submit" class="btn icon primary" disabled={incompatibleImages() || (!chat.draft().trim() && !chat.draftImages().length)} title={chat.busy() ? "Stop this reply and send" : "Send"} aria-label="Send">
           <I.Send />
         </button>
       </form>

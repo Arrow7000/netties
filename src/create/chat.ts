@@ -71,7 +71,7 @@ export type TurnEnd =
   /** The provider or the network said no, or the reply didn't finish. */
   | { kind: "failed"; code: string; message: string };
 
-export type Phase = { kind: "waiting" } | { kind: "thinking" } | { kind: "writing" } | { kind: "over"; end: TurnEnd };
+export type Phase = { kind: "waiting"; since?: number } | { kind: "thinking" } | { kind: "writing" } | { kind: "over"; end: TurnEnd };
 
 export interface Turn {
   tries: Try[];
@@ -85,7 +85,7 @@ export interface Turn {
 }
 
 export type TurnMsg =
-  | { kind: "try"; resumed?: boolean }
+  | { kind: "try"; resumed?: boolean; at?: number }
   | { kind: "note"; text: string }
   | { kind: "thinking"; text: string; at: number }
   | { kind: "writing"; text: string }
@@ -241,7 +241,7 @@ export function updateTurn(t: Turn, msg: TurnMsg): Turn {
   const last = (f: (x: Try) => Try) => ({ ...t, tries: t.tries.map((x, i) => (i === t.tries.length - 1 ? f(x) : x)) });
   switch (msg.kind) {
     case "try":
-      return { ...t, phase: { kind: "waiting" }, tries: [...t.tries, { thinking: "", reply: "", ...(msg.resumed ? { resumed: true } : {}), ...(t.by ? { by: t.by } : {}) }] };
+      return { ...t, phase: { kind: "waiting", ...(msg.at !== undefined ? { since: msg.at } : {}) }, tries: [...t.tries, { thinking: "", reply: "", ...(msg.resumed ? { resumed: true } : {}), ...(t.by ? { by: t.by } : {}) }] };
     case "source":
       return last((x) => ({ ...x, sources: [...(x.sources ?? []).filter((s) => s.url !== msg.source.url), msg.source] }));
     case "note":
@@ -368,7 +368,7 @@ export async function runTurn(c: Conversation, request: string, doc: string, opt
 
   let resuming = opts.resuming;
   for (let attempt = 1; attempt <= TRIES; attempt++) {
-    opts.onMessage?.(resuming ? { kind: "try", resumed: true } : { kind: "try" });
+    opts.onMessage?.({ kind: "try", ...(resuming ? { resumed: true } : {}), at: Date.now() });
     resuming = false;
     const asked = await ask(messages, opts);
     if (asked.kind === "failed") {
