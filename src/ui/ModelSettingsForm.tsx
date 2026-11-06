@@ -97,6 +97,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
   const [url, setUrl] = createSignal("");
   const [wire, setWire] = createSignal<Wire>("openai");
   const [key, setKey] = createSignal("");
+  const [searchKey, setSearchKey] = createSignal(models.searchKey());
   const [model, setModel] = createSignal("");
   const [effort, setEffort] = createSignal<Effort>(models.defaults()?.effort ?? "default");
   const [listing, setListing] = createSignal<Listing>({ kind: "idle" });
@@ -186,6 +187,7 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
     const keep = keepsChat();
     const takes = { model: !keep, level: effort() !== startLevel };
     // Only a chat being put right can keep new chats where they were: from the settings, this is what they're being set to.
+    models.saveSearchKey(searchKey());
     models.save(provider(), entry(), level(), !(keep && why()?.kind === "fixing"));
     props.chat.closeSettings(true, takes);
     props.onSaved();
@@ -335,6 +337,13 @@ export function ModelSettingsForm(props: { chat: Chat; first: boolean; onSaved: 
         <select class="input" aria-label="Reasoning" value={level()} onChange={(e) => setEffort(e.currentTarget.value as Effort)}>
           <For each={levels()}>{(l) => <option value={l.id} selected={l.id === level()}>{l.name}</option>}</For>
         </select>
+      </label>
+      <label>
+        <span>Web search key <span class="optional">(optional)</span></span>
+        <input class="input" aria-label="Tavily API key" type="password" spellcheck={false} autocomplete="off" value={searchKey()} onInput={(e) => setSearchKey(e.currentTarget.value)} />
+        <span class="hint">A Tavily key enables search with other providers and local models that support tools. Kept in this browser and sent only to Tavily. Queries go to Tavily; results go to your model. Search uses your Tavily credits. Anthropic and OpenRouter use their own search.</span>
+        <span class="hint"><a href="https://app.tavily.com" target="_blank" rel="noreferrer">Get a Tavily key</a></span>
+        <Show when={models.searchKey()}><button type="button" class="btn" onClick={() => { models.saveSearchKey(""); setSearchKey(""); }}>Forget search key</button></Show>
       </label>
       <Show when={missing()}>
         <span class="hint model-missing">To save, this needs {missing()}.</span>

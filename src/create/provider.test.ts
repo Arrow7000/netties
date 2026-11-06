@@ -339,7 +339,7 @@ describe("when a request gets no answer at all", () => {
     ctrl.abort();
     const { f, calls } = provider(new DOMException("Aborted", "AbortError"));
     const { error } = await collect(ask(OPENAI, f, { signal: ctrl.signal }));
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(0);
     expect(error).not.toBeInstanceOf(ModelError);
   });
 });
@@ -505,4 +505,85 @@ it("continues an Anthropic search pause with the original tool blocks", async ()
   expect(calls).toHaveLength(2);
   expect((calls[1]!.body.messages as unknown[]).at(-1)).toEqual({ role: "assistant", content: [{ ...block, input: { query: "nets" } }] });
   expect(result.events).toContainEqual({ kind: "text", text: "Found it." });
+});
+
+describe("browser-run tools", () => {
+  const tool = (execute = vi.fn().mockResolvedValue({ content: "Found a reference.", sources: [{ url: "https://example.org/", title: "Reference" }] })) => ({ name: "web_search", description: "Search", parameters: { type: "object" }, execute });
+  const call = (index: number, id: string, name = "web_search", args = '{"query":"nets"}') => ({ index, id, type: "function", function: { name, arguments: args } });
+  const reply = () => new Response(sse(piece({ content: "Answer." }, "stop"), "[DONE]"));
+
+  it("assembles fragmented calls and preserves reasoning, IDs, text and provider metadata in the follow-up", async () => {
+    const t = tool();
+    const { f, calls } = provider(new Response(sse(
+      piece({ reasoning_content: "Need a reference.", content: "I'll look. ", tool_calls: [{ ...call(0, "c1", "web_", '{"query":'), extra_content: { google: { thought_signature: "sig" } } }] }),
+      piece({ tool_calls: [{ index: 0, function: { name: "search", arguments: '"nets"}' } }] }, "tool_calls"), "[DONE]",
+    )), reply());
+    const result = await collect(ask(OPENAI, f, { tools: [t] }));
+    expect(result.error).toBeUndefined();
+    expect(t.execute).toHaveBeenCalledWith({ query: "nets" }, undefined);
+    expect(calls[0]!.body.tools).toEqual([{ type: "function", function: { name: "web_search", description: "Search", parameters: { type: "object" } } }]);
+    expect((calls[1]!.body.messages as unknown[]).slice(-2)).toEqual([
+      { role: "assistant", content: "I'll look. ", reasoning_content: "Need a reference.", tool_calls: [{ id: "c1", type: "function", function: { name: "web_search", arguments: '{"query":"nets"}' }, extra_content: { google: { thought_signature: "sig" } } }] },
+      { role: "tool", tool_call_id: "c1", content: "Found a reference." },
+    ]);
+    expect(result.events).toContainEqual({ kind: "source", source: { url: "https://example.org/", title: "Reference" } });
+    expect(result.events.filter((e) => e.kind === "text").map((e) => e.text).join("")).toBe("I'll look. Answer.");
+  });
+
+  it("bounds a batch of parallel requests, returns every result ID and disables further calls", async () => {
+    const t = tool();
+    const { f, calls } = provider(new Response(sse(piece({ tool_calls: Array.from({ length: 4 }, (_, i) => call(i, `c${i}`)) }, "tool_calls"), "[DONE]")), reply());
+    const result = await collect(ask(OPENAI, f, { tools: [t] }));
+    expect(result.error).toBeUndefined();
+    expect(t.execute).toHaveBeenCalledTimes(3);
+    const messages = calls[1]!.body.messages as { role: string; tool_call_id?: string; content: string }[];
+    expect(messages.filter((m) => m.role === "tool").map((m) => m.tool_call_id)).toEqual(["c0", "c1", "c2", "c3"]);
+    expect(messages.at(-1)!.content).toContain("limit reached");
+    expect(calls[1]!.body.tool_choice).toBe("none");
+  });
+
+  it("returns invalid arguments and unknown names as tool errors without executing them", async () => {
+    const t = tool();
+    const { f, calls } = provider(new Response(sse(piece({ tool_calls: [call(0, "c1", "web_search", "{"), call(1, "c2", "run_shell")] }, "tool_calls"), "[DONE]")), reply());
+    expect((await collect(ask(OPENAI, f, { tools: [t] }))).error).toBeUndefined();
+    expect(t.execute).not.toHaveBeenCalled();
+    const messages = calls[1]!.body.messages as { content: string }[];
+    expect(messages.at(-2)!.content).toContain("valid JSON");
+    expect(messages.at(-1)!.content).toContain("not available");
+  });
+
+  it("lets the model explain a failed search instead of silently dropping its tool turn", async () => {
+    const t = tool(vi.fn().mockRejectedValue(new Error("Search unavailable")));
+    const { f, calls } = provider(new Response(sse(piece({ tool_calls: [call(0, "c1")] }, "tool_calls"), "[DONE]")), reply());
+    expect((await collect(ask(OPENAI, f, { tools: [t] }))).error).toBeUndefined();
+    expect((calls[1]!.body.messages as { content: string }[]).at(-1)!.content).toContain("Search unavailable");
+  });
+
+  it("propagates cancellation through search and doesn't make another model request", async () => {
+    const ctrl = new AbortController();
+    const t = tool(vi.fn(async (_input, signal) => { expect(signal).toBe(ctrl.signal); ctrl.abort(); throw new DOMException("Aborted", "AbortError"); }));
+    const { f, calls } = provider(new Response(sse(piece({ tool_calls: [call(0, "c1")] }, "tool_calls"), "[DONE]")), reply());
+    const result = await collect(ask(OPENAI, f, { tools: [t], signal: ctrl.signal }));
+    expect(result.error?.name).toBe("AbortError");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("supports a custom Anthropic-style endpoint, retaining signed thinking and tool blocks", async () => {
+    const t = tool();
+    const { f, calls } = provider(new Response(sse(
+      { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "", signature: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Need a source." } },
+      { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "signed" } },
+      { type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "c1", name: "web_search", input: {} } },
+      { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: '{"query":"nets"}' } },
+      { type: "content_block_stop", index: 1 },
+      { type: "message_delta", delta: { stop_reason: "tool_use" } }, { type: "message_stop" },
+    )), new Response(sse({ type: "content_block_delta", delta: { type: "text_delta", text: "Answer." } }, { type: "message_delta", delta: { stop_reason: "end_turn" } }, { type: "message_stop" })));
+    expect((await collect(ask(ANTHROPIC, f, { tools: [t] }))).error).toBeUndefined();
+    expect(calls[0]!.body.tools).toEqual([{ name: "web_search", description: "Search", input_schema: { type: "object" } }]);
+    expect((calls[1]!.body.messages as unknown[]).slice(-2)).toEqual([
+      { role: "assistant", content: [{ type: "thinking", thinking: "Need a source.", signature: "signed" }, { type: "tool_use", id: "c1", name: "web_search", input: { query: "nets" } }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "c1", content: "Found a reference." }] },
+    ]);
+  });
 });

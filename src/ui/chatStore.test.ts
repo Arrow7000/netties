@@ -184,6 +184,30 @@ describe("chats", () => {
     expect(calls[3]!.body.tools).toBeDefined();
   });
 
+  it("offers browser search to other providers after setup, keeping its credential out of model requests and chats", async () => {
+    const b = browser();
+    const calls = model();
+    const t = b.open();
+    await ready(t);
+    expect(t.chat.models.searchMode(t.chat.choice())).toBeUndefined();
+    t.chat.models.saveSearchKey("private-search-key");
+    expect(t.chat.models.searchMode(t.chat.choice())).toBe("tavily");
+    await say(t, calls, "find a reference");
+    expect(calls[0]!.body.tools).toEqual([expect.objectContaining({ type: "function", function: expect.objectContaining({ name: "web_search" }) })]);
+    expect(JSON.stringify(calls[0]!.body)).not.toContain("private-search-key");
+    expect(JSON.stringify(await reading(t.chat.id()))).not.toContain("private-search-key");
+    const loaded = b.open(t.session);
+    await ready(loaded);
+    expect(loaded.chat.models.searchKey()).toBe("private-search-key");
+    expect(loaded.chat.models.searchMode(loaded.chat.choice())).toBe("tavily");
+    loaded.chat.setWebSearch(false);
+    await say(loaded, calls, "without search");
+    expect(calls[1]!.body).not.toHaveProperty("tools");
+    loaded.chat.models.saveSearchKey("");
+    expect(loaded.chat.models.searchMode({ ...loaded.chat.choice()!, webSearch: true })).toBeUndefined();
+    expect(loaded.chat.models.searchMode({ provider: "openrouter", model: "m", effort: "default" })).toBe("openrouter");
+  });
+
   describe("the chat from before there was a list", () => {
     const old = { entries: [{ kind: "user", text: "kept\nand more" }, { kind: "turn", turn: { tries: [], phase: { kind: "over", end: { kind: "said" } }, since: 1 } }], conversation: { messages: [] } };
 

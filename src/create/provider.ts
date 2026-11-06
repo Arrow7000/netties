@@ -158,9 +158,27 @@ export type ReplyEvent = { kind: "text"; text: string } | { kind: "thinking"; te
 
 export interface Source { url: string; title: string }
 
+/** A function the browser can run on a model's behalf. Only registered names
+ * can execute; credentials stay inside the handler, outside model context. */
+export interface ClientTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  status?: string;
+  execute(input: unknown, signal?: AbortSignal): Promise<{ content: string; sources?: Source[] }>;
+}
+
+interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+  [key: string]: unknown;
+}
+
 export interface Ask {
   connection: Connection;
   webSearch?: "anthropic" | "openrouter";
+  tools?: ClientTool[];
   model: string;
   effort: Effort;
   system: string;
@@ -205,6 +223,7 @@ async function request(a: Ask): Promise<{ url: string; headers: Record<string, s
   if (c.wire === "anthropic") {
     const body: Record<string, unknown> = { model: a.model, stream: true, max_tokens: c.maxTokens ?? 64_000, system: a.system, messages, cache_control: { type: "ephemeral" }, thinking: { type: "adaptive", display: "summarized" }, ...c.extra };
     if (a.webSearch === "anthropic") body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }];
+    if (!a.webSearch && a.tools?.length) body.tools = a.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));
     // Newer models always think, and refuse to be told not to, so "off" is as little as they'll do.
     if (a.effort === "off") delete body.thinking;
     if (a.effort !== "default") body.output_config = { effort: a.effort === "off" || a.effort === "minimal" ? "low" : a.effort };
@@ -221,6 +240,7 @@ async function request(a: Ask): Promise<{ url: string; headers: Record<string, s
   }
   const body: Record<string, unknown> = { model: a.model, stream: true, messages: [{ role: "system", content: a.system }, ...messages], ...c.extra };
   if (a.webSearch === "openrouter") body.tools = [{ type: "openrouter:web_search", parameters: { max_uses: 3 } }];
+  if (!a.webSearch && a.tools?.length) body.tools = a.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
   if (a.effort !== "default") body.reasoning_effort = a.effort === "off" ? "none" : a.effort;
   if (c.maxTokens) body.max_tokens = c.maxTokens;
   return {
@@ -311,7 +331,7 @@ async function* dataLines(body: ReadableStream<Uint8Array>): AsyncGenerator<stri
 }
 
 /** How a reply stands after a piece of the stream. */
-type Piece = { events: ReplyEvent[]; finished?: "done" | "cut-off" | "refused" | "pause" };
+type Piece = { events: ReplyEvent[]; finished?: "done" | "cut-off" | "refused" | "pause" | "tools" };
 
 /**
  * Local models often write their thinking into the reply between <think> tags.
@@ -377,16 +397,30 @@ export function thinkSplitter() {
 
 function openAiReader(c: Connection) {
   const tags = thinkSplitter();
+  const calls = new Map<number, ToolCall>();
+  const assistant: Record<string, unknown> = { role: "assistant", content: "" };
   return {
+    assistant: () => ({ ...assistant, tool_calls: [...calls.values()] }),
     read(data: string): Piece {
       if (data === "[DONE]") return { events: tags.flush(), finished: "done" };
       const chunk = JSON.parse(data) as {
         error?: { message?: string } | string;
-        choices?: { delta?: { content?: string | null; annotations?: { url_citation?: Source }[]; reasoning?: string | null; reasoning_content?: string | null }; finish_reason?: string | null }[];
+        choices?: { delta?: { content?: string | null; tool_calls?: (Partial<ToolCall> & { index: number; function?: { name?: string; arguments?: string } })[]; annotations?: { url_citation?: Source }[]; reasoning?: string | null; reasoning_content?: string | null }; finish_reason?: string | null }[];
       };
       if (chunk.error) throw new ModelError("failed", `${c.name}: ${typeof chunk.error === "string" ? chunk.error : (chunk.error.message ?? "the model reported an error")}`);
       const choice = chunk.choices?.[0];
       const events: ReplyEvent[] = [];
+      const delta = choice?.delta;
+      if (delta?.content) assistant.content = String(assistant.content) + delta.content;
+      for (const field of ["reasoning", "reasoning_content"] as const) if (delta?.[field]) assistant[field] = String(assistant[field] ?? "") + delta[field];
+      for (const part of delta?.tool_calls ?? []) {
+        if (!Number.isInteger(part.index) || part.index < 0 || part.index > 15) throw new ModelError("failed", "The model returned too many tool calls.");
+        const previous = calls.get(part.index);
+        const call: ToolCall = { ...previous, ...part, id: part.id ?? previous?.id ?? "", type: "function", function: { name: (previous?.function.name ?? "") + (part.function?.name ?? ""), arguments: (previous?.function.arguments ?? "") + (part.function?.arguments ?? "") } };
+        delete call.index;
+        if (call.function.arguments.length > 64_000) throw new ModelError("failed", "The model's tool arguments were too long.");
+        calls.set(part.index, call);
+      }
       const thinking = choice?.delta?.reasoning ?? choice?.delta?.reasoning_content;
       if (thinking) events.push({ kind: "thinking", text: thinking });
       if (choice?.delta?.content) events.push(...tags.push(choice.delta.content));
@@ -397,7 +431,7 @@ function openAiReader(c: Connection) {
       if (!stop) return { events };
       events.push(...tags.flush());
       if (stop === "error") throw new ModelError("failed", `${c.name}: the model reported an error.`);
-      return { events, finished: stop === "length" ? "cut-off" : stop === "content_filter" ? "refused" : "done" };
+      return { events, finished: stop === "tool_calls" ? "tools" : stop === "length" ? "cut-off" : stop === "content_filter" ? "refused" : "done" };
     },
   };
 }
@@ -405,6 +439,7 @@ function openAiReader(c: Connection) {
 function anthropicReader(c: Connection) {
   let stop: string | undefined;
   return {
+    assistant: (): Record<string, unknown> => ({}),
     read(data: string): Piece {
       const ev = JSON.parse(data) as { type: string; delta?: { type?: string; text?: string; thinking?: string; stop_reason?: string; citation?: Source }; content_block?: { type?: string; name?: string; content?: { type?: string; error_code?: string } }; error?: { message?: string } };
       switch (ev.type) {
@@ -421,7 +456,7 @@ function anthropicReader(c: Connection) {
           stop = ev.delta?.stop_reason ?? stop;
           return { events: [] };
         case "message_stop":
-          return { events: [], finished: stop === "pause_turn" ? "pause" : stop === "max_tokens" ? "cut-off" : stop === "refusal" ? "refused" : "done" };
+          return { events: [], finished: stop === "tool_use" ? "tools" : stop === "pause_turn" ? "pause" : stop === "max_tokens" ? "cut-off" : stop === "refusal" ? "refused" : "done" };
         case "error":
           throw new ModelError("failed", `${c.name}: ${ev.error?.message ?? "the model reported an error"}`);
         default:
@@ -432,8 +467,13 @@ function anthropicReader(c: Connection) {
 }
 
 /** Send the request, going again without any setting the model turns down. */
-async function send(a: Ask, doFetch: typeof fetch, onNote: (text: string) => void, continuation: unknown[] = []): Promise<Response> {
+async function send(a: Ask, doFetch: typeof fetch, onNote: (text: string) => void, continuation: unknown[] = [], toolsExhausted = false): Promise<Response> {
   const { url, headers, body, optional } = await request(a);
+  if (toolsExhausted) {
+    // Returning all outstanding results lets the model finish normally, with no
+    // further paid searches available in this call.
+    body.tool_choice = a.connection.wire === "anthropic" ? { type: "none" } : "none";
+  }
   if (continuation.length) body.messages = [...(body.messages as unknown[]), ...continuation];
   for (;;) {
     let res: Response;
@@ -460,9 +500,11 @@ async function send(a: Ask, doFetch: typeof fetch, onNote: (text: string) => voi
 /** A reply as it comes. It ends normally only when the reply is whole; anything else throws a ModelError, or the abort if it was stopped. */
 export async function* streamReply(a: Ask): AsyncGenerator<ReplyEvent, void> {
   const continuation: unknown[] = [];
+  let toolUses = 0;
   for (let round = 0; ; round++) {
+    if (a.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const notes: string[] = [];
-    const res = await send(a, a.fetch ?? fetch, (t) => notes.push(t), continuation);
+    const res = await send(a, a.fetch ?? fetch, (t) => notes.push(t), continuation, toolUses >= 3);
     for (const text of notes) yield { kind: "note", text };
     const reader = a.connection.wire === "anthropic" ? anthropicReader(a.connection) : openAiReader(a.connection);
     let finished: Piece["finished"];
@@ -504,6 +546,45 @@ export async function* streamReply(a: Ask): AsyncGenerator<ReplyEvent, void> {
       throw new ModelError("dropped", `The connection to ${a.connection.name} dropped part way through the reply.`);
     }
     if (a.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    if (finished === "tools") {
+      if (!a.tools?.length || a.webSearch) throw new ModelError("failed", "The model requested a tool that isn't available.");
+      if (round >= 3) throw new ModelError("failed", "The model kept requesting tools after reaching the limit.");
+      const anthropic = a.connection.wire === "anthropic";
+      const assistant = anthropic ? { role: "assistant", content: blocks } : reader.assistant();
+      const calls: ToolCall[] = anthropic
+        ? blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: String(b.id ?? ""), type: "function", function: { name: String(b.name ?? ""), arguments: JSON.stringify(b.input) } }))
+        : assistant.tool_calls as ToolCall[];
+      if (!calls?.length || calls.some((c) => !c.id) || new Set(calls.map((c) => c.id)).size !== calls.length) throw new ModelError("failed", "The model returned incomplete tool calls.");
+      continuation.push(assistant);
+      const results: { type: string; tool_use_id: string; content: string; is_error?: boolean }[] = [];
+      for (const call of calls) {
+        if (a.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        let content: string;
+        let isError = false;
+        try {
+          const tool = a.tools.find((t) => t.name === call.function.name);
+          if (!tool) throw new Error("This tool is not available.");
+          if (toolUses >= 3) throw new Error("Tool limit reached. Answer with the information already available.");
+          toolUses++;
+          let input: unknown;
+          try { input = JSON.parse(call.function.arguments); } catch { throw new Error("The tool arguments were not valid JSON. Supply a JSON object."); }
+          yield { kind: "note", text: tool.status ?? `Using ${tool.name}` };
+          const result = await tool.execute(input, a.signal);
+          if (a.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+          content = result.content;
+          for (const source of result.sources ?? []) yield { kind: "source", source };
+        } catch (e) {
+          if (a.signal?.aborted) throw e;
+          isError = true;
+          content = JSON.stringify({ error: e instanceof Error ? e.message : "The tool failed." });
+          yield { kind: "note", text: `Tool failed: ${e instanceof Error ? e.message : "unknown error"}` };
+        }
+        if (anthropic) results.push({ type: "tool_result", tool_use_id: call.id, content, ...(isError ? { is_error: true } : {}) });
+        else continuation.push({ role: "tool", tool_call_id: call.id, content });
+      }
+      if (anthropic) continuation.push({ role: "user", content: results });
+      continue;
+    }
     if (finished === "pause") {
       if (round >= 2) throw new ModelError("failed", "The provider kept pausing the web search. Try again with a narrower question.");
       continuation.push({ role: "assistant", content: blocks });

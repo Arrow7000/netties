@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { webSearchTool } from "../create/search";
 import type { Asker } from "../create/chat";
 import { CUSTOM, type Connection, type Effort, type ModelInfo, type Preset, PRESETS, type Wire, listModels, localSetup, normalizeUrl, streamReply } from "../create/provider";
 
@@ -14,7 +15,7 @@ const LIST_MS = 10 * 60_000;
 
 /** A model to use, and how hard it should think. */
 export interface Choice {
-  /** Enabled unless explicitly switched off, where the provider supplies search. */
+  /** Enabled unless explicitly switched off, where search is configured. */
   webSearch?: boolean;
   provider: string;
   model: string;
@@ -22,9 +23,9 @@ export interface Choice {
 }
 
 /** The hosted search tool to offer; an absent preference means on. */
-export function searchFor(choice: Choice | undefined): "anthropic" | "openrouter" | undefined {
-  if (choice?.webSearch === false) return undefined;
-  return choice?.provider === "anthropic" || choice?.provider === "openrouter" ? choice.provider : undefined;
+export function searchFor(choice: Choice | undefined, fallback = false): "anthropic" | "openrouter" | "tavily" | undefined {
+  if (!choice || choice.webSearch === false) return undefined;
+  return choice?.provider === "anthropic" || choice?.provider === "openrouter" ? choice.provider : fallback ? "tavily" : undefined;
 }
 
 export interface ProviderEntry {
@@ -37,6 +38,7 @@ export interface ProviderEntry {
 }
 
 interface Stored {
+  searchKey?: string;
   providers: Record<string, ProviderEntry>;
   default?: Choice;
   /** The reasoning levels that models have turned down, as provider, model and level. */
@@ -68,7 +70,7 @@ function read(): Stored {
   try {
     const raw = localStorage.getItem(KEY);
     const got = raw ? (JSON.parse(raw) as Partial<Stored>) : undefined;
-    return { providers: got?.providers ?? {}, default: got?.default, noLevel: got?.noLevel };
+    return { providers: got?.providers ?? {}, default: got?.default, noLevel: got?.noLevel, searchKey: got?.searchKey };
   } catch {
     return { providers: {} };
   }
@@ -125,6 +127,9 @@ export function createModelSettings() {
   };
 
   return {
+    searchKey: () => stored().searchKey ?? "",
+    saveSearchKey: (key: string) => write({ ...stored(), searchKey: key.trim() || undefined }),
+    searchMode: (choice: Choice | undefined) => searchFor(choice, !!stored().searchKey),
     entry: (id: string) => stored().providers[id],
     connect,
     /** The providers set up so far. */
@@ -185,7 +190,8 @@ export function createModelSettings() {
     asker(choice: Choice, system: string): Asker {
       return (messages, signal) => {
         const c = connection(choice.provider);
-        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, webSearch: searchFor(choice), setup: setupFor(choice.provider) });
+        const search = searchFor(choice, !!stored().searchKey);
+        return streamReply({ connection: c ?? { name: nameOf(choice.provider), url: "", wire: "openai" }, model: choice.model, effort: effective(choice), system, messages, signal, webSearch: search === "tavily" ? undefined : search, tools: search === "tavily" ? [webSearchTool(stored().searchKey!)] : undefined, setup: setupFor(choice.provider) });
       };
     },
     setupFor,

@@ -8,7 +8,7 @@ import * as I from "./icons";
 import { Menu, MenuItem } from "./Menu";
 import { effortName } from "../create/provider";
 import { EffortPicker, ModelPicker, ModelSettingsForm, Trouble } from "./ModelSettingsForm";
-import { nameOf, searchFor } from "./modelSettings";
+import { nameOf } from "./modelSettings";
 import { pieces } from "./pieces";
 
 /** Width of the panel on a desktop, which the canvas leaves room for. */
@@ -769,7 +769,20 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
       <div class="chat-model" style={{ display: setting() ? "none" : undefined }}>
         <ModelPicker chat={chat} />
         <EffortPicker chat={chat} />
-        <button class="btn" disabled={!["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "")} aria-pressed={!!searchFor(chat.choice())} onClick={() => chat.setWebSearch(!searchFor(chat.choice()))} title={["anthropic", "openrouter"].includes(chat.choice()?.provider ?? "") ? "Let the model search the web. Searches are billed by your provider." : "Web search is available with Anthropic and OpenRouter."}>Web</button>
+        <button
+          class="btn"
+          disabled={!chat.choice()}
+          aria-pressed={!!chat.models.searchMode(chat.choice())}
+          onClick={() => {
+            const choice = chat.choice();
+            if (!choice) return;
+            if (!chat.models.searchMode({ ...choice, webSearch: true })) {
+              chat.setWebSearch(true);
+              chat.openSettings();
+            } else chat.setWebSearch(!chat.models.searchMode(choice));
+          }}
+          title={chat.choice() && chat.models.searchMode({ ...chat.choice()!, webSearch: true }) ? "Let the model search the web. Searches are billed by your search provider." : "Set up a Tavily key to let this model search the web."}
+        >Web</button>
         <button class="btn icon chat-settings" onClick={() => chat.openSettings()} title="Providers and keys" aria-label="Providers and keys">
           <I.Gear />
         </button>
