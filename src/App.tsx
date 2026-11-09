@@ -497,9 +497,9 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           )}
         </Menu>
         <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
-        <button class="btn chat-toggle" classList={{ busy: chat.replying().size > 0 }} aria-pressed={chat.open()} onClick={() => setChatOpen(!chat.open())} title={chat.replying().size ? "Chat: a reply is on its way" : "Chat"}>
+        <button class="btn chat-toggle" classList={{ busy: chat.replying().size > 0 }} aria-label="Ask AI" aria-pressed={chat.open()} onClick={() => setChatOpen(!chat.open())} title={chat.replying().size ? "Create, change, and explain nets with AI. A reply is on its way." : "Create, change, and explain nets with AI"}>
           <I.Chat />
-          <Show when={!compact()}>Chat</Show>
+          <Show when={!compact()}>Ask AI</Show>
         </button>
         <Show when={!compact()}>
         <span class="sep" />

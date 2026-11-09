@@ -145,7 +145,7 @@ Choices made along the way that you haven't confirmed yet:
      within the context of an existing conversation"). Available to everyone as of
      2026-11-09, without a feature announcement. The earlier build flag and browser
      unlock links have been removed. Logic in `src/create/chat.ts`, the panel in
-     `src/ui/Chat.tsx`. The button's label is still being discussed.
+     `src/ui/Chat.tsx`. The button is labelled "Ask AI", with the tooltip "Create, change, and explain nets with AI".
      - Bring your own model (you, 2026-11-05: "i think for now let's just allow
        people to bring their own models and providers... we can make requests
        right from the frontend! which also neatly gets rid of the whole netlify
