@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <title>netties — A playground for interaction nets</title>
+  <rect width="1200" height="630" fill="#ffffff"/>
+  <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1" fill="#e5e5e5"/></pattern></defs>
+  <rect x="660" width="540" height="630" fill="url(#dots)"/>
+  <!-- Net proportions and crossing follow the light-mode canvas reference. -->
+  <g transform="translate(635 46) scale(.55)">
+    <g fill="none" stroke="#000" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M260 96V225 M587 96V225 M226 355V638 M622 355V638 M260 766V897 M587 766V897"/>
+      <path d="M294 355C294 490 553 503 553 638"/>
+      <path d="M553 355C553 490 294 503 294 638" stroke="#fff" stroke-width="22"/>
+      <path d="M553 355C553 490 294 503 294 638"/>
+      <path d="M157 355L260 225L363 355Z M484 355L587 225L690 355Z" fill="#000"/>
+      <path d="M157 638H363L260 766Z M484 638H690L587 766Z" fill="#fff"/>
+      <g fill="#fff" stroke-width="5">
+        <circle cx="260" cy="96" r="10"/><circle cx="587" cy="96" r="10"/>
+        <circle cx="260" cy="897" r="10"/><circle cx="587" cy="897" r="10"/>
+      </g>
+    </g>
+    <g font-family="STIX Two Text, Times New Roman, serif" font-style="italic" text-anchor="middle" font-size="48">
+      <g fill="#fff"><text x="260" y="328">γ</text><text x="587" y="328">γ</text></g>
+      <g fill="#000"><text x="260" y="693">δ</text><text x="587" y="693">δ</text></g>
+      <g fill="#697080" font-size="40"><text x="260" y="76">c</text><text x="587" y="76">d</text><text x="260" y="965">b</text><text x="587" y="965">a</text></g>
+    </g>
+  </g>
+  <g fill="#171717" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+    <text x="72" y="290" font-size="112" font-weight="600" letter-spacing="-6">netties</text>
+    <text x="78" y="355" font-size="30">A playground for</text>
+    <text x="78" y="395" font-size="30">interaction nets.</text>
+    <text x="78" y="552" font-size="20" fill="#697080">netties.adler.dev</text>
+  </g>
+</svg>
