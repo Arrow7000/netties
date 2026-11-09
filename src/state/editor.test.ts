@@ -263,14 +263,14 @@ describe("the speed of a run", () => {
     for (const s of SPEEDS) expect(nearestSpeed(s)).toBe(s);
   });
 
-  it("is really N times as fast at N×, whether it's animating or stepping ahead", () => {
-    for (const speed of [0.25, 1, 2, 4, 6, 8, 12, 16]) {
-      running(speed, (ed) => {
-        vi.advanceTimersByTime(30_000);
-        const expected = (30_000 * speed) / 896;
-        expect(Math.abs(ed.steps() - expected), `${ed.steps()} steps at ${speed}×`).toBeLessThanOrEqual(Math.max(1, expected * 0.05));
-      });
-    }
+  // Each simulated speed gets its own timeout and fresh timers. Grouping all
+  // eight into one test exhausted its timeout when other suites were busy.
+  it.each([0.25, 1, 2, 4, 6, 8, 12, 16])("is really %s times as fast, whether it's animating or stepping ahead", (speed) => {
+    running(speed, (ed) => {
+      vi.advanceTimersByTime(30_000);
+      const expected = (30_000 * speed) / 896;
+      expect(Math.abs(ed.steps() - expected), `${ed.steps()} steps at ${speed}×`).toBeLessThanOrEqual(Math.max(1, expected * 0.05));
+    });
   });
 
   it("takes as many steps as are due when drawing can't keep up, and rests in proportion", () => {
