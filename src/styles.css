@@ -3959,7 +3959,16 @@ button.select.open {
    a long reply can shrink earlier rows and paint over their collapse controls. */
 .chat-log > * { flex-shrink: 0; }
 
-.chat-sources { display: flex; flex-direction: column; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.chat-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .chat-drop-hint {
   position: absolute;
   inset: 4px;
@@ -4049,19 +4058,17 @@ button.select.open {
 }
 
 .chat-thought summary {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--chrome);
+  padding-block: 4px;
 }
 
 .chat-model .btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 
+/* Thinking belongs to the conversation scroll, so a swipe can reach the next message. */
 .chat-thought > div {
   margin-top: 6px;
-  max-height: min(50dvh, 480px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+  overflow-wrap: anywhere;
   color: var(--muted);
   white-space: pre-wrap;
   font-size: 12px;
@@ -4140,11 +4147,16 @@ button.select.open {
 }
 
 .chat-compose {
+  flex: none;
   display: flex;
   align-items: flex-end;
-  gap: 4px;
-  padding: 8px;
+  gap: 6px;
+  padding: 10px;
   border-top: 1px solid var(--line);
+}
+
+.chat-compose > .btn {
+  flex: none;
 }
 
 .chat-compose textarea {
@@ -4152,6 +4164,8 @@ button.select.open {
   min-width: 0;
   resize: none;
   height: auto;
+  overflow-y: hidden;
+  overscroll-behavior-y: auto;
   max-height: min(140px, calc(var(--visible, 100dvh) * 0.4));
 }
 
@@ -4221,18 +4235,21 @@ button.select.open {
   border-top: 0;
 }
 
+:root[data-sideways][data-keyboard] .chat-compose .chat-field {
+  --chat-row-height: 36px;
+  --chat-stop-inset: 2px;
+}
+
 :root[data-sideways][data-keyboard] .chat-compose .chat-field textarea {
-  min-height: 36px;
+  min-height: calc(var(--chat-row-height) - 2px);
   padding-block: 6px;
 }
 
-:root[data-sideways][data-keyboard] .chat-compose .btn.icon.primary {
+:root[data-sideways][data-keyboard] .chat-compose > .btn.icon {
   height: 36px;
 }
 
 :root[data-sideways][data-keyboard] .btn.chat-stop {
-  right: 2px;
-  bottom: 2px;
   height: 32px;
 }
 
@@ -4312,28 +4329,50 @@ button.select.open {
 
 /* The message box: Stop sits inside it, so nothing moves when a reply starts or ends. */
 .chat-field {
+  --chat-row-height: 32px;
+  --chat-stop-size: 26px;
+  --chat-stop-inset: 3px;
   position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-ctl);
+  background: var(--chrome);
+}
+
+.chat-field:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: transparent;
 }
 
 .chat-field textarea {
-  min-height: 32px;
+  min-height: calc(var(--chat-row-height) - 2px);
   padding: 6px 36px 6px 10px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
   line-height: 1.4;
+}
+
+.chat-field textarea:focus {
+  outline: none;
 }
 
 .btn.chat-stop {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 26px;
-  height: 26px;
+  /* Absolute offsets start inside the field's 1px border. */
+  right: calc(var(--chat-stop-inset) - 1px);
+  bottom: calc(var(--chat-stop-inset) - 1px);
+  width: var(--chat-stop-size);
+  height: var(--chat-stop-size);
   min-width: 0;
   padding: 0;
   color: var(--text);
   border: 1px solid var(--line-2);
+  /* Concentric corners: inner radius = outer radius − edge inset. */
+  border-radius: max(0px, calc(var(--r-ctl) - var(--chat-stop-inset)));
 }
 
 .chat-head .btn + .btn {
@@ -4668,21 +4707,21 @@ div.chat-seam {
     min-width: 44px;
   }
 
-  .chat-compose .btn.icon.primary {
+  .chat-compose > .btn.icon {
     width: 44px;
     height: 48px;
   }
 
-  .chat-compose .chat-field textarea {
-    min-height: 48px;
-    padding: 13px 50px 13px 10px;
+  .chat-field {
+    --chat-row-height: 48px;
+    --chat-stop-size: 44px;
+    --chat-stop-inset: 2px;
   }
 
-  .btn.chat-stop {
-    right: 2px;
-    bottom: 2px;
-    width: 44px;
-    height: 44px;
+  .chat-compose .chat-field textarea {
+    min-height: calc(var(--chat-row-height) - 2px);
+    /* One 16px line plus padding and borders fits the 48px controls. */
+    padding: 12px 50px 12px 10px;
   }
 }
 
@@ -4713,11 +4752,10 @@ div.chat-seam {
     inset: -10px -8px;
   }
 
-  /* These clip what's outside them, so they grow into the space around them instead. Only as wide as its words, to keep clear of Edit in the message above. */
+  /* Keep disclosure touch targets in flow so they cannot overlap the text. */
   .chat-thought summary {
-    width: fit-content;
-    padding-block: 11px;
-    margin-block: -11px;
+    min-height: 44px;
+    padding-block: 12px;
   }
 
   .chat-doc summary {

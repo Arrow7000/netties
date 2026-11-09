@@ -175,16 +175,15 @@ function TryView(props: { t: ShownTry; n: number; last: boolean; turn: Turn; now
   const doing = (what: string) => (triesSoFar(props.turn.tries) > 1 ? `Try ${props.n} of ${TRIES}: ${what}` : what[0]!.toUpperCase() + what.slice(1));
   const words = () => props.t.words.trim();
   const lines = () => (going() ? linesWritten(props.t.reply) : undefined);
-  let trace: ReturnType<typeof anchored> | undefined;
   return (
     <>
       <Show when={props.t.note}>
         <div class="chat-status">{props.t.note}</div>
       </Show>
       <Show when={props.t.thinking}>
-        <details class="chat-thought" onToggle={(e) => e.currentTarget.open && trace?.toEnd()}>
+        <details class="chat-thought">
           <summary classList={{ live: thinking() }}>{thinking() ? `${doing("thinking")}, ${seconds(props.now - (props.t.thoughtFrom ?? props.turn.since))}` : `Thought for ${seconds(props.t.thoughtMs ?? 0)}`}</summary>
-          <div ref={(el) => (trace = anchored(el))}>
+          <div>
             <Index each={pieces(props.t.thinking)}>{(p) => <div>{p()}</div>}</Index>
           </div>
         </details>
@@ -299,12 +298,22 @@ function UserView(props: { chat: Chat; entry: Extract<Entry, { kind: "user" }>; 
   );
 }
 
+/** Grow with the draft; only scroll once it reaches the available height. */
+function fitMessage(area: HTMLTextAreaElement, limit: number) {
+  const style = getComputedStyle(area);
+  const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+  const cap = Math.min(limit, parseFloat(style.maxHeight) || limit);
+  area.style.overflowY = "hidden";
+  area.style.height = "auto";
+  area.style.height = `${Math.min(area.scrollHeight + border, cap)}px`;
+  area.style.overflowY = area.scrollHeight > area.clientHeight ? "auto" : "hidden";
+}
+
 function EditBox(props: { text: string; onCancel: () => void; onSend: (text: string) => void }) {
   const [text, setText] = createSignal(props.text);
   let area!: HTMLTextAreaElement;
   const size = () => {
-    area.style.height = "auto";
-    area.style.height = `${Math.min(area.scrollHeight + 2, 200)}px`;
+    fitMessage(area, 200);
   };
   const send = () => text().trim() && props.onSend(text().trim());
   closeOnEscape(() => props.onCancel(), true);
@@ -594,6 +603,18 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
       if (panel.contains(on) && on?.matches("input, textarea")) on.scrollIntoView({ block: "nearest" });
     });
     reveal.observe(panel);
+    // Rewrap drafts when the panel changes width, including a rotated phone.
+    let width = 0;
+    let cap = "";
+    const rewrap = new ResizeObserver(() => {
+      const nextCap = getComputedStyle(area).maxHeight;
+      if (area.clientWidth === width && nextCap === cap) return;
+      width = area.clientWidth;
+      cap = nextCap;
+      size();
+    });
+    rewrap.observe(area);
+    onCleanup(() => rewrap.disconnect());
     onCleanup(() => reveal.disconnect());
   });
 
@@ -637,9 +658,10 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
   createEffect(on(chat.id, () => following?.toEnd(), { defer: true }));
 
   const size = () => {
-    area.style.height = "auto";
-    area.style.height = `${Math.min(area.scrollHeight + 2, 140)}px`;
+    fitMessage(area, 140);
   };
+
+  createEffect(on(chat.draft, () => size()));
 
   const submit = () => {
     const text = chat.draft().trim();
@@ -745,7 +767,7 @@ export function ChatPanel(props: { chat: Chat; onEscape: () => void; onClose: ()
         }}
       >
         <input ref={files} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={(e) => { attach(Array.from(e.currentTarget.files ?? [])); e.currentTarget.value = ""; }} />
-        <button type="button" class="btn" disabled={imageSupport() === false} onClick={() => files.click()} title={imageSupport() === false ? "This model does not accept images. Choose an image-capable model." : "Attach images (up to four, 5 MB each)."} aria-label="Attach images">+</button>
+        <button type="button" class="btn icon chat-attach" disabled={imageSupport() === false} onClick={() => files.click()} title={imageSupport() === false ? "This model does not accept images. Choose an image-capable model." : "Attach images (up to four, 5 MB each)."} aria-label="Attach images"><I.Plus /></button>
         <div class="chat-field">
         <textarea
           ref={area}
