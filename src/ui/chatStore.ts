@@ -6,15 +6,7 @@ import { type Effort, levelRefused } from "../create/provider";
 import type { Editor } from "../state/editor";
 import { decode } from "../state/persist";
 import { type ChatDb, type Listing, type Saved, openChats, titleOf } from "./chatDb";
-import { chatUnlocked } from "./chatUnlock";
 import { type Choice, createModelSettings } from "./modelSettings";
-
-/**
- * Whether there's a chat at all: the build's VITE_CHAT is "on" (in .env locally),
- * or this browser has been let in by a link. It's only a switch, as nothing is
- * behind it: which model answers is up to each visitor, with their own key.
- */
-export const CHAT = import.meta.env.VITE_CHAT === "on" || chatUnlocked();
 
 /** Which chat this tab is on (sessionStorage), and which one a new tab starts on (localStorage). */
 const CURRENT_KEY = "netties:chat-id";

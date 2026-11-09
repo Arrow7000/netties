@@ -142,13 +142,10 @@ Choices made along the way that you haven't confirmed yet:
      that prompts are not one-offs into the ether which either succeed or
      don't, but where you can have a conversation and ask for something like
      'ok now make types required and add another agent type that does xyz'
-     within the context of an existing conversation"). Built behind a switch,
-     2026-11-04, on no design round: `VITE_CHAT=on` shows it, in the local `.env`
-     and not in production, where `?chat=on` lets a browser in for good and
-     `?chat=off` takes it back out (`src/ui/chatUnlock.ts`, 2026-11-05, so a friend
-     can try it; you: "it's just a feature switch"). It adds about 15 kB compressed
-     for everyone, which loading it only once unlocked would save. Logic in
-     `src/create/chat.ts`, the panel in `src/ui/Chat.tsx`.
+     within the context of an existing conversation"). Available to everyone as of
+     2026-11-09, without a feature announcement. The earlier build flag and browser
+     unlock links have been removed. Logic in `src/create/chat.ts`, the panel in
+     `src/ui/Chat.tsx`. The button's label is still being discussed.
      - Bring your own model (you, 2026-11-05: "i think for now let's just allow
        people to bring their own models and providers... we can make requests
        right from the frontend! which also neatly gets rid of the whole netlify

@@ -3,7 +3,7 @@ import { SPEEDS, createEditor } from "./state/editor";
 import { type Doc, arrival, fromShareHash, loadInitialDoc, SHARE_LOAD_ERROR, sharePushes } from "./state/persist";
 import { Canvas, type Pad, createCamera } from "./ui/Canvas";
 import { CHAT_WIDTH, ChatPanel } from "./ui/Chat";
-import { CHAT, createChat } from "./ui/chatStore";
+import { createChat } from "./ui/chatStore";
 import { compact, fingers, heightAtRest, sideways } from "./ui/compact";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { ExamplesMenu } from "./ui/ExamplesMenu";
@@ -42,7 +42,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
   const m = ed.model;
   const camera = createCamera();
   const phone = createPhone(ed, camera);
-  const chat = CHAT ? createChat(ed) : undefined;
+  const chat = createChat(ed);
 
   const stored = safeGet(THEME_KEY);
   const [theme, setTheme] = createSignal<string | undefined>(stored === "light" || stored === "dark" ? stored : undefined);
@@ -123,7 +123,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
       const target = e.target as Element;
       // Keys in the chat stay there, except that with nothing typed, undo still means the net.
       if (target.closest(".chat")) {
-        if (!(mod && e.key.toLowerCase() === "z" && !chat?.draft())) return;
+        if (!(mod && e.key.toLowerCase() === "z" && !chat.draft())) return;
       } else if (target.closest("input, textarea, select")) return;
       // The directions and types sheet edits the system in place, so undo works while it's open.
       const sheetOnly = ed.screen().kind === "types";
@@ -223,7 +223,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
   /** Open or close the chat. The net gets out of its way, keeping any zoom someone chose. */
   const setChatOpen = (open: boolean) => {
     const fitted = compact() || Math.abs(camera.view().k - camera.fitZoom()) < 0.01;
-    chat?.setOpen(open);
+    chat.setOpen(open);
     const room = ((open ? 1 : -1) * (CHAT_WIDTH + 36 - DESKTOP_PAD.l)) / 2;
     queueMicrotask(() => (fitted ? camera.fit() : camera.setView((v) => ({ ...v, x: v.x + room }))));
   };
@@ -259,12 +259,12 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
     });
   });
   const pad = (): Pad => {
-    if (!compact()) return chat?.open() ? { ...DESKTOP_PAD, l: CHAT_WIDTH + 36 } : DESKTOP_PAD;
+    if (!compact()) return chat.open() ? { ...DESKTOP_PAD, l: CHAT_WIDTH + 36 } : DESKTOP_PAD;
     viewport();
     const top = topEdge() ?? edgeOf(topBar.getBoundingClientRect());
     const sheet = phone.room();
     const room = { t: top.bottom + 12, r: sheet.r + 8, b: sheet.b + 12, l: top.left + 8 };
-    if (!chat?.open()) return room;
+    if (!chat.open()) return room;
     // The same share of the screen as the panel takes in styles.css.
     return sideways() ? { ...room, l: innerWidth * 0.5 + 8 } : { ...room, b: heightAtRest() * 0.58 + 12 };
   };
@@ -497,14 +497,10 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           )}
         </Menu>
         <ExamplesMenu examples={ed.examples} onPick={ed.loadExample} />
-        <Show when={chat}>
-          {(c) => (
-            <button class="btn chat-toggle" classList={{ busy: c().replying().size > 0 }} aria-pressed={c().open()} onClick={() => setChatOpen(!c().open())} title={c().replying().size ? "Chat: a reply is on its way" : "Chat"}>
-              <I.Chat />
-              <Show when={!compact()}>Chat</Show>
-            </button>
-          )}
-        </Show>
+        <button class="btn chat-toggle" classList={{ busy: chat.replying().size > 0 }} aria-pressed={chat.open()} onClick={() => setChatOpen(!chat.open())} title={chat.replying().size ? "Chat: a reply is on its way" : "Chat"}>
+          <I.Chat />
+          <Show when={!compact()}>Chat</Show>
+        </button>
         <Show when={!compact()}>
         <span class="sep" />
         <button
@@ -644,7 +640,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
         </div>
       </Show>
 
-      <Show when={chat?.open() && chat}>{(c) => <ChatPanel chat={c()} onEscape={() => (m.selection() ? ed.dispatch({ kind: "selection/clear" }) : setChatOpen(false))} onClose={() => setChatOpen(false)} />}</Show>
+      <Show when={chat.open()}><ChatPanel chat={chat} onEscape={() => (m.selection() ? ed.dispatch({ kind: "selection/clear" }) : setChatOpen(false))} onClose={() => setChatOpen(false)} /></Show>
 
       <Show when={ed.screen().kind === "types"}>
         <TypesSheet ed={ed} />
