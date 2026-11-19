@@ -68,3 +68,14 @@
 .dev-palette.folded > :not(.fold) {
   display: none;
 }
+
+.dev-palette .ui-colour {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 6px;
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+  cursor: pointer;
+}

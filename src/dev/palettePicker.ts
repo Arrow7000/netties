@@ -54,6 +54,32 @@ export function mountPalettePicker() {
   bar.classList.toggle("folded", innerWidth < 700);
   fold.onclick = () => bar.classList.toggle("folded");
   bar.append(fold);
+  // Colour the interface, or leave it plain to compare.
+  const PLAIN = "netties:dev-palette-plain";
+  const plainLabel = document.createElement("label");
+  plainLabel.className = "ui-colour";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  const setPlain = (plain: boolean) => {
+    if (plain) document.documentElement.dataset.plain = "";
+    else delete document.documentElement.dataset.plain;
+    box.checked = !plain;
+    try {
+      localStorage.setItem(PLAIN, plain ? "1" : "");
+    } catch {
+      // Not remembered.
+    }
+  };
+  let wasPlain = false;
+  try {
+    wasPlain = localStorage.getItem(PLAIN) === "1";
+  } catch {
+    // Not remembered.
+  }
+  setPlain(wasPlain);
+  box.onchange = () => setPlain(!box.checked);
+  plainLabel.append(box, "Colour the interface");
+  bar.append(plainLabel);
   const rows = [{ id: "", name: "Current", after: "pure black and white", ...CURRENT }, ...PALETTES].map((p) => {
     const b = document.createElement("button");
     const label = document.createElement("span");

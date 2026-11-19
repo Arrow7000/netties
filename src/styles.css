@@ -29,6 +29,14 @@
   --dot: rgba(0, 0, 0, 0.1);
   --scrim: rgba(10, 12, 16, 0.28);
   --shadow: 0 1px 2px rgba(16, 20, 28, 0.06), 0 8px 24px rgba(16, 20, 28, 0.08);
+  /*
+   * Roles in the interface (not the net), coloured the way an editor colours
+   * code: agents, ports, types and directions each get a colour of their own.
+   * Left unset here, so each use falls back to the plain colour it had; a
+   * palette (src/dev/palettes.ts) sets them. --c-agent, --c-port,
+   * --c-port-name, --c-port-edge, --c-type, --c-type-bg, --c-dir, --c-edge,
+   * --c-outline, --c-pressed, --c-primary, --c-on-primary.
+   */
   --r-island: 12px;
   --r-pop: 14px;
   --r-ctl: 8px;
@@ -139,6 +147,7 @@ textarea {
 }
 
 .sym {
+  color: var(--c-agent, currentColor);
   font-family: var(--serif);
   font-style: italic;
   font-size: 1.15em;
@@ -317,16 +326,16 @@ textarea {
 
 .btn.outline,
 .panel-row .btn {
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--c-outline, var(--line-2));
 }
 
 .btn.primary {
-  background: var(--text);
-  color: var(--chrome);
+  background: var(--c-primary, var(--text));
+  color: var(--c-on-primary, var(--chrome));
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 85%, var(--chrome));
+  background: color-mix(in srgb, var(--c-primary, var(--text)) 85%, var(--chrome));
 }
 
 .btn.run {
@@ -391,7 +400,7 @@ textarea {
 
 .seg button[aria-pressed="true"] {
   background: var(--chrome);
-  color: var(--text);
+  color: var(--c-pressed, var(--text));
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.12),
     0 0 0 1px var(--line);
@@ -1199,7 +1208,7 @@ kbd {
 }
 
 .tile {
-  border: 1px solid var(--line);
+  border: 1px solid var(--c-edge, var(--line));
   background: var(--chrome);
   border-radius: 10px;
   padding: 6px 2px 5px;
@@ -1257,19 +1266,23 @@ kbd {
 }
 
 .glyph .stub {
-  stroke: var(--ink);
+  stroke: var(--c-port, var(--ink));
   stroke-width: 1.4;
 }
 
 .glyph .body {
-  stroke: var(--ink);
+  stroke: var(--c-agent, var(--ink));
   stroke-width: 1.3;
   fill: var(--paper);
   stroke-linejoin: round;
 }
 
 .glyph.filled .body {
-  fill: var(--ink);
+  fill: var(--c-agent, var(--ink));
+}
+
+.glyph .arrowhead {
+  fill: var(--c-port, var(--ink));
 }
 
 .glyph text {
@@ -1772,6 +1785,10 @@ kbd {
   font: 400 12.5px var(--ui-font);
   min-width: 0;
   width: 100%;
+}
+
+.type-col .select:not(.any) {
+  color: var(--c-type, var(--text));
 }
 
 .select.any {
@@ -2648,7 +2665,7 @@ kbd {
 }
 
 .port-badge .dir .pol-icon {
-  color: var(--ink);
+  color: var(--c-dir, var(--ink));
 }
 
 .dir-seg button {
@@ -2680,8 +2697,8 @@ kbd {
   display: inline-block;
   padding: 1px 7px;
   border-radius: 999px;
-  background: var(--chip, color-mix(in srgb, var(--ink) 8%, transparent));
-  color: var(--text);
+  background: var(--chip, var(--c-type-bg, color-mix(in srgb, var(--ink) 8%, transparent)));
+  color: var(--c-type, var(--text));
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
@@ -2690,9 +2707,9 @@ kbd {
 .slot-tag {
   display: inline-block;
   padding: 0 5px;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--c-port-edge, var(--line-2));
   border-radius: 5px;
-  color: var(--muted);
+  color: var(--c-port, var(--muted));
   font-size: 11px;
   font-weight: 500;
   line-height: 16px;
@@ -2923,7 +2940,7 @@ button.type-chip:hover {
 }
 
 .ts-label {
-  color: var(--muted);
+  color: var(--c-port-name, var(--muted));
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
