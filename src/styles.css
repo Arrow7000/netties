@@ -36,7 +36,8 @@
    * each use falls back to the plain colour it had; a palette
    * (src/dev/palettes.ts) sets them. --c-port,
    * --c-port-name, --c-port-edge, --c-type, --c-type-bg, --c-dir, --c-edge,
-   * --c-outline, --c-pressed, --c-pressed-bg, --c-primary, --c-on-primary.
+   * --c-outline, --c-outline-text, --c-pressed, --c-pressed-bg, --c-primary,
+   * --c-on-primary, --c-heading, --c-tile-bg, --c-tile-hover.
    */
   --r-island: 12px;
   --r-pop: 14px;
@@ -327,6 +328,10 @@ textarea {
 .btn.outline,
 .panel-row .btn {
   border: 1px solid var(--c-outline, var(--line-2));
+}
+
+.btn.small.outline {
+  color: var(--c-outline-text, var(--text));
 }
 
 .btn.primary {
@@ -1194,6 +1199,7 @@ kbd {
   font-size: 12px;
   font-weight: 600;
   margin: 0;
+  color: var(--c-heading, var(--text));
 }
 
 .section-head .btn {
@@ -1209,7 +1215,7 @@ kbd {
 
 .tile {
   border: 1px solid var(--c-edge, var(--line));
-  background: var(--chrome);
+  background: var(--c-tile-bg, var(--chrome));
   border-radius: 10px;
   padding: 6px 2px 5px;
   display: flex;
@@ -1224,7 +1230,7 @@ kbd {
 .tile:hover,
 .tile.editing {
   border-color: var(--line-2);
-  background: var(--chrome-2);
+  background: var(--c-tile-hover, var(--chrome-2));
 }
 
 .tile.editing {

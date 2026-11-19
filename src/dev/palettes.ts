@@ -11,8 +11,9 @@
  *
  * Each theme also colours the interface around the net from the editor's
  * syntax colours: ports, types and directions each get one, and controls
- * take the accent. Agents stay in ink, in the tiles as on the canvas; only
- * their symbols, in both places, take a calm colour of the theme's.
+ * take the accent, and section headings the theme's keyword colour. Agents
+ * stay in ink, symbols too, and the tiles have the canvas behind them, so an
+ * agent in the sidebar looks just as it will when dropped.
  * `data-plain` on the root turns that off, to compare.
  */
 export type Theme = {
@@ -29,9 +30,9 @@ export type Theme = {
   /** A stuck pair. */
   stuck: string;
   /**
-   * Colours for the interface, as an editor colours code: agents' symbols
-   * (drawn calmer, mixed well towards the ink, on the canvas too), ports,
-   * types, directions.
+   * Colours for the interface, as an editor colours code: `agent` (the
+   * keyword colour) for section headings and, faintly, the tiles' borders;
+   * ports, types, directions.
    */
   ui?: { agent: string; port: string; type: string; dir: string };
 };
@@ -161,6 +162,10 @@ function roles(t: Theme) {
   --c-dir: ${u.dir};
   --c-edge: ${mix(u.agent, 30, t.chrome)};
   --c-outline: ${mix(t.accent, 45, t.chrome)};
+  --c-outline-text: ${t.accent};
+  --c-heading: ${mix(u.agent, 80, t.ink)};
+  --c-tile-bg: ${t.paper};
+  --c-tile-hover: ${mix(t.ink, 5, t.paper)};
   --c-pressed: ${t.accent};
   --c-pressed-bg: ${mix(t.accent, 20, t.chrome)};
   --c-primary: ${t.accent};
