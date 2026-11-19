@@ -10,8 +10,9 @@
  * every palette has the same structure.
  *
  * Each theme also colours the interface around the net from the editor's
- * syntax colours: agents' symbols and drawings, ports, types and directions
- * each get one, and controls take the accent. The net itself stays in ink.
+ * syntax colours: ports, types and directions each get one, and controls
+ * take the accent. Agents stay in ink, in the tiles as on the canvas; only
+ * their symbols, in both places, take a calm colour of the theme's.
  * `data-plain` on the root turns that off, to compare.
  */
 export type Theme = {
@@ -27,7 +28,11 @@ export type Theme = {
   active: string;
   /** A stuck pair. */
   stuck: string;
-  /** Colours for the interface (not the net), as an editor colours code: agents, ports, types, directions. */
+  /**
+   * Colours for the interface, as an editor colours code: agents' symbols
+   * (drawn calmer, mixed well towards the ink, on the canvas too), ports,
+   * types, directions.
+   */
   ui?: { agent: string; port: string; type: string; dir: string };
 };
 
@@ -148,7 +153,7 @@ function roles(t: Theme) {
   if (!u) return "";
   const mix = (a: string, pct: number, b: string) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
   return `
-  --c-agent: ${u.agent};
+  --c-symbol: ${mix(u.agent, 60, t.ink)};
   --c-port: ${u.port};
   --c-port-name: ${mix(u.port, 75, t.muted)};
   --c-port-edge: ${mix(u.port, 45, t.chrome)};
