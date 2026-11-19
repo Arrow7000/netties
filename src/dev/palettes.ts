@@ -127,8 +127,9 @@ function luminance(hex: string) {
   return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
 }
 
+const mix = (a: string, pct: number, b: string) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
+
 function tokens(t: Theme) {
-  const mix = (a: string, pct: number, b: string) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
   return `
   --paper: ${t.paper};
   --ink: ${t.ink};
@@ -151,9 +152,7 @@ function tokens(t: Theme) {
 function roles(t: Theme) {
   const u = t.ui;
   if (!u) return "";
-  const mix = (a: string, pct: number, b: string) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
   return `
-  --c-symbol: ${mix(u.agent, 60, t.ink)};
   --c-port: ${u.port};
   --c-port-name: ${mix(u.port, 75, t.muted)};
   --c-port-edge: ${mix(u.port, 45, t.chrome)};
@@ -163,28 +162,49 @@ function roles(t: Theme) {
   --c-edge: ${mix(u.agent, 30, t.chrome)};
   --c-outline: ${mix(t.accent, 45, t.chrome)};
   --c-pressed: ${t.accent};
+  --c-pressed-bg: ${mix(t.accent, 20, t.chrome)};
   --c-primary: ${t.accent};
   --c-on-primary: ${luminance(t.accent) > 0.3 ? mix(t.accent, 15, "#000") : "#ffffff"};`;
 }
 
+/**
+ * How far the panels stand from the canvas. "close" is the theme as given;
+ * "apart" lifts the panels clear of the canvas (lighter in the dark, and in
+ * the light a greyer canvas under whiter panels); "tinted" is apart, with
+ * the panels washed in the accent's hue.
+ */
+export const SURFACES = ["close", "apart", "tinted"] as const;
+export type Surface = (typeof SURFACES)[number];
+
+function surfaced(t: Theme, dark: boolean, surface: Surface): Theme {
+  if (surface === "close") return t;
+  const apart = dark
+    ? { ...t, chrome: mix(t.ink, 8, t.chrome) }
+    : { ...t, paper: mix(t.ink, 5, t.paper), chrome: mix(t.chrome, 40, "#ffffff") };
+  if (surface === "apart") return apart;
+  return { ...apart, chrome: mix(t.accent, dark ? 10 : 6, apart.chrome) };
+}
+
+/** A block for the light theme, and the same selector for the dark one, whether chosen or from the system. */
+function themed(sel: string, light: string, dark: string) {
+  return `
+${sel} {${light}
+}
+@media (prefers-color-scheme: dark) {
+  ${sel}:not([data-theme="light"]) {${dark}
+  }
+}
+${sel}[data-theme="dark"] {${dark}
+}`;
+}
+
 export function paletteCss() {
-  return PALETTES.map(
-    (p) => `
-:root[data-palette="${p.id}"] {${tokens(p.light)}
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-palette="${p.id}"]:not([data-theme="light"]) {${tokens(p.dark)}
-  }
-}
-:root[data-palette="${p.id}"][data-theme="dark"] {${tokens(p.dark)}
-}
-:root[data-palette="${p.id}"]:not([data-plain]) {${roles(p.light)}
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-palette="${p.id}"]:not([data-plain]):not([data-theme="light"]) {${roles(p.dark)}
-  }
-}
-:root[data-palette="${p.id}"]:not([data-plain])[data-theme="dark"] {${roles(p.dark)}
-}`,
+  return PALETTES.map((p) =>
+    SURFACES.map((surface) => {
+      const sel = `:root[data-palette="${p.id}"]${surface === "close" ? "" : `[data-surface="${surface}"]`}`;
+      const light = surfaced(p.light, false, surface);
+      const dark = surfaced(p.dark, true, surface);
+      return themed(sel, tokens(light), tokens(dark)) + themed(`${sel}:not([data-plain])`, roles(light), roles(dark));
+    }).join("\n"),
   ).join("\n");
 }

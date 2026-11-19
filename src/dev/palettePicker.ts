@@ -1,5 +1,5 @@
 import "./palettes.css";
-import { PALETTES, paletteCss, type Theme } from "./palettes";
+import { PALETTES, SURFACES, paletteCss, type Surface, type Theme } from "./palettes";
 
 /**
  * Dev only: a list in the top-left corner that switches the app between the
@@ -80,6 +80,40 @@ export function mountPalettePicker() {
   box.onchange = () => setPlain(!box.checked);
   plainLabel.append(box, "Colour the interface");
   bar.append(plainLabel);
+
+  // How far the panels stand from the canvas.
+  const SURFACE = "netties:dev-palette-surface";
+  const surfaceRow = document.createElement("div");
+  surfaceRow.className = "surfaces";
+  const surfaceButtons = SURFACES.map((sf) => {
+    const b = document.createElement("button");
+    b.textContent = sf.charAt(0).toUpperCase() + sf.slice(1);
+    b.onclick = () => setSurface(sf);
+    surfaceRow.append(b);
+    return [sf, b] as const;
+  });
+  const setSurface = (sf: Surface) => {
+    if (sf === "close") delete document.documentElement.dataset.surface;
+    else document.documentElement.dataset.surface = sf;
+    for (const [other, b] of surfaceButtons) b.setAttribute("aria-pressed", String(other === sf));
+    try {
+      localStorage.setItem(SURFACE, sf);
+    } catch {
+      // Not remembered.
+    }
+  };
+  let wasSurface: Surface = "close";
+  try {
+    const v = localStorage.getItem(SURFACE);
+    if (SURFACES.includes(v as Surface)) wasSurface = v as Surface;
+  } catch {
+    // Not remembered.
+  }
+  setSurface(wasSurface);
+  const surfaceLabel = document.createElement("span");
+  surfaceLabel.textContent = "Panels";
+  surfaceRow.prepend(surfaceLabel);
+  bar.append(surfaceRow);
   const rows = [{ id: "", name: "Current", after: "pure black and white", ...CURRENT }, ...PALETTES].map((p) => {
     const b = document.createElement("button");
     const label = document.createElement("span");

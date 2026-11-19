@@ -79,3 +79,27 @@
   margin-bottom: 2px;
   cursor: pointer;
 }
+
+.dev-palette .surfaces {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 6px 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+  color: var(--text);
+}
+
+.dev-palette .surfaces span {
+  margin-right: auto;
+}
+
+.dev-palette .surfaces button {
+  display: block;
+  padding: 3px 7px;
+}
+
+.dev-palette .ui-colour {
+  border-bottom: 0;
+  margin-bottom: 0;
+}

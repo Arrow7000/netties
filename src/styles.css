@@ -31,13 +31,12 @@
   --shadow: 0 1px 2px rgba(16, 20, 28, 0.06), 0 8px 24px rgba(16, 20, 28, 0.08);
   /*
    * Roles in the interface, coloured the way an editor colours code: ports,
-   * types and directions each get a colour of their own. Agents are drawn in
-   * ink everywhere, as on the canvas; only their symbols (on the canvas and in
-   * the interface alike) may take a calmer colour of their own. Left unset
-   * here, so each use falls back to the plain colour it had; a palette
-   * (src/dev/palettes.ts) sets them. --c-symbol, --c-port,
+   * types and directions each get a colour of their own. Agents, symbols
+   * included, stay in ink everywhere, as on the canvas. Left unset here, so
+   * each use falls back to the plain colour it had; a palette
+   * (src/dev/palettes.ts) sets them. --c-port,
    * --c-port-name, --c-port-edge, --c-type, --c-type-bg, --c-dir, --c-edge,
-   * --c-outline, --c-pressed, --c-primary, --c-on-primary.
+   * --c-outline, --c-pressed, --c-pressed-bg, --c-primary, --c-on-primary.
    */
   --r-island: 12px;
   --r-pop: 14px;
@@ -149,7 +148,6 @@ textarea {
 }
 
 .sym {
-  color: var(--c-symbol, currentColor);
   font-family: var(--serif);
   font-style: italic;
   font-size: 1.15em;
@@ -401,7 +399,7 @@ textarea {
 }
 
 .seg button[aria-pressed="true"] {
-  background: var(--chrome);
+  background: var(--c-pressed-bg, var(--chrome));
   color: var(--c-pressed, var(--text));
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.12),
@@ -820,7 +818,7 @@ kbd {
   font-family: var(--serif);
   font-style: italic;
   font-size: 11px;
-  fill: var(--c-symbol, var(--ink));
+  fill: var(--ink);
   pointer-events: none;
 }
 
@@ -1287,7 +1285,7 @@ kbd {
   font-family: var(--serif);
   font-style: italic;
   font-size: 13px;
-  fill: var(--c-symbol, var(--ink));
+  fill: var(--ink);
 }
 
 .glyph.filled text {
