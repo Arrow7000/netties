@@ -1,9 +1,12 @@
 /*
- * Nets are drawn like printed figures: black ink on white paper, or white
- * on black. Everything around them is a quiet tool: floating panels in a
- * neutral sans. Colour means something: amber is a pair that can fire, red
- * is something wrong or destructive, blue is selection and where a drop
- * will land.
+ * Nets are drawn like printed figures: dark ink on pale paper, or pale ink
+ * on dark. Everything around them is a quiet tool: floating panels in a
+ * neutral sans. Colour means something: a warm colour is a pair that can
+ * fire, red is something wrong or destructive, the accent is selection and
+ * where a drop will land.
+ *
+ * The colours here are pure black and white; the app puts a palette over
+ * them at startup (src/palettes.ts), which sets these same variables.
  */
 
 :root {
@@ -37,7 +40,7 @@
    * types and directions each get a colour of their own. Agents, symbols
    * included, stay in ink everywhere, as on the canvas. Left unset here, so
    * each use falls back to the plain colour it had; a palette
-   * (src/dev/palettes.ts) sets them. --c-port,
+   * (src/palettes.ts) sets them. --c-port,
    * --c-port-name, --c-port-edge, --c-type, --c-type-bg, --c-dir,
    * --c-outline, --c-outline-text, --c-pressed, --c-pressed-bg, --c-primary,
    * --c-on-primary, --c-heading.

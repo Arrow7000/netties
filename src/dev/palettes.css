@@ -1,4 +1,4 @@
-/* The dev-only palette picker (palettePicker.ts); the palettes themselves are made in palettes.ts. */
+/* The dev-only palette picker (palettePicker.ts); the palettes themselves are in src/palettes.ts. */
 .dev-palette {
   position: fixed;
   left: 12px;

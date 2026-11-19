@@ -1,25 +1,28 @@
 import "./palettes.css";
-import { PALETTES, SURFACES, paletteCss, type Surface, type Theme } from "./palettes";
+import { DEFAULT_PALETTE, PALETTES, SURFACES, applyPalette, type Surface, type Theme } from "../palettes";
 
 /**
  * Dev only: a list in the top-left corner that switches the app between the
- * palettes in palettes.ts. The choice is remembered in this browser, and
- * `?palette=nord` picks one from the address. Light and dark still come from
- * the app's own theme menu.
+ * palettes in src/palettes.ts, over the default the app starts with. The
+ * choice is remembered in this browser, and `?palette=nord` picks one from
+ * the address. Light and dark still come from the app's own theme menu.
  */
 const KEY = "netties:dev-palette";
 
 function stored(): string {
   try {
-    return localStorage.getItem(KEY) ?? "";
+    return localStorage.getItem(KEY) ?? DEFAULT_PALETTE;
   } catch {
-    return "";
+    return DEFAULT_PALETTE;
   }
 }
 
+let palette = DEFAULT_PALETTE;
+let surface: Surface = "close";
+
 function apply(id: string) {
-  if (id) document.documentElement.dataset.palette = id;
-  else delete document.documentElement.dataset.palette;
+  palette = id;
+  applyPalette(palette, surface);
   try {
     localStorage.setItem(KEY, id);
   } catch {
@@ -33,12 +36,8 @@ const CURRENT: { light: Theme; dark: Theme } = {
 };
 
 export function mountPalettePicker() {
-  const style = document.createElement("style");
-  style.textContent = paletteCss();
-  document.head.append(style);
-
   const fromUrl = new URLSearchParams(location.search).get("palette");
-  apply(fromUrl ?? stored());
+  palette = fromUrl ?? stored();
 
   const dark = matchMedia("(prefers-color-scheme: dark)");
   const showingDark = () => {
@@ -95,8 +94,8 @@ export function mountPalettePicker() {
     return [sf, b] as const;
   });
   const setSurface = (sf: Surface) => {
-    if (sf === "close") delete document.documentElement.dataset.surface;
-    else document.documentElement.dataset.surface = sf;
+    surface = sf;
+    applyPalette(palette, surface);
     for (const [other, b] of surfaceButtons) b.setAttribute("aria-pressed", String(other === sf));
     try {
       localStorage.setItem(SURFACE, sf);
@@ -111,6 +110,7 @@ export function mountPalettePicker() {
   } catch {
     // Not remembered.
   }
+  // Puts the palette on too, with these panels.
   setSurface(wasSurface);
   const surfaceLabel = document.createElement("span");
   surfaceLabel.textContent = "Panels";

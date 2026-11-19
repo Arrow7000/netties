@@ -1,7 +1,8 @@
 /**
- * Softer palettes to try instead of pure black and white, each in light and
- * dark, after code editors' themes. Dev only: the picker in palettePicker.ts
- * sets data-palette on the root, and the CSS for it is made here.
+ * The app's colours: palettes after code editors' themes, each in light and
+ * dark, softer than the stylesheet's pure black and white. The app starts
+ * with DEFAULT_PALETTE; in development the picker (src/dev/palettePicker.ts)
+ * switches between them.
  *
  * Each theme gives its own colours for an active pair and a stuck one, from
  * the editor's warning and error colours, so they sit in the theme rather
@@ -240,13 +241,36 @@ ${sel}[data-theme="dark"] {${dark}
 }`;
 }
 
-export function paletteCss() {
-  return PALETTES.map((p) =>
-    SURFACES.map((surface) => {
-      const sel = `:root[data-palette="${p.id}"]${surface === "close" ? "" : `[data-surface="${surface}"]`}`;
-      const light = surfaced(p.light, false, surface);
-      const dark = surfaced(p.dark, true, surface);
-      return themed(sel, tokens(light), tokens(dark)) + themed(`${sel}:not([data-plain])`, roles(light), roles(dark));
-    }).join("\n"),
-  ).join("\n");
+/** The palette the app starts with. */
+export const DEFAULT_PALETTE = "catppuccin";
+
+/** The CSS for one palette, in light and dark; `data-plain` on the root leaves the interface uncoloured. */
+export function paletteCss(p: Palette, surface: Surface = "close") {
+  const sel = `:root[data-palette="${p.id}"]`;
+  const light = surfaced(p.light, false, surface);
+  const dark = surfaced(p.dark, true, surface);
+  return themed(sel, tokens(light), tokens(dark)) + themed(`${sel}:not([data-plain])`, roles(light), roles(dark));
+}
+
+/**
+ * Colour the app with a palette: its variables go in a style element of
+ * their own, over the stylesheet's. An id that isn't a palette's (say "")
+ * takes it off, back to the stylesheet's pure black and white.
+ */
+export function applyPalette(id: string, surface: Surface = "close") {
+  const root = document.documentElement;
+  const p = PALETTES.find((q) => q.id === id);
+  let style = document.getElementById("palette");
+  if (!p) {
+    style?.remove();
+    delete root.dataset.palette;
+    return;
+  }
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "palette";
+    document.head.append(style);
+  }
+  style.textContent = paletteCss(p, surface);
+  root.dataset.palette = p.id;
 }
