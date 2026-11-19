@@ -115,6 +115,48 @@ export const PALETTES: Palette[] = [
     light: { paper: "#fdf6e3", chrome: "#fffbef", ink: "#5c6a72", muted: "#829181", accent: "#35a77c", active: "#dfa000", stuck: "#f85552", ui: { agent: "#df69ba", port: "#3a94c5", type: "#8da101", dir: "#35a77c" } },
     dark: { paper: "#2d353b", chrome: "#343f44", ink: "#d3c6aa", muted: "#9da9a0", accent: "#a7c080", active: "#dbbc7f", stuck: "#e67e80", ui: { agent: "#d699b6", port: "#7fbbb3", type: "#83c092", dir: "#a7c080" } },
   },
+  {
+    id: "dracula",
+    name: "Dracula",
+    after: "Alucard and Dracula, vampire purple",
+    light: { paper: "#f8f4e3", chrome: "#fffbeb", ink: "#1f1f1f", muted: "#6c664b", accent: "#644ac9", active: "#a34d14", stuck: "#cb3a2a", ui: { agent: "#a3144d", port: "#14710a", type: "#036a96", dir: "#644ac9" } },
+    dark: { paper: "#282a36", chrome: "#303241", ink: "#f8f8f2", muted: "#8c96c4", accent: "#bd93f9", active: "#ffb86c", stuck: "#ff5555", ui: { agent: "#ff79c6", port: "#50fa7b", type: "#8be9fd", dir: "#bd93f9" } },
+  },
+  {
+    id: "cyberpunk",
+    name: "Cyberpunk",
+    after: "neon on night, and on signal yellow",
+    light: { paper: "#f6efc2", chrome: "#fdf9e2", ink: "#1b1530", muted: "#625a80", accent: "#d4007a", active: "#e08a00", stuck: "#e0003c", ui: { agent: "#7a2cf0", port: "#c24e00", type: "#008c9e", dir: "#d4007a" } },
+    dark: { paper: "#0f1020", chrome: "#181a33", ink: "#e3f1ff", muted: "#8a8fb8", accent: "#00e5ff", active: "#fcee0a", stuck: "#ff2a6d", ui: { agent: "#ff4ecd", port: "#ff9e3d", type: "#39ff9e", dir: "#00e5ff" } },
+  },
+  {
+    id: "synthwave",
+    name: "Synthwave '84",
+    after: "outrun sunset; the light one made up",
+    light: { paper: "#fbf0f6", chrome: "#fffafc", ink: "#2b1d3d", muted: "#7a6a94", accent: "#0a9ea8", active: "#d98f00", stuck: "#e0284a", ui: { agent: "#d6339f", port: "#d0533f", type: "#1d9a6c", dir: "#0a9ea8" } },
+    dark: { paper: "#241b2f", chrome: "#2d2340", ink: "#f4eefa", muted: "#9a90c4", accent: "#36f9f6", active: "#fede5d", stuck: "#fe4450", ui: { agent: "#ff7edb", port: "#f97e72", type: "#72f1b8", dir: "#36f9f6" } },
+  },
+  {
+    id: "kanagawa",
+    name: "Kanagawa",
+    after: "Lotus and Wave, Hokusai's ink",
+    light: { paper: "#f2ecbc", chrome: "#f8f3d4", ink: "#545464", muted: "#716e61", accent: "#4d699b", active: "#cc6d00", stuck: "#c84053", ui: { agent: "#624c83", port: "#77713f", type: "#597b75", dir: "#6693bf" } },
+    dark: { paper: "#1f1f28", chrome: "#2a2a37", ink: "#dcd7ba", muted: "#9d9a8a", accent: "#7e9cd8", active: "#ffa066", stuck: "#ff5d62", ui: { agent: "#957fb8", port: "#e6c384", type: "#7aa89f", dir: "#7fb4ca" } },
+  },
+  {
+    id: "monokai",
+    name: "Monokai Pro",
+    after: "warm charcoal, bright fruit",
+    light: { paper: "#f3ebe8", chrome: "#faf4f2", ink: "#29242a", muted: "#7e787a", accent: "#1c8ca8", active: "#cc7a0a", stuck: "#e14775", ui: { agent: "#7058be", port: "#e16032", type: "#269d69", dir: "#1c8ca8" } },
+    dark: { paper: "#2d2a2e", chrome: "#363337", ink: "#fcfcfa", muted: "#a09fa0", accent: "#78dce8", active: "#ffd866", stuck: "#ff6188", ui: { agent: "#ab9df2", port: "#fc9867", type: "#a9dc76", dir: "#78dce8" } },
+  },
+  {
+    id: "owl",
+    name: "Night Owl",
+    after: "Light Owl and Night Owl, deep sea blue",
+    light: { paper: "#f0f0f0", chrome: "#fbfbfb", ink: "#403f53", muted: "#6f7380", accent: "#4876d6", active: "#c99400", stuck: "#de3d3b", ui: { agent: "#994cc3", port: "#aa0982", type: "#0c969b", dir: "#4876d6" } },
+    dark: { paper: "#011627", chrome: "#0b2942", ink: "#d6deeb", muted: "#8b9fb3", accent: "#82aaff", active: "#ffcb8b", stuck: "#ef5350", ui: { agent: "#c792ea", port: "#f78c6c", type: "#7fdbca", dir: "#82aaff" } },
+  },
 ];
 
 /** Relative luminance, for picking dark or light text on a colour. */

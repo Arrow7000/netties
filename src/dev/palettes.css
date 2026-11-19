@@ -13,6 +13,8 @@
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
   font: 500 12px var(--ui-font);
+  max-height: calc(100dvh - 76px);
+  overflow-y: auto;
 }
 
 .dev-palette button {

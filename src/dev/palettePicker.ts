@@ -48,6 +48,8 @@ export function mountPalettePicker() {
 
   const bar = document.createElement("div");
   bar.className = "dev-palette";
+  // Trying palettes leaves open whatever is open, the rule grid say.
+  bar.dataset.notOutside = "";
   // Folded to one line on narrow screens, where the list would cover the canvas.
   const fold = document.createElement("button");
   fold.className = "fold";
