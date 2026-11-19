@@ -29,15 +29,9 @@
   --dot: rgba(0, 0, 0, 0.1);
   --scrim: rgba(10, 12, 16, 0.28);
   --shadow: 0 1px 2px rgba(16, 20, 28, 0.06), 0 8px 24px rgba(16, 20, 28, 0.08);
-  /*
-   * Tiles are small raised cards, as Apple draws them: no border, a hairline
-   * ring and a soft shadow, a little lighter than the panel in the dark.
-   */
-  --tile-bg: var(--chrome);
-  --tile-hover: color-mix(in srgb, var(--ink) 3%, var(--chrome));
-  --tile-ring: 0 0 0 0.5px color-mix(in srgb, var(--ink) 14%, transparent);
-  --tile-shadow: 0 1px 1.5px color-mix(in srgb, var(--ink) 6%, transparent), 0 2px 8px -1px color-mix(in srgb, var(--ink) 7%, transparent);
-  --tile-lift: 0 2px 3px color-mix(in srgb, var(--ink) 7%, transparent), 0 6px 16px -2px color-mix(in srgb, var(--ink) 10%, transparent);
+  /* Tiles are a flat, quiet fill, a shade off the panel, as Apple fills grouped controls. */
+  --tile-bg: color-mix(in srgb, var(--ink) 5%, var(--chrome));
+  --tile-hover: color-mix(in srgb, var(--ink) 9%, var(--chrome));
   /*
    * Roles in the interface, coloured the way an editor colours code: ports,
    * types and directions each get a colour of their own. Agents, symbols
@@ -74,11 +68,6 @@
     --dot: rgba(255, 255, 255, 0.13);
     --scrim: rgba(0, 0, 0, 0.5);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
-    --tile-bg: color-mix(in srgb, var(--ink) 7%, var(--chrome));
-    --tile-hover: color-mix(in srgb, var(--ink) 10%, var(--chrome));
-    --tile-ring: inset 0 0.5px 0 color-mix(in srgb, var(--ink) 12%, transparent), 0 0 0 0.5px rgba(0, 0, 0, 0.45);
-    --tile-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px -1px rgba(0, 0, 0, 0.25);
-    --tile-lift: 0 2px 4px rgba(0, 0, 0, 0.35), 0 6px 16px -2px rgba(0, 0, 0, 0.35);
     color-scheme: dark;
   }
 }
@@ -102,11 +91,6 @@
   --dot: rgba(255, 255, 255, 0.13);
   --scrim: rgba(0, 0, 0, 0.5);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
-  --tile-bg: color-mix(in srgb, var(--ink) 7%, var(--chrome));
-  --tile-hover: color-mix(in srgb, var(--ink) 10%, var(--chrome));
-  --tile-ring: inset 0 0.5px 0 color-mix(in srgb, var(--ink) 12%, transparent), 0 0 0 0.5px rgba(0, 0, 0, 0.45);
-  --tile-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px -1px rgba(0, 0, 0, 0.25);
-  --tile-lift: 0 2px 4px rgba(0, 0, 0, 0.35), 0 6px 16px -2px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
 
@@ -1229,18 +1213,14 @@ kbd {
 .tiles {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  /* Room for the tiles' shadows at the edges. */
-  padding: 1px;
-  margin: -1px;
+  gap: 6px;
 }
 
 .tile {
   --glyph-paper: var(--tile-bg);
   border: 0;
   background: var(--glyph-paper);
-  box-shadow: var(--tile-ring), var(--tile-shadow);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 8px 2px 6px;
   display: flex;
   flex-direction: column;
@@ -1249,39 +1229,21 @@ kbd {
   cursor: grab;
   min-width: 0;
   touch-action: none;
-  /* Not the background: the agents' bodies take it at once, so it changes at once too. */
-  transition:
-    box-shadow 0.15s,
-    transform 0.15s;
-}
-
-/* Apple's continuous corners, where the browser has them. */
-@supports (corner-shape: squircle) {
-  .tile {
-    corner-shape: squircle;
-    border-radius: 20px;
-  }
 }
 
 .tile:hover {
   --glyph-paper: var(--tile-hover);
-  box-shadow: var(--tile-ring), var(--tile-lift);
 }
 
-.tile:active {
-  transform: scale(0.97);
-}
-
-/* Being edited: the accent drawn as a ring, so the tile keeps its size. */
+/* Being edited: the accent drawn inside, so the tile keeps its size. */
 .tile.editing {
   --glyph-paper: var(--tile-hover);
-  box-shadow: 0 0 0 2px var(--accent), var(--tile-shadow);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
-/* Components are the user's own: a dashed ring and no shadow, not yet a card. */
+/* Components are the user's own: a dashed outline and no fill. */
 .tile.component {
   --glyph-paper: var(--chrome);
-  box-shadow: none;
   outline: 1px dashed var(--line-2);
   outline-offset: -1px;
 }
