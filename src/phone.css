@@ -62,11 +62,6 @@
   padding: 7px 2px 6px;
   justify-content: center;
   gap: 3px;
-  border-radius: 11px;
-  transition:
-    transform 0.15s,
-    border-color 0.15s,
-    background 0.15s;
 }
 
 .sheet-tile.along-x {
@@ -79,19 +74,18 @@
 
 .sheet-tile:active,
 .sheet-tile.held {
-  background: var(--chrome-2);
-  border-color: var(--line-2);
+  --glyph-paper: var(--tile-hover);
 }
 
 /* Tapped: selected, as the palette's tile being edited looks. */
-.sheet-tile.picked {
-  background: var(--chrome-2);
-  border-color: var(--accent);
+.sheet-tile.picked,
+.sheet-tile.held {
+  --glyph-paper: var(--tile-hover);
+  box-shadow: 0 0 0 2px var(--accent), var(--tile-shadow);
 }
 
 .sheet-tile.held {
   transform: scale(0.94);
-  border-color: var(--accent);
 }
 
 .sheet-tile .tile-name {
@@ -99,7 +93,10 @@
 }
 
 .sheet-tile.new {
-  border-style: dashed;
+  --glyph-paper: var(--chrome);
+  box-shadow: none;
+  outline: 1px dashed var(--line-2);
+  outline-offset: -1px;
   color: var(--muted);
 }
 
@@ -574,7 +571,8 @@
 }
 
 .sheet-agents .sheet-tiles {
-  padding: 8px 10px 0;
+  /* Room under the tiles for their shadow; the scroller would cut it off. */
+  padding: 8px 10px 5px;
 }
 
 /* The line under the tiles takes the rest, its Edit clear of the tiles and of the line below. */
