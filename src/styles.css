@@ -1310,6 +1310,49 @@ kbd {
   color: var(--text);
 }
 
+/* Row heads sit right up against their row; very long ones are cut short (the full name is the tooltip). */
+.rule-grid .head.row {
+  justify-content: flex-end;
+  padding: 0 5px 0 2px;
+  min-width: 0;
+  max-width: 72px;
+  line-height: 1;
+}
+
+.rule-grid .head .sym {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 0.12em; /* room for the italic's overhang */
+}
+
+.rule-grid .head.col {
+  padding-bottom: 3px;
+  min-width: 0;
+}
+
+.rule-grid.tall .head.col {
+  align-items: flex-end;
+}
+
+/* Long symbols: column heads stand on end, reading upwards from their column. */
+.rule-grid .head.col.long {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  justify-content: flex-start;
+  max-height: 72px;
+  padding: 3px 0 0;
+}
+
+.rule-grid .head.col.long .sym {
+  padding: 0 0 0.12em;
+}
+
+/* Square cells as wide as their column allows (the big grid's are a set size). */
+.rule-grid:not(.big) .cell {
+  aspect-ratio: 1;
+}
+
 .rule-grid .head.hl {
   background: var(--accent-soft);
   color: var(--accent);
@@ -1445,7 +1488,7 @@ kbd {
   font-size: 13px;
 }
 
-.rule-grid.big .cell::after {
+.rule-grid.big:not(.tall) .cell::after {
   display: none;
 }
 
@@ -1463,15 +1506,18 @@ kbd {
 }
 
 .rule-grid.big .head.row {
-  justify-content: flex-end;
   gap: 6px;
   padding-right: 6px;
+  max-width: none;
 }
 
 .rule-grid.big .head.col {
-  flex-direction: column;
-  justify-content: flex-end;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
+}
+
+.rule-grid.big .head.col.long {
+  max-height: 110px;
+  padding-top: 6px;
 }
 
 .rule-grid.big .head small {

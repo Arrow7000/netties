@@ -87,15 +87,24 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean; pi
   const state = cellStates(ed);
 
   const n = () => types().length;
-  const cell = () => (props.thumb ? 7 : props.big ? 36 : Math.max(17, Math.min(24, Math.floor(188 / Math.max(1, n())))));
+  /**
+   * Cells in the side panel, the phone's sheet and the thumbnail have a most
+   * they can be and shrink to fit the width there; the big grid's are a set size.
+   */
+  const cell = () => (props.thumb ? "minmax(0, 9px)" : props.big ? "36px" : "minmax(0, 24px)");
+  /** Too wide to sit upright over a column: such a column head stands on end instead. */
+  const long = (symbol: string) => [...symbol].length > (props.thumb ? 1 : 2);
+  /** Some symbol is long, so the big grid's cells are too narrow to spell out their pairs. */
+  const tall = () => types().some((t) => long(t.symbol));
 
   return (
     <div
       class="rule-grid"
-      classList={{ big: !!props.big, thumb: !!props.thumb }}
+      classList={{ big: !!props.big, thumb: !!props.thumb, tall: tall() }}
       style={{
-        "grid-template-columns": `${props.big ? "auto" : `${cell()}px`} repeat(${n()}, ${cell()}px)`,
-        "grid-auto-rows": `${cell()}px`,
+        "grid-template-columns": `max-content repeat(${n()}, ${cell()})`,
+        "grid-template-rows": "auto",
+        "grid-auto-rows": props.big ? cell() : "auto",
       }}
       onPointerLeave={() => {
         if (props.pick) return;
@@ -106,18 +115,15 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean; pi
       <span />
       <For each={types()}>
         {(t, j) => (
-          <span class="head col" classList={{ hl: hot()?.[1] === j() }}>
+          <span class="head col" classList={{ hl: hot()?.[1] === j(), long: long(t.symbol) }} title={t.name}>
             <i class="sym">{t.symbol}</i>
-            <Show when={props.big}>
-              <small>{t.name}</small>
-            </Show>
           </span>
         )}
       </For>
       <For each={types()}>
         {(a, i) => (
           <>
-            <span class="head row" classList={{ hl: hot()?.[0] === i() }}>
+            <span class="head row" classList={{ hl: hot()?.[0] === i() }} title={a.name}>
               <Show when={props.big}>
                 <small>{a.name}</small>
               </Show>
@@ -152,7 +158,7 @@ export function RuleGrid(props: { ed: Editor; big?: boolean; thumb?: boolean; pi
                       ed.openRule(a.id, b.id);
                     }}
                   >
-                    <Show when={props.big && state(a.id, b.id) !== "never"}>
+                    <Show when={props.big && !tall() && state(a.id, b.id) !== "never"}>
                       {a.symbol}
                       {b.symbol}
                     </Show>
