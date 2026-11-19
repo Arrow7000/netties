@@ -1346,6 +1346,9 @@ kbd {
 
 .rule-grid .head.col.long .sym {
   padding: 0 0 0.12em;
+  /* A thin underline marks the heads that are turned, so they stand apart from the upright ones. */
+  border-block-end: 1px solid var(--faint);
+  padding-block-end: 1px;
 }
 
 /* Square cells as wide as their column allows (the big grid's are a set size). */
@@ -1531,6 +1534,10 @@ kbd {
 
 .rule-grid.thumb .head {
   font-size: 8px;
+}
+
+.rule-grid.thumb .head.col.long .sym {
+  border: 0;
 }
 
 .rule-grid.thumb .cell {
