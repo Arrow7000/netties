@@ -197,6 +197,15 @@ textarea {
 .top-right {
   top: 12px;
   right: 12px;
+  /* Over the palette below it, for the theme menu. */
+  z-index: 11;
+}
+
+/* The theme menu opens leftwards, from the right edge. */
+.menu.theme-menu {
+  left: auto;
+  right: -6px;
+  min-width: 250px;
 }
 
 /* The bottom row: counters, run controls and view controls, kept apart. */

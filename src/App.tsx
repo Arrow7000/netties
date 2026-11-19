@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { SPEEDS, createEditor } from "./state/editor";
 import { type Doc, arrival, fromShareHash, loadInitialDoc, SHARE_LOAD_ERROR, sharePushes } from "./state/persist";
 import { Canvas, type Pad, createCamera } from "./ui/Canvas";
@@ -29,6 +29,12 @@ import { parseProgram } from "./core/programText";
 import { typingOn } from "./core/types";
 
 const THEME_KEY = "netties:theme";
+type ThemeChoice = "system" | "light" | "dark";
+const THEMES: [ThemeChoice, string][] = [
+  ["system", "System"],
+  ["light", "Light"],
+  ["dark", "Dark"],
+];
 
 /** The speed the clock button goes to. */
 const SLOW = 0.25;
@@ -44,16 +50,34 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
   const phone = createPhone(ed, camera);
   const chat = createChat(ed);
 
+  // Light, dark, or whatever the system says, which is where everyone starts
+  // until they pick one; a pick is remembered in this browser.
   const stored = safeGet(THEME_KEY);
-  const [theme, setTheme] = createSignal<string | undefined>(stored === "light" || stored === "dark" ? stored : undefined);
+  const [theme, setTheme] = createSignal<ThemeChoice>(stored === "light" || stored === "dark" ? stored : "system");
   createEffect(() => {
     const t = theme();
-    if (!t) delete document.documentElement.dataset.theme;
+    if (t === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = t;
-    if (t) safeSet(THEME_KEY, t);
   });
-  const dark = () => (theme() ? theme() === "dark" : matchMedia("(prefers-color-scheme: dark)").matches);
-  const toggleTheme = () => setTheme(dark() ? "light" : "dark");
+  const pickTheme = (t: ThemeChoice) => {
+    setTheme(t);
+    safeSet(THEME_KEY, t);
+  };
+  const themes = () => (
+    <div class="seg" role="group" aria-label="Theme">
+      <For each={THEMES}>
+        {([t, label]) => (
+          <button
+            aria-pressed={theme() === t}
+            onClick={() => pickTheme(t)}
+            title={t === "system" ? "Follow the system's light or dark setting" : undefined}
+          >
+            {label}
+          </button>
+        )}
+      </For>
+    </div>
+  );
 
   // Save after every change.
   createEffect(on([ed.rev, m.mode], () => ed.save()));
@@ -390,14 +414,10 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           <hr />
           <div class="menu-head">Just for you, in this browser</div>
           {wireTypes(close)}
-          <MenuItem
-            lead={dark() ? <I.Check /> : <span class="mi-blank" />}
-            title="Dark theme"
-            onClick={() => {
-              toggleTheme();
-              close();
-            }}
-          />
+          <div class="menu-row">
+            <span class="menu-label">Theme</span>
+            {themes()}
+          </div>
         </>
       )}
     </Menu>
@@ -544,9 +564,23 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
         {/* On a phone the theme is in the view menu. */}
         <Show when={!compact()}>
           <span class="sep" />
-          <button class="btn icon" onClick={toggleTheme} title="Switch between light and dark">
-            <I.Theme />
-          </button>
+          <Menu label={<I.Theme />} title="Light, dark, or as the system is" class="icon" menuClass="theme-menu" bare>
+            {(close) => (
+              <For each={THEMES}>
+                {([t, label]) => (
+                  <MenuItem
+                    lead={theme() === t ? <I.Check /> : <span class="mi-blank" />}
+                    title={label}
+                    note={t === "system" ? "Follows your computer's setting" : undefined}
+                    onClick={() => {
+                      pickTheme(t);
+                      close();
+                    }}
+                  />
+                )}
+              </For>
+            )}
+          </Menu>
         </Show>
       </div>
 
