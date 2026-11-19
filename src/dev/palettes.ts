@@ -1,0 +1,151 @@
+/**
+ * Softer palettes to try instead of pure black and white, each in light and
+ * dark, after code editors' themes. Dev only: the picker in palettePicker.ts
+ * sets data-palette on the root, and the CSS for it is made here.
+ *
+ * Each theme gives its own colours for an active pair and a stuck one, from
+ * the editor's warning and error colours, so they sit in the theme rather
+ * than on top of it. The in-between shades (panel greys, lines, the faint
+ * text, the soft accent, the canvas dots) are mixed from the given ones, so
+ * every palette has the same structure.
+ */
+export type Theme = {
+  /** The canvas. */
+  paper: string;
+  /** Panels and bars. */
+  chrome: string;
+  /** Agents and wires, and the main text. */
+  ink: string;
+  muted: string;
+  accent: string;
+  /** An active pair, and the Run button. */
+  active: string;
+  /** A stuck pair. */
+  stuck: string;
+};
+
+export type Palette = { id: string; name: string; after: string; light: Theme; dark: Theme };
+
+export const PALETTES: Palette[] = [
+  {
+    id: "soft",
+    name: "Soft",
+    after: "today's, softened",
+    light: { paper: "#fbfbfa", chrome: "#ffffff", ink: "#1d1f23", muted: "#697080", accent: "#2d5bff", active: "#f2a20c", stuck: "#d9472b" },
+    dark: { paper: "#111215", chrome: "#1b1d21", ink: "#e4e6ea", muted: "#9aa1ad", accent: "#7090ff", active: "#ffb321", stuck: "#ff6a4d" },
+  },
+  {
+    id: "dimmed",
+    name: "Dimmed",
+    after: "GitHub",
+    light: { paper: "#f6f8fa", chrome: "#ffffff", ink: "#24292f", muted: "#57606a", accent: "#0969da", active: "#d4a72c", stuck: "#cf222e" },
+    dark: { paper: "#22272e", chrome: "#2d333b", ink: "#cdd9e5", muted: "#8d9aa7", accent: "#539bf5", active: "#daaa3f", stuck: "#e5534b" },
+  },
+  {
+    id: "warm",
+    name: "Warm",
+    after: "printed paper",
+    light: { paper: "#f6f2e9", chrome: "#fcfaf6", ink: "#2b2824", muted: "#756d60", accent: "#3b5fc7", active: "#e09422", stuck: "#c8442b" },
+    dark: { paper: "#1d1b18", chrome: "#282521", ink: "#e6dfd1", muted: "#a89f90", accent: "#8ea6f0", active: "#e8a646", stuck: "#e2674c" },
+  },
+  {
+    id: "one",
+    name: "One",
+    after: "Atom",
+    light: { paper: "#fafafa", chrome: "#ffffff", ink: "#383a42", muted: "#696c77", accent: "#4078f2", active: "#c18401", stuck: "#e45649" },
+    dark: { paper: "#21252b", chrome: "#282c34", ink: "#d7dae0", muted: "#9da5b4", accent: "#61afef", active: "#e5c07b", stuck: "#e06c75" },
+  },
+  {
+    id: "gruvbox",
+    name: "Gruvbox",
+    after: "retro, earthy",
+    light: { paper: "#fbf1c7", chrome: "#f9f5d7", ink: "#3c3836", muted: "#7c6f64", accent: "#076678", active: "#d79921", stuck: "#cc241d" },
+    dark: { paper: "#282828", chrome: "#32302f", ink: "#ebdbb2", muted: "#a89984", accent: "#83a598", active: "#fabd2f", stuck: "#fb4934" },
+  },
+  {
+    id: "nord",
+    name: "Nord",
+    after: "arctic blue-grey",
+    light: { paper: "#eceff4", chrome: "#f8f9fb", ink: "#2e3440", muted: "#4c566a", accent: "#5e81ac", active: "#d08770", stuck: "#bf616a" },
+    dark: { paper: "#2e3440", chrome: "#3b4252", ink: "#e5e9f0", muted: "#a5adbb", accent: "#88c0d0", active: "#ebcb8b", stuck: "#bf616a" },
+  },
+  {
+    id: "solarized",
+    name: "Solarized",
+    after: "cream and deep teal",
+    light: { paper: "#fdf6e3", chrome: "#fffcf4", ink: "#073642", muted: "#657b83", accent: "#268bd2", active: "#b58900", stuck: "#dc322f" },
+    dark: { paper: "#002b36", chrome: "#073642", ink: "#eee8d5", muted: "#93a1a1", accent: "#268bd2", active: "#b58900", stuck: "#dc322f" },
+  },
+  {
+    id: "catppuccin",
+    name: "Catppuccin",
+    after: "Latte and Mocha, pastel",
+    light: { paper: "#eff1f5", chrome: "#fbfbfd", ink: "#4c4f69", muted: "#6c6f85", accent: "#8839ef", active: "#fe640b", stuck: "#d20f39" },
+    dark: { paper: "#1e1e2e", chrome: "#26263a", ink: "#cdd6f4", muted: "#a6adc8", accent: "#cba6f7", active: "#fab387", stuck: "#f38ba8" },
+  },
+  {
+    id: "rose",
+    name: "Rosé Pine",
+    after: "Dawn and Moon, muted rose",
+    light: { paper: "#faf4ed", chrome: "#fffaf3", ink: "#575279", muted: "#797593", accent: "#907aa9", active: "#ea9d34", stuck: "#b4637a" },
+    dark: { paper: "#232136", chrome: "#2a273f", ink: "#e0def4", muted: "#908caa", accent: "#c4a7e7", active: "#f6c177", stuck: "#eb6f92" },
+  },
+  {
+    id: "tokyo",
+    name: "Tokyo Night",
+    after: "Day and Night, indigo",
+    light: { paper: "#e1e2e7", chrome: "#eef0f4", ink: "#343b58", muted: "#6172b0", accent: "#2e7de9", active: "#b15c00", stuck: "#f52a65" },
+    dark: { paper: "#1a1b26", chrome: "#222436", ink: "#c0caf5", muted: "#9aa5ce", accent: "#7aa2f7", active: "#e0af68", stuck: "#f7768e" },
+  },
+  {
+    id: "everforest",
+    name: "Everforest",
+    after: "green, forest",
+    light: { paper: "#fdf6e3", chrome: "#fffbef", ink: "#5c6a72", muted: "#829181", accent: "#35a77c", active: "#dfa000", stuck: "#f85552" },
+    dark: { paper: "#2d353b", chrome: "#343f44", ink: "#d3c6aa", muted: "#9da9a0", accent: "#a7c080", active: "#dbbc7f", stuck: "#e67e80" },
+  },
+];
+
+/** Relative luminance, for picking dark or light text on a colour. */
+function luminance(hex: string) {
+  const channel = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+function tokens(t: Theme) {
+  const mix = (a: string, pct: number, b: string) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
+  return `
+  --paper: ${t.paper};
+  --ink: ${t.ink};
+  --text: ${t.ink};
+  --chrome: ${t.chrome};
+  --chrome-2: ${mix(t.ink, 6, t.chrome)};
+  --chrome-3: ${mix(t.ink, 10, t.chrome)};
+  --line: ${mix(t.ink, 12, t.chrome)};
+  --line-2: ${mix(t.ink, 22, t.chrome)};
+  --muted: ${t.muted};
+  --faint: ${mix(t.muted, 62, t.chrome)};
+  --accent: ${t.accent};
+  --accent-soft: ${mix(t.accent, 16, t.chrome)};
+  --active: ${t.active};
+  --on-active: ${luminance(t.active) > 0.3 ? mix(t.active, 15, "#000") : "#ffffff"};
+  --stuck: ${t.stuck};
+  --dot: ${mix(t.ink, 11, "transparent")};`;
+}
+
+export function paletteCss() {
+  return PALETTES.map(
+    (p) => `
+:root[data-palette="${p.id}"] {${tokens(p.light)}
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette="${p.id}"]:not([data-theme="light"]) {${tokens(p.dark)}
+  }
+}
+:root[data-palette="${p.id}"][data-theme="dark"] {${tokens(p.dark)}
+}`,
+  ).join("\n");
+}

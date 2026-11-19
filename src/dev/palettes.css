@@ -1,218 +1,13 @@
-/*
- * Softer palettes to try instead of pure black and white, each in light and
- * dark. Dev only: the picker in palettePicker.ts sets data-palette on the
- * root. Each palette sets the same tokens in both themes, so none of the
- * defaults' light values leak into its dark one.
- */
-
-/* Soft: today's look, with the black and white taken off the extremes. */
-:root[data-palette="soft"] {
-  --paper: #fbfbfa;
-  --ink: #1d1f23;
-  --chrome: #ffffff;
-  --chrome-2: #f2f3f5;
-  --chrome-3: #e8eaed;
-  --line: #e2e4e8;
-  --line-2: #cfd3d9;
-  --text: #1c1f24;
-  --muted: #697080;
-  --faint: #9aa0ab;
-  --accent: #2d5bff;
-  --accent-soft: #e8eeff;
-  --dot: rgba(0, 0, 0, 0.09);
-}
-
-/* Dimmed: after GitHub's light and Dark Dimmed themes; cool greys, a mid-grey night. */
-:root[data-palette="dimmed"] {
-  --paper: #f6f8fa;
-  --ink: #24292f;
-  --chrome: #ffffff;
-  --chrome-2: #eef1f4;
-  --chrome-3: #e3e7eb;
-  --line: #d8dee4;
-  --line-2: #c3cad2;
-  --text: #24292f;
-  --muted: #57606a;
-  --faint: #8c959f;
-  --accent: #0969da;
-  --accent-soft: #ddf4ff;
-  --dot: rgba(31, 35, 40, 0.1);
-}
-
-/* Warm: printed paper by day, warm charcoal by night (Gruvbox and Zed's warmer themes). */
-:root[data-palette="warm"] {
-  --paper: #f6f2e9;
-  --ink: #2b2824;
-  --chrome: #fcfaf6;
-  --chrome-2: #efeae0;
-  --chrome-3: #e5dfd3;
-  --line: #e0d9cc;
-  --line-2: #cbc2b2;
-  --text: #2b2824;
-  --muted: #756d60;
-  --faint: #a69d8e;
-  --accent: #3b5fc7;
-  --accent-soft: #e4e9f6;
-  --dot: rgba(60, 45, 20, 0.12);
-}
-
-/* One: after Atom's One Light and One Dark; blue-grey night. */
-:root[data-palette="one"] {
-  --paper: #fafafa;
-  --ink: #383a42;
-  --chrome: #ffffff;
-  --chrome-2: #f0f0f1;
-  --chrome-3: #e5e5e6;
-  --line: #e1e2e5;
-  --line-2: #c8cad0;
-  --text: #383a42;
-  --muted: #696c77;
-  --faint: #a0a1a7;
-  --accent: #4078f2;
-  --accent-soft: #e6edfd;
-  --dot: rgba(56, 58, 66, 0.1);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root[data-palette="soft"]:not([data-theme="light"]) {
-    --paper: #111215;
-    --ink: #e4e6ea;
-    --chrome: #1b1d21;
-    --chrome-2: #24272c;
-    --chrome-3: #2e3137;
-    --line: #2f3238;
-    --line-2: #3e424a;
-    --text: #e4e6ea;
-    --muted: #9aa1ad;
-    --faint: #6b717c;
-    --accent: #7090ff;
-    --accent-soft: #1d2645;
-    --dot: rgba(255, 255, 255, 0.1);
-  }
-
-  :root[data-palette="dimmed"]:not([data-theme="light"]) {
-    --paper: #22272e;
-    --ink: #cdd9e5;
-    --chrome: #2d333b;
-    --chrome-2: #363d46;
-    --chrome-3: #424a54;
-    --line: #444c56;
-    --line-2: #545d68;
-    --text: #cdd9e5;
-    --muted: #8d9aa7;
-    --faint: #636e7b;
-    --accent: #539bf5;
-    --accent-soft: #1b3456;
-    --dot: rgba(205, 217, 229, 0.12);
-  }
-
-  :root[data-palette="warm"]:not([data-theme="light"]) {
-    --paper: #1d1b18;
-    --ink: #e6dfd1;
-    --chrome: #282521;
-    --chrome-2: #312e29;
-    --chrome-3: #3b3832;
-    --line: #3a3631;
-    --line-2: #4b463f;
-    --text: #e6dfd1;
-    --muted: #a89f90;
-    --faint: #786f63;
-    --accent: #8ea6f0;
-    --accent-soft: #2a2f45;
-    --dot: rgba(230, 223, 209, 0.11);
-  }
-
-  :root[data-palette="one"]:not([data-theme="light"]) {
-    --paper: #21252b;
-    --ink: #d7dae0;
-    --chrome: #282c34;
-    --chrome-2: #2f343e;
-    --chrome-3: #383e4a;
-    --line: #3a3f4b;
-    --line-2: #4b5263;
-    --text: #d7dae0;
-    --muted: #9da5b4;
-    --faint: #636b78;
-    --accent: #61afef;
-    --accent-soft: #1d3347;
-    --dot: rgba(215, 218, 224, 0.1);
-  }
-}
-
-:root[data-palette="soft"][data-theme="dark"] {
-  --paper: #111215;
-  --ink: #e4e6ea;
-  --chrome: #1b1d21;
-  --chrome-2: #24272c;
-  --chrome-3: #2e3137;
-  --line: #2f3238;
-  --line-2: #3e424a;
-  --text: #e4e6ea;
-  --muted: #9aa1ad;
-  --faint: #6b717c;
-  --accent: #7090ff;
-  --accent-soft: #1d2645;
-  --dot: rgba(255, 255, 255, 0.1);
-}
-
-:root[data-palette="dimmed"][data-theme="dark"] {
-  --paper: #22272e;
-  --ink: #cdd9e5;
-  --chrome: #2d333b;
-  --chrome-2: #363d46;
-  --chrome-3: #424a54;
-  --line: #444c56;
-  --line-2: #545d68;
-  --text: #cdd9e5;
-  --muted: #8d9aa7;
-  --faint: #636e7b;
-  --accent: #539bf5;
-  --accent-soft: #1b3456;
-  --dot: rgba(205, 217, 229, 0.12);
-}
-
-:root[data-palette="warm"][data-theme="dark"] {
-  --paper: #1d1b18;
-  --ink: #e6dfd1;
-  --chrome: #282521;
-  --chrome-2: #312e29;
-  --chrome-3: #3b3832;
-  --line: #3a3631;
-  --line-2: #4b463f;
-  --text: #e6dfd1;
-  --muted: #a89f90;
-  --faint: #786f63;
-  --accent: #8ea6f0;
-  --accent-soft: #2a2f45;
-  --dot: rgba(230, 223, 209, 0.11);
-}
-
-:root[data-palette="one"][data-theme="dark"] {
-  --paper: #21252b;
-  --ink: #d7dae0;
-  --chrome: #282c34;
-  --chrome-2: #2f343e;
-  --chrome-3: #383e4a;
-  --line: #3a3f4b;
-  --line-2: #4b5263;
-  --text: #d7dae0;
-  --muted: #9da5b4;
-  --faint: #636b78;
-  --accent: #61afef;
-  --accent-soft: #1d3347;
-  --dot: rgba(215, 218, 224, 0.1);
-}
-
-/* The picker itself. */
+/* The dev-only palette picker (palettePicker.ts); the palettes themselves are made in palettes.ts. */
 .dev-palette {
   position: fixed;
-  left: 50%;
-  top: 16px;
-  transform: translateX(-50%);
+  left: 12px;
+  top: 64px;
   z-index: 10000;
   display: flex;
-  gap: 2px;
-  padding: 3px;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
   border-radius: 10px;
   background: var(--chrome);
   border: 1px solid var(--line);
@@ -221,16 +16,55 @@
 }
 
 .dev-palette button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
   border: 0;
   border-radius: 7px;
-  padding: 5px 9px;
+  padding: 4px 8px;
   background: transparent;
   color: var(--muted);
   font: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+.dev-palette button:hover {
+  background: var(--chrome-2);
 }
 
 .dev-palette button[aria-pressed="true"] {
   background: var(--chrome-3);
   color: var(--text);
+}
+
+.dev-palette small {
+  display: block;
+  font-weight: 400;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* Paper, ink, accent, active and stuck, as the palette has them in the theme showing now. */
+.dev-palette .sw {
+  display: flex;
+  gap: 2px;
+}
+
+.dev-palette .sw i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 25%, transparent);
+}
+
+.dev-palette .fold {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dev-palette.folded > :not(.fold) {
+  display: none;
 }

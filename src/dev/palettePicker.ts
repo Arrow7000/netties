@@ -1,18 +1,13 @@
 import "./palettes.css";
+import { PALETTES, paletteCss, type Theme } from "./palettes";
 
 /**
- * Dev only: a row of buttons in the bottom-left corner that switches the
- * app between the palettes in palettes.css. The choice is remembered in this
- * browser; light and dark still come from the app's own theme button.
+ * Dev only: a list in the top-left corner that switches the app between the
+ * palettes in palettes.ts. The choice is remembered in this browser, and
+ * `?palette=nord` picks one from the address. Light and dark still come from
+ * the app's own theme menu.
  */
 const KEY = "netties:dev-palette";
-const PALETTES = [
-  ["", "Current"],
-  ["soft", "Soft"],
-  ["dimmed", "Dimmed"],
-  ["warm", "Warm"],
-  ["one", "One"],
-] as const;
 
 function stored(): string {
   try {
@@ -32,21 +27,69 @@ function apply(id: string) {
   }
 }
 
+const CURRENT: { light: Theme; dark: Theme } = {
+  light: { paper: "#ffffff", chrome: "#ffffff", ink: "#000000", muted: "#697080", accent: "#2d5bff", active: "#f2a20c", stuck: "#d9472b" },
+  dark: { paper: "#000000", chrome: "#17181b", ink: "#ffffff", muted: "#9aa1ad", accent: "#7090ff", active: "#ffb321", stuck: "#ff6a4d" },
+};
+
 export function mountPalettePicker() {
+  const style = document.createElement("style");
+  style.textContent = paletteCss();
+  document.head.append(style);
+
   const fromUrl = new URLSearchParams(location.search).get("palette");
   apply(fromUrl ?? stored());
+
+  const dark = matchMedia("(prefers-color-scheme: dark)");
+  const showingDark = () => {
+    const t = document.documentElement.dataset.theme;
+    return t ? t === "dark" : dark.matches;
+  };
+
   const bar = document.createElement("div");
   bar.className = "dev-palette";
-  const buttons = PALETTES.map(([id, label]) => {
+  // Folded to one line on narrow screens, where the list would cover the canvas.
+  const fold = document.createElement("button");
+  fold.className = "fold";
+  bar.classList.toggle("folded", innerWidth < 700);
+  fold.onclick = () => bar.classList.toggle("folded");
+  bar.append(fold);
+  const rows = [{ id: "", name: "Current", after: "pure black and white", ...CURRENT }, ...PALETTES].map((p) => {
     const b = document.createElement("button");
-    b.textContent = label;
+    const label = document.createElement("span");
+    label.textContent = p.name;
+    const note = document.createElement("small");
+    note.textContent = p.after;
+    label.append(note);
+    const sw = document.createElement("span");
+    sw.className = "sw";
+    b.append(label, sw);
     b.onclick = () => {
-      apply(id);
-      for (const [other, ob] of buttons) ob.setAttribute("aria-pressed", String(other === id));
+      apply(p.id);
+      update();
     };
-    b.setAttribute("aria-pressed", String((document.documentElement.dataset.palette ?? "") === id));
     bar.append(b);
-    return [id, b] as const;
+    return { p, b, sw };
   });
+
+  function update() {
+    const on = document.documentElement.dataset.palette ?? "";
+    fold.textContent = `Palette: ${rows.find((r) => r.p.id === on)?.p.name ?? "Current"}`;
+    const mode = showingDark() ? "dark" : "light";
+    for (const { p, b, sw } of rows) {
+      b.setAttribute("aria-pressed", String(p.id === on));
+      const t = p[mode];
+      sw.replaceChildren(
+        ...[t.paper, t.ink, t.accent, t.active, t.stuck].map((c) => {
+          const i = document.createElement("i");
+          i.style.background = c;
+          return i;
+        }),
+      );
+    }
+  }
+  update();
+  new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-palette"] });
+  dark.addEventListener("change", update);
   document.body.append(bar);
 }
