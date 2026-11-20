@@ -1,7 +1,9 @@
 import { createRoot } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Net, free, port } from "../core/net";
+import { interfaceNet, interfacePins, parseIface } from "../core/ruleNet";
 import { System } from "../core/system";
+import { flip, specOf } from "../core/types";
 import { createNetModel } from "./model";
 
 describe("net model gesture boundary", () => {
@@ -139,6 +141,34 @@ describe("net model gesture boundary", () => {
       const z = model.addAgent("z", at, { end: free("x"), slot: 0 });
       expect(model.net.free.size).toBe(0);
       expect(model.net.partner(port(z, 0))).toEqual(port(s, 1));
+      dispose();
+    });
+  });
+  it("plugs a new agent onto a rule's interface end, which stays, if it fits what the end stands for", () => {
+    createRoot((dispose) => {
+      const system = new System()
+        .addType({ id: "s", name: "S", symbol: "S", arity: 1, ports: [{ pol: "give" }, { pol: "take" }] })
+        .addType({ id: "t", name: "T", symbol: "T", arity: 0, ports: [{ pol: "take" }] })
+        .addType({ id: "z", name: "Z", symbol: "Z", arity: 0, ports: [{ pol: "give" }] });
+      system.typing = { dirs: "optional", types: "off", names: [] };
+      // As the rule editor has it: x₁ stands for what was plugged into S's aux port, which took, so it gives.
+      const freeSpec = (name: string) => {
+        const i = parseIface(name);
+        return i ? flip(specOf(system, i.side === 0 ? "s" : "t", i.slot)) : undefined;
+      };
+      const pins = interfacePins(system, "s", "t");
+      const model = createNetModel({ system: () => system, pins: () => pins, surface: "rule", freeSpec });
+      model.setNet(interfaceNet(system, "s", "t"));
+      const [x1] = pins.top;
+
+      expect(model.attachEnds("z").map((c) => [c.end.kind === "free" && c.end.name, c.fits])).toEqual([[x1, false]]);
+      expect(model.attachEnds("t").map((c) => [c.end.kind === "free" && c.end.name, c.fits])).toEqual([[x1, true]]);
+
+      const n = model.addAgent("t", undefined, { end: free(x1!), slot: 0 });
+      expect(model.net.free.has(x1!)).toBe(true);
+      expect(model.net.partner(free(x1!))).toEqual(port(n, 0));
+      // Wired now, it's no longer somewhere to plug in.
+      expect(model.attachEnds("t")).toEqual([]);
       dispose();
     });
   });

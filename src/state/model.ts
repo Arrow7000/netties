@@ -870,7 +870,8 @@ export function createNetModel(opts: NetModelOptions) {
      * ports (its principal port if it can): every empty port it fits, and on
      * the main canvas every loose end, which it fits if it fits the port at
      * the far end of the loose end's wire. A port wired to a loose end isn't
-     * one: the loose end is. `fits` is false for ends it could plug into but
+     * one: the loose end is. In a rule, every interface end with no wire yet,
+     * which it fits if it fits what the end stands for. `fits` is false for ends it could plug into but
      * doesn't fit, which are drawn as refusing.
      */
     attachEnds(type: string): (Attach & { at: Terminal; fits: boolean })[] {
@@ -894,12 +895,11 @@ export function createNetModel(opts: NetModelOptions) {
           if (v.wireAt(e) === NONE) add(e, portPos(p, arity, slot), specAt(e));
         }
       }
-      if (freePorts.scratch) {
-        for (const name of v.free.keys()) {
-          const e = free(name);
-          const other = v.wireAt(e) === NONE ? undefined : v.partner(e);
-          add(e, l.routed.free.get(name), other ? specAt(other) : {});
-        }
+      for (const name of v.free.keys()) {
+        const e = free(name);
+        const wired = v.wireAt(e) !== NONE;
+        if (freePorts.scratch) add(e, l.routed.free.get(name), wired ? specAt(v.partner(e)!) : {});
+        else if (!wired) add(e, l.routed.free.get(name), specAt(e));
       }
       return out;
     },
@@ -939,7 +939,7 @@ export function createNetModel(opts: NetModelOptions) {
       if (attach) {
         const real = v.toReal(attach.end);
         const w = net.wireAt(real);
-        if (real.kind === "free") {
+        if (real.kind === "free" && freePorts.scratch) {
           // Plugged onto a loose end: the new agent takes its place at the end of its wire.
           const other = w === NONE ? undefined : net.partner(real);
           if (w !== NONE) net.disconnect(w);
@@ -947,15 +947,19 @@ export function createNetModel(opts: NetModelOptions) {
           if (other) net.connect(port(id, attach.slot), other);
         } else if (w === NONE) net.connect(port(id, attach.slot), real);
         // Set the new agent where it plugs in, turned to face its wire, rather than where it was let go:
-        // a short wire beyond a port, or with its port where the loose end was.
+        // a short wire beyond a port or a rule's end, or with its port where the loose end was.
         const e = attach.end;
         const p = e.kind === "port" ? l.placement.get(e.agent) : undefined;
+        const end = e.kind === "free" ? l.routed.free.get(e.name) : undefined;
+        // A rule's end points out of the result, where its wire comes in from: the agent goes the other way, as beyond a port.
         const target =
-          e.kind === "port" ? p && portPos(p, v.net.agent(e.agent).wires.length - 1, e.slot) : l.routed.free.get(e.name);
+          e.kind === "port"
+            ? p && portPos(p, v.net.agent(e.agent).wires.length - 1, e.slot)
+            : end && (freePorts.scratch ? end : { ...end, dir: end.dir === "up" ? ("down" as const) : ("up" as const) });
         if (target) {
           const facing = target.dir === "up" ? "down" : "up";
           const orient = attach.slot === 0 ? facing : target.dir;
-          const gap = attach.end.kind === "free" ? 0 : attach.slot === 0 && attach.end.slot === 0 ? G.pairGap : G.layerH - G.agentH;
+          const gap = attach.end.kind === "free" ? (freePorts.scratch ? 0 : G.layerH - G.agentH) : attach.slot === 0 && attach.end.slot === 0 ? G.pairGap : G.layerH - G.agentH;
           const plug = portPos({ x: 0, y: 0, orient }, t.arity, attach.slot);
           const y = target.y + (target.dir === "up" ? -gap : gap);
           place = { x: target.x - plug.x, y: y - plug.y, orient };
