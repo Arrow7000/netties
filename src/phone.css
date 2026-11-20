@@ -822,3 +822,13 @@
   grid-template-columns: repeat(3, 1fr);
   padding: 10px;
 }
+
+/* Under what wiring says, the agents run to the row's edges. */
+.rp-tiles.inline {
+  margin: 8px -12px -10px;
+}
+
+.rp-focus.beside .rp-tiles.inline .sheet-tiles.wrap {
+  grid-template-columns: repeat(3, 1fr);
+  padding: 10px 12px;
+}

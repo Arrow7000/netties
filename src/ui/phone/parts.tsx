@@ -230,6 +230,8 @@ export function FocusInfo(props: {
   onChoices: (a: Action) => void;
   ref?: (el: HTMLDivElement) => void;
   class?: string;
+  /** More, under the actions. */
+  children?: JSX.Element;
 }) {
   return (
     <div class={`sheet-focus ${props.class ?? ""}`} ref={props.ref}>
@@ -252,6 +254,7 @@ export function FocusInfo(props: {
           <For each={props.actions}>{(a) => <ActionButton a={a} say={props.say} onChoices={props.onChoices} />}</For>
         </div>
       </Show>
+      {props.children}
     </div>
   );
 }
@@ -272,6 +275,8 @@ export function SelectionView(props: {
   onMore: () => void;
   /** Shown when nothing is. */
   fallback?: JSX.Element;
+  /** Shown under what is, after its actions. */
+  below?: JSX.Element;
   ref?: (el: HTMLDivElement) => void;
   class?: string;
 }) {
@@ -285,7 +290,11 @@ export function SelectionView(props: {
   return (
     <>
       <Show when={f.info()} fallback={props.fallback}>
-        {(i) => <FocusInfo ref={props.ref} class={props.class} label={f.label()} info={i()} actions={shown()} say={f.say} onChoices={sheets.choices} />}
+        {(i) => (
+          <FocusInfo ref={props.ref} class={props.class} label={f.label()} info={i()} actions={shown()} say={f.say} onChoices={sheets.choices}>
+            {props.below}
+          </FocusInfo>
+        )}
       </Show>
       {sheets.view()}
     </>

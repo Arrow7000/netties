@@ -176,7 +176,7 @@ export function createFocus(host: FocusHost) {
       case "armed": {
         const lines: Info["lines"] = [];
         if (f.refused?.kind === "refuse") lines.push({ text: f.refused.why, tone: "bad" });
-        lines.push({ text: rule ? "Tap a lit port or end to wire it there." : "Tap a lit port or loose end to wire it there, or an agent below to plug a new one in." });
+        lines.push({ text: rule ? "Tap a lit port or end to wire it there, or an agent below to plug a new one in." : "Tap a lit port or loose end to wire it there, or an agent below to plug a new one in." });
         return { title: <>Wire from {endName(f.from)}</>, lines };
       }
       case "run": {

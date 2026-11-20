@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createSignal, on } from "solid-js";
+import { sameEnd } from "../../core/net";
 import type { Clip } from "../../core/clip";
 import type { Pt } from "../../layout/geometry";
 import type { Editor } from "../../state/editor";
@@ -119,8 +120,19 @@ export function createRulePhone(opts: {
   const [lifted, setLifted] = createSignal(false);
   const add = (id: string, at: Pt, attach?: Parameters<typeof m.addAgent>[2]) => {
     setArmed(undefined);
+    // The end tapped to start a wire was tapped for this, and is done with.
+    m.setHover(undefined);
     m.addAgent(id, at, attach);
     setAdded(m.selection());
+  };
+  /** A tap on a tile: plugged into the end a tap started a wire from, if one is waiting, as on the net; otherwise one is added beside the result. */
+  const tapTile = (id: string) => {
+    const a = armed();
+    if (!a) return add(id, opts.centre());
+    const from = a.kind === "new" ? a.from : a.moving;
+    const c = m.attachEnds(id).find((c) => sameEnd(c.end, from));
+    if (!c || !c.fits) return ed.notify(`${ed.system.types.get(id)?.name ?? "That agent"} has no port that fits there.`);
+    add(id, { x: c.at.x, y: c.at.y }, { end: c.end, slot: c.slot });
   };
   /** The rule, as somewhere a tile adds to: the result's canvas, but not the buttons over it. */
   const tiles: TileTarget = {
@@ -128,7 +140,7 @@ export function createRulePhone(opts: {
     camera: opts.camera,
     over: (x, y) => opts.camera.contains(x, y) && !document.elementFromPoint(x, y)?.closest(".rp-tools, .rp-focus, .rp-tiles"),
     add: (w, at, attach) => w.kind === "type" && add(w.id, at, attach),
-    tap: (w) => w.kind === "type" && add(w.id, opts.centre()),
+    tap: (w) => w.kind === "type" && tapTile(w.id),
   };
 
   /** For the hold menu (./parts.tsx). */
@@ -151,7 +163,9 @@ export function RuleSelection(props: { touch: RulePhone; m: NetModel; beside: bo
   // Another selection, or none, folds the rest away again.
   createEffect(on([() => f.focus()?.kind, props.m.selection, props.m.hover], () => setExpanded(false), { defer: true }));
   const kind = () => (props.beside ? "rp-focus beside" : "rp-focus");
-  const tiles = () => <RuleTiles touch={t} beside={props.beside} class={kind()} />;
+  const tiles = () => <RuleTiles touch={t} beside={props.beside} class={`${kind()} rp-tiles`} />;
+  // Wiring, the agents stay under what it says, so a tap on one plugs a new one in.
+  const below = () => (f.focus()?.kind === "armed" ? <RuleTiles touch={t} beside={props.beside} class="rp-tiles inline" /> : undefined);
   // Just added by a tile, the new agent is selected, but the agents stay.
   const quiet = () => f.focus()?.kind === "items" && props.m.selection() === t.added();
   return (
@@ -164,6 +178,7 @@ export function RuleSelection(props: { touch: RulePhone; m: NetModel; beside: bo
         expanded={expanded()}
         onMore={() => setExpanded(true)}
         fallback={tiles()}
+        below={below()}
       />
     </Show>
   );
@@ -171,13 +186,17 @@ export function RuleSelection(props: { touch: RulePhone; m: NetModel; beside: bo
 
 export type RulePhone = ReturnType<typeof createRulePhone>;
 
-/** The agents, in the selection's row while nothing is selected: drag one into the result, or tap it to add one beside it. */
+/**
+ * The agents, in the selection's row while nothing is selected, or under
+ * what it says while wiring: drag one into the result, or tap it to add one
+ * beside it, or to plug one into the end waiting for a wire.
+ */
 function RuleTiles(props: { touch: RulePhone; beside: boolean; class: string }) {
   const t = props.touch;
   const ed = t.kit.ed;
   const types = () => (ed.rev(), [...ed.system.types.keys()]);
   return (
-    <div class={`${props.class} rp-tiles`} classList={{ out: t.lifted() }}>
+    <div class={props.class} classList={{ out: t.lifted() }}>
       <div class="sheet-tiles" ref={edgeFades} classList={{ wrap: props.beside }}>
         <For each={types()}>{(id) => <Tile kit={t.kit} what={{ kind: "type", id }} axis={props.beside ? "y" : "x"} onLift={t.setLifted} into={t.tiles} />}</For>
       </div>
