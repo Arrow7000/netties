@@ -42,9 +42,10 @@ const UNSAVED = "Unsaved changes: save or cancel them first.";
 const PAD: { before: Pad; after: Pad } = { before: { t: 48, r: 24, b: 48, l: 24 }, after: { t: 60, r: 56, b: 60, l: 56 } };
 /**
  * On a phone the rule is fitted snugly, below the captions, and zoomed in
- * no further than `PHONE_ZOOM`, so a small rule isn't drawn huge. The
- * result takes the whole of After: the selection's row comes up over it
- * without moving anything, and only Fit fits it to what the row leaves.
+ * no further than `PHONE_ZOOM`, so a small rule isn't drawn huge, and
+ * clear of the row of agents along After's bottom. A selection's row takes
+ * that one's place without moving anything, and only Fit fits the result
+ * to what that row leaves.
  */
 const PHONE_PAD: Pad = { t: 30, r: 14, b: 14, l: 14 };
 const PHONE_ZOOM = 1.6;
@@ -220,11 +221,13 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
    * the zoom both are drawn at, After getting the rest.
    */
   const [split, setSplit] = createSignal<number>();
+  /** What the phone's row of agents covers of After, when that's what the row holds: it's there from the start, so fits keep clear of it. */
+  const tilesCover = () => (panel?.querySelector(".rp-tiles") ? covered() : NO_COVER);
   /**
    * Fit both sides at one zoom, so an agent is the same size on both: After
    * all of it, or (asked to, by Fit) what `cover` leaves of it.
    */
-  const fitBoth = (clear = NO_COVER) => {
+  const fitBoth = (clear = tilesCover()) => {
     setCover(clear);
     if (compact() && stacked()) return fitStacked();
     setSplit(undefined);
@@ -278,6 +281,23 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
     return { x: right + 70 + (n % 2) * 40, y: mid + (n - 1.5) * 34 };
   };
 
+  /**
+   * Where a tap on a tile in the phone's row adds an agent: beside the
+   * result as on a desktop, if that's in view, and otherwise in the middle
+   * of what the row leaves of After, since the view is the finger's to move.
+   */
+  const phoneCentre = () => {
+    const at = centre();
+    const r = afterEl.getBoundingClientRect();
+    const row = panel.querySelector(".rp-focus")?.getBoundingClientRect();
+    const right = row && beside() ? row.left : r.right;
+    const bottom = row && !beside() ? row.top : r.bottom;
+    const [a, b] = [rcam.toWorld(r.left + 30, r.top + 40), rcam.toWorld(right - 30, bottom - 30)];
+    if (!a || !b || (at.x > a.x && at.x < b.x && at.y > a.y && at.y < b.y)) return at;
+    const n = (drops - 1) % 4;
+    return rcam.toWorld((r.left + right) / 2 + (n % 2) * 40 - 20, (r.top + bottom) / 2 + (n - 1.5) * 24) ?? at;
+  };
+
   // While the pointer is over the result, that's where a paste goes.
   let pointer: { x: number; y: number } | undefined;
 
@@ -322,7 +342,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
   };
 
   /** Fingers on a phone, as on the net: a tap on an end starts a wire, and the selection gets a row of its own. */
-  const touch = props.phone && createRulePhone({ ed, kit: props.phone, m: rhs, freeLabel: ifaceLabel, copy, paste });
+  const touch = props.phone && createRulePhone({ ed, kit: props.phone, m: rhs, camera: rcam, centre: phoneCentre, freeLabel: ifaceLabel, copy, paste });
 
   // Escape lets go of a pending delete, then the selection, then closes.
   const escape = () => {
@@ -614,7 +634,7 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
           <Show when={compact() && touch}>
             {(t) => (
               <>
-                <RuleSelection focus={t().focus} m={rhs} beside={beside()} />
+                <RuleSelection touch={t()} m={rhs} beside={beside()} />
                 <HoldMenu kit={t().hold} selectAll={t().hold.selectAll} />
               </>
             )}

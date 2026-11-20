@@ -4,7 +4,7 @@ import { type AgentId, type End, type WireId, sameEnd } from "../../core/net";
 import { parse } from "../../core/text";
 import { type Pt, boxOf } from "../../layout/geometry";
 import type { Editor } from "../../state/editor";
-import type { NetModel, WireGesture } from "../../state/model";
+import type { Attach, NetModel, WireGesture } from "../../state/model";
 import type { Camera, CanvasPhone, Pad } from "../Canvas";
 import { copyText } from "../clipboard";
 import { compact, sideways } from "../compact";
@@ -22,6 +22,21 @@ export interface Carry {
   x: number;
   y: number;
   over: boolean;
+}
+
+/**
+ * Where a tile's agent goes: the net, or a rule being edited
+ * (src/ui/RuleEditor.tsx), which has its own model and camera.
+ */
+export interface TileTarget {
+  m: NetModel;
+  camera: Camera;
+  /** Whether a tile drawn at (x, y), on screen, is over somewhere it can be added. */
+  over(x: number, y: number): boolean;
+  /** Let go at `at`, plugged into `attach` if it's given. */
+  add(w: TileWhat, at: Pt, attach?: Attach): void;
+  /** A tap on the tile. */
+  tap(w: TileWhat): void;
 }
 
 /** How far above a finger a carried tile is drawn, so the finger doesn't hide it. */
@@ -230,17 +245,30 @@ export function createPhone(ed: Editor, camera: Camera) {
 
   const openTile = (w: TileWhat) => (w.kind === "type" ? ed.openAgent(w.id) : ed.openComponent(w.id));
 
-  /** Where on the canvas a tile drawn at (x, y) would go: nowhere over the chrome. */
-  const spot = (x: number, y: number) => {
-    const under = document.elementFromPoint(x, y);
-    const chrome = !!under?.closest(".island, .pop, .menu, .phone-chrome");
-    const at = camera.toWorld(x, y);
-    return at && !chrome ? at : undefined;
+  /** The net, as somewhere a tile adds to: anywhere but over the chrome. */
+  const net: TileTarget = {
+    m,
+    camera,
+    over: (x, y) => !document.elementFromPoint(x, y)?.closest(".island, .pop, .menu, .phone-chrome"),
+    add: (w, at, attach) => {
+      setArmed(undefined);
+      tileAt = performance.now();
+      if (w.kind === "type") ed.dispatch({ kind: "net/add-agent", type: w.id, at, attach });
+      else ed.dispatch({ kind: "net/add-component", id: w.id, at });
+    },
+    tap: (w) => tapTile(w),
+  };
+
+  /** Where in the target a tile drawn at (x, y) would go, if anywhere. */
+  const spot = (into: TileTarget, x: number, y: number) => {
+    const at = into.camera.toWorld(x, y);
+    return at && into.over(x, y) ? at : undefined;
   };
 
   /** Draw the carried tile at (x, y), lighting up where it would plug in. */
-  const carryTo = (w: TileWhat, x: number, y: number) => {
-    const at = spot(x, y);
+  const carryTo = (into: TileTarget, w: TileWhat, x: number, y: number) => {
+    const { m, camera } = into;
+    const at = spot(into, x, y);
     setCarry({ what: w, x, y, over: !!at });
     if (w.kind !== "type") return;
     const attach = at && m.attachTarget(w.id, at);
@@ -255,7 +283,7 @@ export function createPhone(ed: Editor, camera: Camera) {
   /** The sheet, told when a tile lifts out of it and when it's let go. */
   let onLift: ((on: boolean) => void) | undefined;
   let pressed: TilePress | undefined;
-  let pressing: { what: TileWhat; el: HTMLElement; stop: () => void } | undefined;
+  let pressing: { what: TileWhat; el: HTMLElement; into: TileTarget; stop: () => void } | undefined;
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => pressing?.stop());
 
@@ -264,10 +292,10 @@ export function createPhone(ed: Editor, camera: Camera) {
     if (!p) return;
     const [next, fx] = updateTile(pressed, msg);
     pressed = next;
-    for (const f of fx) performTile(f, p.what, p.el);
+    for (const f of fx) performTile(f, p.what, p.el, p.into);
     if (!next) p.stop();
   };
-  const performTile = (fx: TileEffect, w: TileWhat, el: HTMLElement) => {
+  const performTile = (fx: TileEffect, w: TileWhat, el: HTMLElement, into: TileTarget) => {
     switch (fx.kind) {
       case "await-hold": {
         const id = fx.pointer;
@@ -276,7 +304,7 @@ export function createPhone(ed: Editor, camera: Camera) {
         return;
       }
       case "tap":
-        return tapTile(w);
+        return into.tap(w);
       case "lift":
         if (fx.held) {
           navigator.vibrate?.(8);
@@ -285,25 +313,21 @@ export function createPhone(ed: Editor, camera: Camera) {
         }
         return onLift?.(true);
       case "carry":
-        return carryTo(w, fx.at.x, fx.at.y);
+        return carryTo(into, w, fx.at.x, fx.at.y);
       case "drop": {
-        const at = spot(fx.at.x, fx.at.y);
-        const attach = m.placing()?.attach;
-        if (at) {
-          setArmed(undefined);
-          tileAt = performance.now();
-          if (w.kind === "type") ed.dispatch({ kind: "net/add-agent", type: w.id, at, attach });
-          else ed.dispatch({ kind: "net/add-component", id: w.id, at });
-        }
-        return putBack();
+        const at = spot(into, fx.at.x, fx.at.y);
+        const attach = into.m.placing()?.attach;
+        putBack(into);
+        if (at) into.add(w, at, attach);
+        return;
       }
       case "put-back":
-        return putBack();
+        return putBack(into);
     }
   };
-  const putBack = () => {
+  const putBack = (into: TileTarget) => {
     setCarry(undefined);
-    m.setPlacing(undefined);
+    into.m.setPlacing(undefined);
     onLift?.(false);
   };
 
@@ -316,9 +340,10 @@ export function createPhone(ed: Editor, camera: Camera) {
 
   /**
    * A pointer down on a tile, which the tile machine (./tile.ts) follows to
-   * its end. `axis` is the way the tiles scroll; `lifted` tells the sheet.
+   * its end. `axis` is the way the tiles scroll; `onLift` tells the sheet;
+   * `into` is where the agent goes, the net unless it says otherwise.
    */
-  const pressTile = (w: TileWhat, opts: { axis: "x" | "y"; onLift: (on: boolean) => void }) => (e: PointerEvent) => {
+  const pressTile = (w: TileWhat, opts: { axis: "x" | "y"; onLift: (on: boolean) => void; into?: TileTarget }) => (e: PointerEvent) => {
     if (e.button !== 0) return;
     pressing?.stop();
     onLift = opts.onLift;
@@ -334,7 +359,7 @@ export function createPhone(ed: Editor, camera: Camera) {
       pressing = undefined;
       pressed = undefined;
     };
-    pressing = { what: w, el, stop };
+    pressing = { what: w, el, into: opts.into ?? net, stop };
     pressed = undefined;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);

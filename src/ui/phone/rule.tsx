@@ -1,13 +1,13 @@
-import { createEffect, createSignal, on } from "solid-js";
+import { For, Show, createEffect, createSignal, on } from "solid-js";
 import type { Clip } from "../../core/clip";
 import type { Pt } from "../../layout/geometry";
 import type { Editor } from "../../state/editor";
 import type { NetModel, WireGesture } from "../../state/model";
-import type { CanvasPhone } from "../Canvas";
+import type { Camera, CanvasPhone } from "../Canvas";
 import { compact } from "../compact";
-import { type FocusHost, type FocusKit, createFocus } from "./focus";
-import { type Pasted, type Phone, besideSelection, selectConnected } from "./kit";
-import { SelectionView } from "./parts";
+import { type FocusHost, createFocus } from "./focus";
+import { type Pasted, type Phone, type TileTarget, besideSelection, selectConnected } from "./kit";
+import { SelectionView, Tile, edgeFades } from "./parts";
 
 /**
  * The rule editor's result on a phone, worked as the net is: a tap on an
@@ -15,12 +15,16 @@ import { SelectionView } from "./parts";
  * on one of those finishes it; and what's selected or tapped has the
  * Selection face's words and actions (./focus.tsx), in a row of its own.
  * The clipboard is the phone's (./kit.ts), so what's copied on the net can
- * be pasted into a rule.
+ * be pasted into a rule. With nothing selected, that row holds the agents,
+ * to drag into the result as from the sheet, or tap to add one.
  */
 export function createRulePhone(opts: {
   ed: Editor;
   kit: Phone;
   m: NetModel;
+  camera: Camera;
+  /** Where a tap on a tile adds an agent: just beside the result. */
+  centre: () => Pt;
   /** The rule's ends' names, x₁ and so on. */
   freeLabel: (name: string) => string;
   /** The selection in the result, copied. */
@@ -106,10 +110,31 @@ export function createRulePhone(opts: {
     rule: { freeLabel: opts.freeLabel },
   };
 
+  /**
+   * The selection a tile last made, by adding its agent: like the net's
+   * sheet, the row keeps the agents for more, until the selection changes.
+   */
+  const [added, setAdded] = createSignal<ReturnType<typeof m.selection>>();
+  /** A tile carried out of the row: the row gets out of the way. */
+  const [lifted, setLifted] = createSignal(false);
+  const add = (id: string, at: Pt, attach?: Parameters<typeof m.addAgent>[2]) => {
+    setArmed(undefined);
+    m.addAgent(id, at, attach);
+    setAdded(m.selection());
+  };
+  /** The rule, as somewhere a tile adds to: the result's canvas, but not the buttons over it. */
+  const tiles: TileTarget = {
+    m,
+    camera: opts.camera,
+    over: (x, y) => opts.camera.contains(x, y) && !document.elementFromPoint(x, y)?.closest(".rp-tools, .rp-focus, .rp-tiles"),
+    add: (w, at, attach) => w.kind === "type" && add(w.id, at, attach),
+    tap: (w) => w.kind === "type" && add(w.id, opts.centre()),
+  };
+
   /** For the hold menu (./parts.tsx). */
   const hold = { heldAt, setHeldAt, canPaste: kit.canPaste, paste, selectAll: () => m.selectAll() };
 
-  return { armed, setArmed, canvas, hold, focus: createFocus(host) };
+  return { armed, setArmed, canvas, hold, focus: createFocus(host), kit, tiles, added, lifted, setLifted };
 }
 
 /**
@@ -119,19 +144,43 @@ export function createRulePhone(opts: {
  * On a phone on its side, with Before beside After, it's a column at the
  * right instead, with room for them all.
  */
-export function RuleSelection(props: { focus: FocusKit; m: NetModel; beside: boolean }) {
-  const f = props.focus;
+export function RuleSelection(props: { touch: RulePhone; m: NetModel; beside: boolean }) {
+  const t = props.touch;
+  const f = t.focus;
   const [expanded, setExpanded] = createSignal(false);
   // Another selection, or none, folds the rest away again.
   createEffect(on([() => f.focus()?.kind, props.m.selection, props.m.hover], () => setExpanded(false), { defer: true }));
+  const kind = () => (props.beside ? "rp-focus beside" : "rp-focus");
+  const tiles = () => <RuleTiles touch={t} beside={props.beside} class={kind()} />;
+  // Just added by a tile, the new agent is selected, but the agents stay.
+  const quiet = () => f.focus()?.kind === "items" && props.m.selection() === t.added();
   return (
-    <SelectionView
-      class={props.beside ? "rp-focus beside" : "rp-focus"}
-      focus={f}
-      row={props.beside ? 3 : 5}
-      folds={!props.beside}
-      expanded={expanded()}
-      onMore={() => setExpanded(true)}
-    />
+    <Show when={!quiet()} fallback={tiles()}>
+      <SelectionView
+        class={kind()}
+        focus={f}
+        row={props.beside ? 3 : 5}
+        folds={!props.beside}
+        expanded={expanded()}
+        onMore={() => setExpanded(true)}
+        fallback={tiles()}
+      />
+    </Show>
+  );
+}
+
+export type RulePhone = ReturnType<typeof createRulePhone>;
+
+/** The agents, in the selection's row while nothing is selected: drag one into the result, or tap it to add one beside it. */
+function RuleTiles(props: { touch: RulePhone; beside: boolean; class: string }) {
+  const t = props.touch;
+  const ed = t.kit.ed;
+  const types = () => (ed.rev(), [...ed.system.types.keys()]);
+  return (
+    <div class={`${props.class} rp-tiles`} classList={{ out: t.lifted() }}>
+      <div class="sheet-tiles" ref={edgeFades} classList={{ wrap: props.beside }}>
+        <For each={types()}>{(id) => <Tile kit={t.kit} what={{ kind: "type", id }} axis={props.beside ? "y" : "x"} onLift={t.setLifted} into={t.tiles} />}</For>
+      </div>
+    </div>
   );
 }

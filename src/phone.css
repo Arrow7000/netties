@@ -798,3 +798,27 @@
   right: -7px;
   max-height: calc(100dvh - 90px);
 }
+
+/* With nothing selected, the rule editor's row holds the agents to add (src/ui/phone/rule.tsx). */
+.rp-tiles {
+  transition: opacity 0.15s;
+}
+
+/* A tile carried out: the row gets out of the way of the result. */
+.rp-tiles.out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.15s,
+    visibility 0s 0.15s;
+}
+
+.rp-tiles .sheet-tiles {
+  padding: 8px 10px;
+}
+
+.rp-tiles.beside .sheet-tiles.wrap {
+  grid-template-columns: repeat(3, 1fr);
+  padding: 10px;
+}

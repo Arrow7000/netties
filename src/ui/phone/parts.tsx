@@ -5,7 +5,7 @@ import { ComponentGlyph, Glyph, dirsOf } from "../Glyph";
 import * as I from "../icons";
 import type { Info } from "../Panels";
 import type { Action, Choice, FocusKit } from "./focus";
-import type { Phone, TileWhat } from "./kit";
+import type { Phone, TileTarget, TileWhat } from "./kit";
 import { arrange, firstRow } from "./order";
 import type { RunButton } from "./transport";
 
@@ -34,13 +34,17 @@ export function Ghost(props: { kit: Phone }) {
   );
 }
 
-/** A tile in the sheet: tap to select it, drag it out (or hold it) to carry one onto the canvas. */
-export function Tile(props: { kit: Phone; what: TileWhat; axis: "x" | "y"; onLift: (on: boolean) => void }) {
+/**
+ * A tile in the sheet: tap to select it, drag it out (or hold it) to carry
+ * one onto the canvas. In a rule (`into`), what a tap does is the rule's.
+ */
+export function Tile(props: { kit: Phone; what: TileWhat; axis: "x" | "y"; onLift: (on: boolean) => void; into?: TileTarget }) {
   const kit = props.kit;
   const ed = kit.ed;
   const t = () => (props.what.kind === "type" ? (ed.rev(), ed.system.types.get(props.what.id)) : undefined);
   const d = () => (props.what.kind === "component" ? ed.defs().get(props.what.id) : undefined);
   const picked = () => {
+    if (props.into) return false;
     const s = kit.tile();
     return s?.kind === props.what.kind && s.id === props.what.id;
   };
@@ -55,11 +59,11 @@ export function Tile(props: { kit: Phone; what: TileWhat; axis: "x" | "y"; onLif
       class="tile sheet-tile"
       classList={{ component: props.what.kind === "component", picked: picked(), [`along-${props.axis}`]: true }}
       aria-pressed={picked()}
-      onPointerDown={kit.pressTile(props.what, { axis: props.axis, onLift: props.onLift })}
+      onPointerDown={kit.pressTile(props.what, { axis: props.axis, onLift: props.onLift, into: props.into })}
       // Keyboards still click.
-      onClick={(e) => e.detail === 0 && kit.setTile(picked() ? undefined : props.what)}
+      onClick={(e) => e.detail === 0 && (props.into ? props.into.tap(props.what) : kit.setTile(picked() ? undefined : props.what))}
       onContextMenu={(e) => e.preventDefault()}
-      aria-label={`${t()?.name ?? d()?.name}: drag onto the canvas to add one, tap to edit`}
+      aria-label={`${t()?.name ?? d()?.name}: drag onto the canvas to add one, tap to ${props.into ? "add one" : "edit"}`}
     >
       <Show when={t()} fallback={<Show when={d()}>{(dd) => <ComponentGlyph def={dd()} />}</Show>}>
         {(tt) => <Glyph type={tt()} stub={7} dirs={(ed.rev(), dirsOf(ed.system, tt()))} />}
