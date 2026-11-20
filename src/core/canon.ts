@@ -69,5 +69,6 @@ export function canonical(net: Net): string {
     closed.push(best!);
   }
   closed.sort();
-  return [freeText.join(" "), reached.text, ...closed.map((c) => `[${c}]`)].join(" | ");
+  const loops = net.loops.size ? [`${net.loops.size} loop${net.loops.size > 1 ? "s" : ""}`] : [];
+  return [freeText.join(" "), reached.text, ...closed.map((c) => `[${c}]`), ...loops].join(" | ");
 }

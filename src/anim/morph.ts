@@ -164,7 +164,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
   // every interaction in the step.
   const origin = new Map<WireId, WireId[]>();
   for (const rec of records) {
-    for (const c of rec.createdWires) origin.set(c.id, c.from.flatMap((f) => origin.get(f) ?? [f]));
+    for (const c of [...rec.createdWires, ...rec.createdLoops]) origin.set(c.id, c.from.flatMap((f) => origin.get(f) ?? [f]));
   }
   const used = new Set<WireId>();
   const oldShape = (id: WireId) => {
@@ -252,8 +252,19 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     });
     wires.push({ id: String(id), ends: w.ends, from: resample(from, SAMPLES), to, fade: false });
   }
+  // A closed loop draws itself in from the old wires it continues, end to end.
+  for (const id of after.net.loops) {
+    const r = after.routed.wires.get(id);
+    if (!r) continue;
+    const to = resample(flattenPath(r, G.radius), SAMPLES);
+    const srcs = (origin.get(id) ?? [id]).filter((o) => before.routed.wires.has(o));
+    srcs.forEach((s) => used.add(s));
+    const pieces = srcs.map(oldShape).filter((p): p is Pt[] => !!p && p.length > 0);
+    const from = pieces.length ? chain(pieces, pieces[0]![0]!) : to;
+    wires.push({ id: String(id), from: resample(from, SAMPLES), to, fade: false });
+  }
   for (const [id, r] of before.routed.wires) {
-    if (after.net.wires.has(id) || used.has(id)) continue;
+    if (after.net.wires.has(id) || after.net.loops.has(id) || used.has(id)) continue;
     const pts = resample(flattenPath(r, G.radius), SAMPLES);
     wires.push({ id: `gone-${id}`, from: pts, to: pts, fade: true });
   }

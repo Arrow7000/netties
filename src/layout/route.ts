@@ -112,6 +112,17 @@ interface Span {
 }
 
 const JOG = 12;
+/** The radius of a closed loop's circle. */
+export const LOOP_R = 10;
+
+/** A closed loop drawn as a circle round `c`, as a closed polyline starting and ending at the top. */
+export function loopPoints(c: Pt, r = LOOP_R): Pt[] {
+  const n = 32;
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const a = (i / n) * Math.PI * 2;
+    return { x: c.x + r * Math.sin(a), y: c.y - r * Math.cos(a) };
+  });
+}
 /** How far wires keep from agents they don't connect to. Wires are drawn on a halo about this wide either side. */
 const CLEARANCE = 4;
 
@@ -565,6 +576,12 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       }
       free.set(name, { x: bareX, y: bottom, dir: "down" });
       bareX += G.portGap;
+    }
+    // Closed loops sit in the same row, as small circles.
+    for (const id of net.loops) {
+      const c = { x: bareX + LOOP_R, y: bottom - G.layerH / 4 };
+      wires.set(id, loopPoints(c));
+      bareX += LOOP_R * 2 + G.portGap;
     }
     return { wires, free, lanes, edge };
   }

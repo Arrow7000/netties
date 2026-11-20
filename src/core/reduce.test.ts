@@ -4,7 +4,7 @@ import { canonical } from "./canon";
 import { type End, Net, free, port } from "./net";
 import { arithmetic, combinators, directedCombinators } from "./presets";
 import { interact, normalize, parallelStep } from "./reduce";
-import { A, L, R, type System } from "./system";
+import { A, L, R, System } from "./system";
 
 /** Two agents facing each other, their aux ports wired to free ports x1.. and y1.. */
 function pair(sys: System, left: string, right: string) {
@@ -120,7 +120,10 @@ describe("combinators", () => {
     net.disconnect(net.wireAt(port(a, 1)));
     interact(net, sys, w);
     expect(partnerName(net, "x2")).toBe("y1");
-    expect(partnerName(net, "y2")).toBeUndefined();
+    // y2's wire led to the empty port, so it gets a new loose end of its own.
+    const p = net.partner(free("y2"));
+    expect(p?.kind).toBe("free");
+    expect(net.partner(p!)).toEqual(free("y2"));
   });
 
   it("leaves a created agent's port empty where it meets an empty port", () => {
@@ -135,14 +138,109 @@ describe("combinators", () => {
     expect(net.unconnected()).toHaveLength(1);
   });
 
-  it("drops a rule's wire between two empty ports", () => {
+  it("turns a rule's wire between two empty ports into a wire with two loose ends", () => {
     const net = new Net();
     const a = net.addAgent(sys.type("γ"));
     const b = net.addAgent(sys.type("γ"));
     const w = net.connect(port(a, 0), port(b, 0));
     interact(net, sys, w);
     expect(net.agents.size).toBe(0);
+    expect(net.wires.size).toBe(2);
+    for (const w of net.wires.values()) expect(w.ends.map((e) => e.kind)).toEqual(["free", "free"]);
+    expect(net.free.size).toBe(4);
+  });
+
+  it("closes a loop when the pair's aux ports are wired to each other", () => {
+    // γγ joins each aux port to the one facing it (x1–y2, x2–y1), so
+    // wiring them that way too closes two loops; wired x1–y1, x2–y2 they make one.
+    const net = new Net();
+    const a = net.addAgent(sys.type("γ"));
+    const b = net.addAgent(sys.type("γ"));
+    const w = net.connect(port(a, 0), port(b, 0));
+    const w1 = net.connect(port(a, 1), port(b, 2));
+    const w2 = net.connect(port(a, 2), port(b, 1));
+    const one = new Net();
+    const c = one.addAgent(sys.type("γ"));
+    const d = one.addAgent(sys.type("γ"));
+    const u = one.connect(port(c, 0), port(d, 0));
+    one.connect(port(c, 1), port(d, 1));
+    one.connect(port(c, 2), port(d, 2));
+    expect(interact(one, sys, u).createdLoops).toHaveLength(1);
+    expect(one.loops.size).toBe(1);
+    const rec = interact(net, sys, w);
+    expect(net.agents.size).toBe(0);
     expect(net.wires.size).toBe(0);
+    expect([...net.loops].sort()).toEqual([w1, w2].sort());
+    expect(rec.createdLoops.map((l) => l.id).sort()).toEqual([w1, w2].sort());
+    expect(rec.removedWires).toEqual([w]);
+    expect(Net.fromJSON(net.toJSON()).loops).toEqual(net.loops);
+  });
+
+  it("keeps the number of open ports through every step", () => {
+    // Open ports: empty agent ports plus loose ends. A step never makes or loses one.
+    const open = (net: Net) => net.unconnected().filter((e) => e.kind === "port").length + [...net.free.values()].filter((w) => w !== -1).length;
+    fc.assert(
+      fc.property(
+        fc.array(fc.constantFrom("γ", "δ", "ε"), { minLength: 2, maxLength: 8 }),
+        fc.array(fc.nat(), { minLength: 30, maxLength: 30 }),
+        (types, picks) => {
+          const net = new Net();
+          const ends: End[] = [];
+          for (const t of types) {
+            const id = net.addAgent(sys.type(t));
+            for (let s = 0; s <= sys.type(t).arity; s++) ends.push(port(id, s));
+          }
+          // Wire up some of the ports at random, leaving the rest empty.
+          for (let i = 0; i + 1 < ends.length; i += 2) {
+            if (picks[i % picks.length]! % 3 === 0) continue;
+            const j = i + 1 + (picks[(i + 1) % picks.length]! % (ends.length - i - 1));
+            [ends[i + 1], ends[j]] = [ends[j]!, ends[i + 1]!];
+            net.connect(ends[i]!, ends[i + 1]!);
+          }
+          const before = open(net);
+          normalize(net, sys, { limit: 200 });
+          expect(open(net)).toBe(before);
+        },
+      ),
+      { numRuns: 300 },
+    );
+  });
+});
+
+describe("Marc's wire agent", () => {
+  // An agent that, meeting itself, just joins its two aux ports: two of them face to face are a wire.
+  const sys = new System();
+  sys.addType({ id: "W", name: "wire", symbol: "W", arity: 1 });
+  sys.addRule({ left: "W", right: "W", agents: [], wires: [[L(1), R(1)]] });
+  const facing = () => {
+    const net = new Net();
+    const a = net.addAgent(sys.type("W"));
+    const b = net.addAgent(sys.type("W"));
+    return { net, a, b, w: net.connect(port(a, 0), port(b, 0)) };
+  };
+
+  it("leaves a wire between the two loose ends when the aux ports are empty", () => {
+    const { net, w } = facing();
+    interact(net, sys, w);
+    expect(net.agents.size).toBe(0);
+    expect(net.wires.size).toBe(1);
+    expect([...net.wires.values()][0]!.ends.map((e) => e.kind)).toEqual(["free", "free"]);
+  });
+
+  it("leaves a loop when the aux ports are wired to each other", () => {
+    const { net, a, b, w } = facing();
+    const aux = net.connect(port(a, 1), port(b, 1));
+    interact(net, sys, w);
+    expect(net.wires.size).toBe(0);
+    expect([...net.loops]).toEqual([aux]);
+  });
+
+  it("joins two loose ends' wires", () => {
+    const { net, a, b, w } = facing();
+    net.connect(port(a, 1), free("x"));
+    net.connect(port(b, 1), free("y"));
+    interact(net, sys, w);
+    expect(partnerName(net, "x")).toBe("y");
   });
 });
 

@@ -45,10 +45,18 @@ export interface Wire {
 
 export const NONE: WireId = -1;
 
+/** Loose ends are named a, b, … z, a1, b1, … */
+export function looseName(i: number): string {
+  const letter = String.fromCharCode(97 + (i % 26));
+  return i < 26 ? letter : `${letter}${Math.floor(i / 26)}`;
+}
+
 export interface NetJSON {
   agents: { id: AgentId; type: string; arity: number }[];
   wires: { id: WireId; ends: [End, End] }[];
   free: string[];
+  /** Closed loops: wires with no ends, by id. Left out when there are none. */
+  loops?: WireId[];
 }
 
 export const port = (agent: AgentId, slot: number): End => ({ kind: "port", agent, slot });
@@ -64,6 +72,12 @@ export class Net {
   readonly wires = new Map<WireId, Wire>();
   /** Free ports of the net (its interface), by name. */
   readonly free = new Map<string, WireId>();
+  /**
+   * Closed loops: wires joined to themselves, with no ends at all, as when
+   * two agents whose aux ports are wired together annihilate. They share
+   * ids with the wires, which they may have continued.
+   */
+  readonly loops = new Set<WireId>();
   private nextAgent: AgentId = 1;
   private nextWire: WireId = 1;
 
@@ -114,13 +128,27 @@ export class Net {
     for (const e of [a, b]) {
       if (this.wireAt(e) !== NONE) throw new Error(`${endKey(e)} is already connected`);
     }
-    if (id !== undefined && this.wires.has(id)) throw new Error(`wire ${id} already exists`);
+    if (id !== undefined && (this.wires.has(id) || this.loops.has(id))) throw new Error(`wire ${id} already exists`);
     const wid = id ?? this.nextWire++;
     if (wid >= this.nextWire) this.nextWire = wid + 1;
     this.wires.set(wid, { id: wid, ends: [a, b] });
     this.attach(a, wid);
     this.attach(b, wid);
     return wid;
+  }
+
+  /** Add a closed loop, reusing a freed wire id if one is given. */
+  addLoop(id?: WireId): WireId {
+    if (id !== undefined && (this.wires.has(id) || this.loops.has(id))) throw new Error(`wire ${id} already exists`);
+    const wid = id ?? this.nextWire++;
+    if (wid >= this.nextWire) this.nextWire = wid + 1;
+    this.loops.add(wid);
+    return wid;
+  }
+
+  /** A name for a new free port, not yet in use: a, b, … z, a1, b1, … */
+  freshFree(): string {
+    for (let i = 0; ; i++) if (!this.free.has(looseName(i))) return looseName(i);
   }
 
   disconnect(id: WireId): void {
@@ -166,6 +194,7 @@ export class Net {
     for (const a of this.agents.values()) n.agents.set(a.id, { ...a, wires: [...a.wires] });
     for (const w of this.wires.values()) n.wires.set(w.id, { id: w.id, ends: [{ ...w.ends[0] }, { ...w.ends[1] }] });
     for (const [k, v] of this.free) n.free.set(k, v);
+    for (const l of this.loops) n.loops.add(l);
     n.nextAgent = this.nextAgent;
     n.nextWire = this.nextWire;
     return n;
@@ -176,6 +205,7 @@ export class Net {
       agents: [...this.agents.values()].map((a) => ({ id: a.id, type: a.type, arity: a.wires.length - 1 })),
       wires: [...this.wires.values()].map((w) => ({ id: w.id, ends: w.ends })),
       free: [...this.free.keys()],
+      ...(this.loops.size ? { loops: [...this.loops] } : {}),
     };
   }
 
@@ -187,6 +217,7 @@ export class Net {
     }
     for (const name of j.free) n.free.set(name, NONE);
     for (const w of j.wires) n.connect(w.ends[0], w.ends[1], w.id);
+    for (const l of j.loops ?? []) n.addLoop(l);
     return n;
   }
 

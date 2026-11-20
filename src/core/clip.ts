@@ -1,5 +1,5 @@
 import { type ComponentDef, type Defs, type GroupId, Groups, type GroupsJSON } from "./groups";
-import { type AgentId, type End, NONE, Net, type NetJSON, type WireId, free, port } from "./net";
+import { type AgentId, type End, NONE, Net, type NetJSON, type WireId, free, looseName, port } from "./net";
 import { System, type SystemJSON, pairKey } from "./system";
 
 /**
@@ -74,11 +74,7 @@ export function cutOut(net: Net, groups: Groups, agents: Iterable<AgentId>, wire
   return { net: out, groups: sub };
 }
 
-/** Loose ends are named a, b, … z, a1, b1, … */
-export function looseName(i: number): string {
-  const letter = String.fromCharCode(97 + (i % 26));
-  return i < 26 ? letter : `${letter}${Math.floor(i / 26)}`;
-}
+export { looseName };
 
 /** The agent types a net uses, with every rule among them and whatever those rules create. */
 export function systemFor(sys: System, net: Net, components: readonly ComponentDef[] = []): System {

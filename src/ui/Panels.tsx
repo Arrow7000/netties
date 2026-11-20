@@ -493,6 +493,11 @@ export function SelectionPanel(props: { ed: Editor }) {
     const s = m.selection();
     if (s?.kind === "wire") {
       m.rev();
+      if (m.net.loops.has(s.id))
+        return {
+          info: { title: "Loop", lines: [{ text: <>A wire joined to itself, with no ends. Nothing can reach it, so it never changes.</> }] } as Info,
+          actions: [{ label: "Delete", run: () => ed.dispatch({ kind: "selection/delete" }) }] as Action[],
+        };
       if (!m.net.wires.has(s.id)) return undefined;
       const pair = n.pairOf(s.id);
       const active = m.activeWires().has(s.id);

@@ -22,7 +22,8 @@ import { type Level, type PortSpec, typingOn } from "./types";
  *
  * Agents are names that are declared, written with parentheses, or start
  * with an upper-case letter (Inpla's convention).
- * In a net, `_` leaves a port empty; it is not a named loose end.
+ * In a net, `_` leaves a port empty; it is not a named loose end, and
+ * `x ~ x` is a closed loop: a wire joined to itself, with no ends.
  *
  * A port is written `+type` (gives), `-type` (takes) or `type` (either way);
  * `+` or `-` alone has a direction but any type, and `_` neither. A quoted
@@ -305,6 +306,8 @@ export function parse(src: string): { system: System; net: Net } {
   /** Build equations into a net. `bound` names ends that already exist (a rule's interface). */
   const build = (net: Net, equations: Eq[], bound: Map<string, End>, mode: "rule" | "net", line: number) => {
     const pending = new Map<string, End>();
+    /** Names used for closed loops, `x ~ x`, which can't appear again. */
+    const looped = new Set<string>();
     /** Names joined by `x ~ y` before either was attached to anything. */
     const alias = new Map<string, string>();
     const make = (t: Term): AgentId => {
@@ -323,6 +326,7 @@ export function parse(src: string): { system: System; net: Net } {
       if (isAgent(t)) return void net.connect(port(make(t), 0), at);
       // In an ordinary net, `_` means an empty port rather than a named loose end.
       if (mode === "net" && t.name === "_" && t.kind === "var" && !t.quoted) return;
+      if (looped.has(t.name)) throw new ParseError(`${t.name} is a closed loop, so it can't be used again`, t.line, t.col);
       const other = alias.get(t.name);
       if (other !== undefined) {
         alias.delete(t.name);
@@ -334,6 +338,14 @@ export function parse(src: string): { system: System; net: Net } {
       else pending.set(t.name, at);
     };
     for (const [a, b] of equations) {
+      if (!isAgent(a) && !isAgent(b) && a.name === b.name) {
+        if (mode === "rule") throw new ParseError("a rule can't make a closed loop", a.line, a.col);
+        if (bound.has(a.name) || pending.has(a.name) || alias.has(a.name) || looped.has(a.name))
+          throw new ParseError(`${a.name} ~ ${a.name} is a closed loop, so ${a.name} can't be used anywhere else`, a.line, a.col);
+        looped.add(a.name);
+        net.addLoop();
+        continue;
+      }
       if (isAgent(a)) plug(b, port(make(a), 0));
       else if (isAgent(b)) plug(a, port(make(b), 0));
       else {
@@ -472,6 +484,12 @@ function equations(net: Net, sys: System, names: (e: End) => string | undefined,
   for (const w of net.wires.values()) {
     const [a, b] = w.ends;
     if (a.kind === "free" && b.kind === "free") out.push(`${names(a)} ~ ${names(b)}`);
+  }
+  // Closed loops: a wire joined to itself.
+  for (const _ of net.loops) {
+    let n: string;
+    do { n = `w${++fresh}`; } while (net.free.has(n) || [...sys.types.values()].some(t => t.symbol === n));
+    out.push(`${n} ~ ${n}`);
   }
   return out;
 }

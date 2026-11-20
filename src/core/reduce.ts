@@ -1,4 +1,4 @@
-import { type AgentId, type End, type Net, type WireId, port } from "./net";
+import { type AgentId, type End, type Net, NONE, type WireId, free, port } from "./net";
 import { type Rule, type RuleEnd, type System, pairKey } from "./system";
 
 /** What a single interaction did to the net, in enough detail to animate it. */
@@ -17,6 +17,8 @@ export interface StepRecord {
    * appear in `removedWires`.
    */
   createdWires: { id: WireId; from: WireId[] }[];
+  /** Closed loops made by the step, with the old wires each one continues, like `createdWires`. */
+  createdLoops: { id: WireId; from: WireId[] }[];
 }
 
 export class NoRuleError extends Error {
@@ -86,38 +88,59 @@ export function interact(net: Net, sys: System, w: WireId): StepRecord {
     }
   }
 
-  // Follow each chain of interface nodes from one real end to the other and
-  // join those ends with a single wire. A chain that runs into an empty port
-  // leaves its real end empty. Leftover nodes form closed loops, or chains
-  // between two empty ports, which simply vanish.
+  // Follow each chain of interface nodes from one end to the other. An
+  // empty port counts as a loose end that isn't drawn: a chain from a real
+  // end to one leaves an agent's port empty (a loose end's wire gets a new
+  // loose end), and a chain between two of them becomes a wire with two
+  // new loose ends. A chain with no ends at all is a closed loop.
   const visited = new Set<string>();
-  const walk = (start: End, first: string, via: "inner" | "outer") => {
+  type Stop = { end: End } | { open: true } | { loop: true };
+  const follow = (first: string, via: "inner" | "outer"): { from: WireId[]; stop: Stop } => {
     const from: WireId[] = [];
     let node = first;
     let dir = via;
     for (;;) {
       visited.add(node);
       const old = oldWire.get(node);
-      if (dir === "outer" && old !== undefined) from.push(old);
-      const nextDir = dir === "inner" ? "outer" : "inner";
-      const hop = (nextDir === "inner" ? inner : outer).get(node)!;
-      if (nextDir === "outer" && old !== undefined) from.push(old);
-      if ("open" in hop) return;
-      if ("end" in hop) {
-        const ids = [...new Set(from)];
-        const reuse = ids[0];
-        if (reuse !== undefined) removedWires.delete(reuse);
-        createdWires.push({ id: net.connect(start, hop.end, reuse), from: ids });
-        return;
-      }
+      if (old !== undefined) from.push(old);
+      dir = dir === "inner" ? "outer" : "inner";
+      const hop = (dir === "inner" ? inner : outer).get(node)!;
+      if (!("node" in hop)) return { from: [...new Set(from)], stop: hop };
+      if (visited.has(hop.node)) return { from: [...new Set(from)], stop: { loop: true } };
       node = hop.node;
-      dir = nextDir;
     }
   };
-  for (const [k, hop] of outer) if ("end" in hop && !visited.has(k)) walk(hop.end, k, "outer");
-  for (const [k, hop] of inner) if ("end" in hop && !visited.has(k)) walk(hop.end, k, "inner");
+  const reuse = (from: WireId[]) => {
+    const id = from[0];
+    if (id !== undefined) removedWires.delete(id);
+    return id;
+  };
+  const join = (a: End, b: End, from: WireId[]) => createdWires.push({ id: net.connect(a, b, reuse(from)), from });
+  const loose = (): End => {
+    const name = net.freshFree();
+    net.free.set(name, NONE);
+    return free(name);
+  };
+  const createdLoops: StepRecord["createdLoops"] = [];
+  const fromEnd = (start: End, k: string, via: "inner" | "outer") => {
+    if (visited.has(k)) return;
+    const { from, stop } = follow(k, via);
+    if ("end" in stop) join(start, stop.end, from);
+    else if (start.kind === "free") join(start, loose(), from);
+  };
+  for (const [k, hop] of outer) if ("end" in hop) fromEnd(hop.end, k, "outer");
+  for (const [k, hop] of inner) if ("end" in hop) fromEnd(hop.end, k, "inner");
+  for (const [k, hop] of outer) {
+    if (!("open" in hop) || visited.has(k)) continue;
+    join(loose(), loose(), follow(k, "outer").from);
+  }
+  for (const k of outer.keys()) {
+    if (visited.has(k)) continue;
+    const { from } = follow(k, "outer");
+    createdLoops.push({ id: net.addLoop(reuse(from)), from });
+  }
 
-  return { wire: w, rule, removed: side, created, removedWires: [...removedWires], createdWires };
+  return { wire: w, rule, removed: side, created, removedWires: [...removedWires], createdWires, createdLoops };
 }
 
 export interface Stats {

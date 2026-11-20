@@ -124,6 +124,7 @@ export function createFocus(host: FocusHost) {
     if (h?.kind === "wire" && paired(h.id)) {
       return { kind: "pair", wire: h.id, active: m.activeWires().has(h.id), selected: s?.kind === "wire" && s.id === h.id };
     }
+    if (s?.kind === "wire" && m.net.loops.has(s.id)) return { kind: "wire", wire: s.id };
     if (s?.kind === "wire" && m.net.wires.has(s.id)) {
       if (paired(s.id)) return { kind: "pair", wire: s.id, active: m.activeWires().has(s.id), selected: true };
       return { kind: "wire", wire: s.id };
@@ -154,7 +155,7 @@ export function createFocus(host: FocusHost) {
       case "pair":
         return f.active ? "Active pair" : "Pair with no rule";
       case "wire":
-        return "Wire";
+        return m.net.loops.has(f.wire) ? "Loop" : "Wire";
       case "items": {
         const { agents, groups, wires } = f;
         if (agents.length + groups.length + wires.length === 1) return agents.length ? "Agent" : groups.length ? "Component" : "Wire";
@@ -224,6 +225,7 @@ export function createFocus(host: FocusHost) {
         };
       }
       case "wire": {
+        if (m.net.loops.has(f.wire)) return { title: "Loop", lines: [{ text: <>A wire joined to itself, with no ends. Nothing can reach it, so it never changes.</> }] };
         const w = m.view().net.wires.get(f.wire);
         return { title: "Wire", lines: w ? [{ text: <>From {endName(w.ends[0])} to {endName(w.ends[1])}.</> }] : [] };
       }
@@ -325,7 +327,7 @@ export function createFocus(host: FocusHost) {
   /** What applies to a selected wire of what an agent can have done to it. */
   const wireActions = (w: WireId, all: Action): Action[] => {
     const ends = agentsOf(w);
-    const none = ends.length ? undefined : "Both its ends are loose.";
+    const none = ends.length ? undefined : m.net.loops.has(w) ? "A loop has no ends." : "Both its ends are loose.";
     return [
       { id: "delete", label: "Delete", icon: I.Trash, danger: true, run: () => dispatch({ kind: "selection/delete" }) },
       { id: "ends", label: ends.length === 1 ? "Select its agent" : "Select its agents", short: ends.length === 1 ? "Its agent" : "Its agents", icon: I.Ends, run: () => m.pickMany(ends, []), why: none },

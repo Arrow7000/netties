@@ -66,6 +66,20 @@ describe("text format", () => {
     expect(print(system, net)).toContain("_ ~ A(_),");
   });
 
+  it("writes a closed loop as a name joined to itself", () => {
+    const { net, system } = parse("agent W 1\n\nW(x) >< W(y) => x ~ y;\n\nW(a) ~ W(b), a ~ b, l ~ l;");
+    expect(net.loops.size).toBe(1);
+    normalize(net, system);
+    expect(net.agents.size).toBe(0);
+    expect(net.loops.size).toBe(2);
+    const again = parse(print(system, net)).net;
+    expect(again.loops.size).toBe(2);
+    expect(again.wires.size).toBe(0);
+    expect(() => parse("A(l) ~ B, l ~ l;")).toThrow(/closed loop/);
+    expect(() => parse("l ~ l, A(l) ~ B;")).toThrow(/closed loop/);
+    expect(() => parse("A(x) >< B => x ~ x, l ~ l;")).toThrow(/loop/);
+  });
+
   it("points at the line of a mistake", () => {
     expect(() => parse("A(x) >< B => y ~ x;")).toThrow(ParseError);
     try {

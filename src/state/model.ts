@@ -1079,11 +1079,14 @@ export function createNetModel(opts: NetModelOptions) {
         }
         // Wires left over: between loose ends, or into an instance kept whole.
         for (const w of sel.wires) {
+          net.loops.delete(w);
           if (!net.wires.has(w)) continue;
           const [a, b] = net.wire(w).ends;
           for (const e of [a, b]) if (e.kind === "port") groups.dissolveAround([e.agent]);
           detach(a);
         }
+      } else if (sel.kind === "wire" && net.loops.has(sel.id)) {
+        net.loops.delete(sel.id);
       } else if (sel.kind === "wire" && net.wires.has(sel.id)) {
         const [a, b] = net.wire(sel.id).ends;
         for (const e of [a, b]) if (e.kind === "port") groups.dissolveAround([e.agent]);

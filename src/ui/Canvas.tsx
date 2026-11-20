@@ -634,7 +634,7 @@ export function Canvas(props: CanvasProps) {
         return q.some((a, i) => segmentHitsBox(a, q[(i + 1) % q.length]!, box)) || insidePolygon(corners[0]!, q);
       };
       const agents = new Set([...l.placement].filter(([id, p]) => v.agents.has(id) && touches(id, p)).map(([id]) => id));
-      const wires = [...v.wires.keys()].filter((id) => {
+      const wires = [...v.wires.keys(), ...v.loops].filter((id) => {
         const f = flattenPath(l.routed.wires.get(id) ?? [], G.radius);
         return f.some((a, i) => i > 0 && segmentHitsBox(f[i - 1]!, a, box));
       });
@@ -644,6 +644,8 @@ export function Canvas(props: CanvasProps) {
     // A loose end is inside when the spot it's drawn at is.
     const inside = (e: End) => (e.kind === "port" ? agents.has(e.agent) : !!l.routed.free.get(e.name) && within(l.routed.free.get(e.name)!));
     const wires = [...v.wires.values()].filter((w) => inside(w.ends[0]) && inside(w.ends[1])).map((w) => w.id);
+    // A closed loop is inside when all of it is.
+    for (const id of v.loops) if ((l.routed.wires.get(id) ?? []).every(within)) wires.push(id);
     return { agents, wires };
   };
   /** A marquee dragged leftwards selects whatever it touches. */
@@ -887,7 +889,7 @@ export function Canvas(props: CanvasProps) {
     return { "background-size": `${g}px ${g}px`, "background-position": `${v.x}px ${v.y}px` };
   };
 
-  const isEmpty = () => (ed.rev(), ed.net.agents.size === 0 && ed.net.free.size === 0);
+  const isEmpty = () => (ed.rev(), ed.net.agents.size === 0 && ed.net.free.size === 0 && ed.net.loops.size === 0);
 
   return (
     <div class={`stage ${props.class ?? ""}`} style={grid()}>
