@@ -203,6 +203,27 @@ instance "c" parent - expanded members [0] ports [["p1",0,0]];
     });
   });
 
+  it("resets a net the chat loaded, as it does an example", () => {
+    createRoot((dispose) => {
+      const ed = createEditor(undefined);
+      const ex = examples.find((e) => e.name === "3 + 2")!;
+      const system = ex.system();
+      ed.loadParsed(system, ex.net(system), [], undefined, { name: "the net from the chat", fromChat: true });
+      const start = ed.toDoc().net;
+      expect(ed.canResetExample()).toBe(false);
+      ed.stepAll();
+      expect(ed.canResetExample()).toBe(true);
+      expect(ed.resetsChat()).toBe(true);
+      ed.resetExample();
+      expect(ed.toDoc().net).toEqual(start);
+
+      ed.loadParsed(system, ex.net(system));
+      ed.stepAll();
+      expect(ed.canResetExample()).toBe(false);
+      dispose();
+    });
+  });
+
   it("offers a one-click reset after Run finishes", () => {
     vi.useFakeTimers();
     try {

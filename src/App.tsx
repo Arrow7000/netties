@@ -630,8 +630,8 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
               {ed.running() ? "Stop" : "Run"}
             </button>
             <Show when={ed.canResetExample()}>
-              <button class="btn outline" onClick={ed.resetExample} title="Restore the loaded example to its starting net. You can undo this.">
-                Reset example
+              <button class="btn outline" onClick={ed.resetExample} title={ed.resetsChat() ? "Restore the net the chat loaded to how it started. You can undo this." : "Restore the loaded example to its starting net. You can undo this."}>
+                {ed.resetsChat() ? "Reset net" : "Reset example"}
               </button>
             </Show>
             <span class="sep" />

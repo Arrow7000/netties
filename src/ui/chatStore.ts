@@ -245,7 +245,7 @@ export function createChat(ed: Editor, models = createModelSettings()) {
   const put = (code: string) => {
     if (ed.screen().kind !== "net") ed.dispatch({ kind: "screen/close" });
     const { system, net, components, groups } = parseProgram(code);
-    const cut = ed.loadParsed(system, net, components, groups);
+    const cut = ed.loadParsed(system, net, components, groups, { name: "the net from the chat", fromChat: true });
     if (cut) ed.notify(`Cut ${cut === 1 ? "1 wire" : `${cut} wires`} that didn't fit the types into loose ends.`, true);
     return cut;
   };

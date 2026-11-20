@@ -197,7 +197,7 @@ export function RunButtons(props: { kit: Phone }) {
         {ed.running() ? "Stop" : "Run"}
       </button>
       <Show when={ed.canResetExample()}>
-        <button class="btn outline icon" onClick={ed.resetExample} aria-label="Reset example: restore its starting net. You can undo this.">
+        <button class="btn outline icon" onClick={ed.resetExample} aria-label={ed.resetsChat() ? "Reset net: restore the net the chat loaded to how it started. You can undo this." : "Reset example: restore its starting net. You can undo this."}>
           <I.Reset />
         </button>
       </Show>

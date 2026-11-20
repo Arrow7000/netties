@@ -139,8 +139,12 @@ export function createEditor(initial: Doc | undefined) {
     groups: model.groups.toJSON(),
   });
 
-  /** Only states reached by reducing the loaded example can reset to it. */
-  const [exampleStart, setExampleStart] = createSignal<{ name: string; doc: Doc; states: string[] }>();
+  /** Only states reached by reducing the loaded example, or a net loaded from the chat, can reset to it. */
+  const [exampleStart, setExampleStart] = createSignal<{ name: string; doc: Doc; states: string[]; fromChat?: boolean }>();
+  const startHere = (name: string, fromChat?: boolean) => {
+    const doc = toDoc();
+    setExampleStart({ name, doc, states: [JSON.stringify(doc)], fromChat });
+  };
   const fingerprint = () => JSON.stringify(toDoc());
   const inExampleRun = () => !!exampleStart()?.states.includes(fingerprint());
   const canResetExample = createMemo(() => {
@@ -605,6 +609,8 @@ export function createEditor(initial: Doc | undefined) {
     previewing,
     setPreviewMode,
     canResetExample,
+    /** What the reset button goes back to: an example, or a net the chat loaded. */
+    resetsChat: () => !!exampleStart()?.fromChat,
     resetExample() {
       const start = exampleStart();
       if (!start || !canResetExample()) return;
@@ -654,8 +660,7 @@ export function createEditor(initial: Doc | undefined) {
         model.restoreView("auto", new Map());
         resetRun();
       });
-      const doc = toDoc();
-      setExampleStart({ name: ex.name, doc, states: [JSON.stringify(doc)] });
+      startHere(ex.name);
       model.requestFit();
       if (!quiet) notify(`Loaded ${ex.name}.`, true);
     },
@@ -939,8 +944,8 @@ export function createEditor(initial: Doc | undefined) {
     closeTypes: () => dispatch({ kind: "screen/close" }),
     openText: () => dispatch({ kind: "screen/open", screen: { kind: "text" } }),
     closeText: () => dispatch({ kind: "screen/close" }),
-    /** Replace everything with a parsed system and net. */
-    loadParsed(sys: System, net: Net, components: ComponentDef[] = [], groups = new Groups()) {
+    /** Replace everything with a parsed system and net. `start` names it as a start to reset back to after reducing, as an example is. */
+    loadParsed(sys: System, net: Net, components: ComponentDef[] = [], groups = new Groups(), start?: { name: string; fromChat?: boolean }) {
       stop();
       setExampleStart(undefined);
       model.checkpoint();
@@ -954,6 +959,7 @@ export function createEditor(initial: Doc | undefined) {
       });
       const n = enforceTypes();
       if (n) model.bump();
+      if (start) startHere(start.name, start.fromChat);
       model.requestFit();
       return n;
     },
