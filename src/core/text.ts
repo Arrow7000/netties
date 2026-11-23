@@ -4,7 +4,7 @@ import { type Rule, System } from "./system";
 import { type Level, type PortSpec, typingOn } from "./types";
 
 /**
- * A text format in the style of Inpla:
+ * A text format in the style of Inpla (Sato) and Pin (Hassan, Mackie and Sato, 2008):
  *
  *     agent γ 2 filled "constructor"     -- optional declarations
  *     directions required                -- optional: ports give (+) or take (-)

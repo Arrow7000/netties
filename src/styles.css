@@ -2351,6 +2351,101 @@ kbd {
   color: var(--accent);
 }
 
+/* About */
+
+.about {
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  color: var(--text);
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pop);
+  box-shadow: var(--shadow);
+}
+
+.about:focus {
+  outline: none;
+}
+
+.about::backdrop {
+  background: var(--scrim);
+}
+
+.about-body {
+  padding: 40px 28px 26px;
+  text-align: center;
+}
+
+.about-mark {
+  width: 84px;
+  height: 98px;
+}
+
+.about h2 {
+  margin: 22px 0 2px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.about p {
+  margin: 0;
+}
+
+.about-tagline {
+  color: var(--muted);
+}
+
+.about dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 24px 0;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.about dt {
+  text-align: right;
+}
+
+.about dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.about-source {
+  color: inherit;
+  text-decoration: none;
+  background: var(--chrome-2);
+}
+
+.about .about-foot {
+  margin-top: 20px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.out {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.out:hover {
+  color: var(--text);
+}
+
+.text-credit {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
 /* Full-screen editors: rules, components, the translation, text */
 
 .rule-editor {

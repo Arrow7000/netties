@@ -36,6 +36,11 @@ For those interested in how it works under the hood:
 - `src/state` — The net model and the editor store.
 - `src/ui` — SolidJS UI components.
 
+## Credits
+
+- Interaction nets ([1990](https://doi.org/10.1145/96709.96718)) and interaction combinators ([1997](https://doi.org/10.1006/inco.1997.2643)) are Yves Lafont's.
+- The text format is a dialect of the notation of [Pin](https://eceasst.org/index.php/eceasst/article/download/2523/2697/2713) (Abubakar Hassan, Ian Mackie and Shinya Sato, 2008) and [Inpla](https://github.com/inpla/inpla) (Shinya Sato), in the tradition of Maribel Fernández and Ian Mackie's [calculus for interaction nets](https://doi.org/10.1007/10704567_10) (1999).
+
 ## Licence
 
 Copyright 2026 Aron Adler. Netties is available under the

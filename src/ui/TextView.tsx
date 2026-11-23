@@ -1,6 +1,8 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
 import { ParseError } from "../core/text";
 import { parseProgram, printProgram } from "../core/programText";
+import { Out } from "./About";
+import { CREDITS } from "./credits";
 import { decode } from "../state/persist";
 import type { Editor } from "../state/editor";
 import { copyText } from "./clipboard";
@@ -112,6 +114,10 @@ export function TextView(props: { ed: Editor }) {
         {error() ??
           note() ??
           "Rules are A(x, y) >< B(z) => …; nets are equations t ~ u. A name used once in a net is a free port. Components use component … ports […] / end blocks; instance annotations refer to agents by zero-based first appearance. Loading replaces the current program."}
+        <span class="text-credit">
+          Based on the notation of <Out href={CREDITS.inpla}>Inpla</Out> (Shinya Sato) and <Out href={CREDITS.pin}>Pin</Out> (Abubakar Hassan, Ian
+          Mackie and Shinya Sato), with additions.
+        </span>
       </p>
     </div>
   );

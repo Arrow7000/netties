@@ -303,13 +303,17 @@ Choices made along the way that you haven't confirmed yet:
   upper-case agents), itself from Fernández & Mackie's interaction calculus,
   plus our own extras: `agent` declarations, `directions`/`types` and port
   specs like `+number`, quoted descriptions, `_` for an empty port, `--`
-  comments, lower-case or Unicode agent names. Never checked against Inpla
+  comments, lower-case or Unicode agent names. Never run against Inpla
   itself; we don't read Inpla's integers, built-ins, `if`, `where` or
-  commands. To think about: whether to make it fully Inpla-compatible (or
+  commands. Checked against their papers and docs on 2026-11-23: `><`, `=>`
+  and `~` are already in Pin (Hassan, Mackie & Sato, 2008), and `><` and the
+  `+`/`-` port types seem to be Lafont's (1990, secondhand); Inpla numbers aux
+  ports anticlockwise where we go clockwise. Credited in the text view, File →
+  About netties, and the README. `x ~ x` loops are
+  ours too. To think about: whether to make it fully Inpla-compatible (or
   just an export that drops our extras and uses ASCII names); whether to
-  publish an official spec/grammar and a migration guide to and from Inpla;
-  whether the text panel should say what language it is. Ties in with
-  shorter share links, which would extend the format with positions,
+  publish an official spec/grammar and a migration guide to and from Inpla.
+  Ties in with shorter share links, which would extend the format with positions,
   components and groups.
 
 ## Later

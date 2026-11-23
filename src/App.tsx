@@ -7,6 +7,7 @@ import { createChat } from "./ui/chatStore";
 import { compact, fingers, heightAtRest, sideways } from "./ui/compact";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { ExamplesMenu } from "./ui/ExamplesMenu";
+import { AboutDialog } from "./ui/About";
 import { FEEDBACK, FeedbackDialog, FeedbackNudge } from "./ui/Feedback";
 import { Menu, MenuItem } from "./ui/Menu";
 import { Palette } from "./ui/Palette";
@@ -100,7 +101,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
   // while it is open. Full workspaces and sheets block those shortcuts.
   const overlayOpen = () => {
     const kind = ed.screen().kind;
-    return kind !== "net" && kind !== "agent";
+    return about() || (kind !== "net" && kind !== "agent");
   };
 
   // The undo and redo buttons light up when their shortcuts are used.
@@ -320,6 +321,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
   };
 
   const [feedback, setFeedback] = createSignal(false);
+  const [about, setAbout] = createSignal(false);
   /** A link to the net as it is, for feedback, leaving the address bar alone. */
   const netLink = async () => {
     const { toShareHash } = await import("./state/persist");
@@ -503,6 +505,14 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
                   }}
                 />
               </Show>
+              <hr />
+              <MenuItem
+                title="About netties"
+                onClick={() => {
+                  setAbout(true);
+                  close();
+                }}
+              />
               <hr />
               <MenuItem
                 title="Clear net"
@@ -691,6 +701,9 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
       <Show when={ed.screen().kind === "rule" ? ed.screen() as Extract<ReturnType<typeof ed.screen>, { kind: "rule" }> : undefined} keyed>
         {(screen) => <RuleEditor ed={ed} left={screen.left} right={screen.right} phone={phone} />}
       </Show>
+      <Show when={about()}>
+        <AboutDialog onClose={() => setAbout(false)} />
+      </Show>
       <Show when={feedback()}>
         <FeedbackDialog
           netLink={netLink}
@@ -702,7 +715,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
         />
       </Show>
       <Show when={FEEDBACK}>
-        <FeedbackNudge quiet={() => feedback() || ed.screen().kind !== "net" || ed.running()} onOpen={() => setFeedback(true)} />
+        <FeedbackNudge quiet={() => feedback() || about() || ed.screen().kind !== "net" || ed.running()} onOpen={() => setFeedback(true)} />
       </Show>
       <Tooltips />
       {import.meta.env.DEV && <Show when={freezeState()}>
