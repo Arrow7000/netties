@@ -1,3 +1,5 @@
+import { System } from "./system";
+import { Net } from "./net";
 import { describe, expect, it } from "vitest";
 import { cutOut, graft, looseName, mergePlan, systemFor } from "./clip";
 import { Groups } from "./groups";
@@ -77,5 +79,15 @@ describe("clipboard pieces", () => {
     expect(new Set(ids.values()).size).toBe(net.agents.size);
     expect([...target.free.keys()].sort()).toEqual(["a", "out"]);
     expect(target.unconnected()).toEqual([]);
+  });
+
+  it("copies and grafts closed loops", () => {
+    const net = new Net();
+    const l = net.addLoop();
+    const piece = cutOut(net, new Groups(), [], [l]).net;
+    expect(piece.loops.size).toBe(1);
+    const { wires } = graft(net, new Groups(), new System(), piece, new Groups(), () => "a");
+    expect(net.loops.size).toBe(2);
+    expect(wires.every((w) => net.loops.has(w))).toBe(true);
   });
 });

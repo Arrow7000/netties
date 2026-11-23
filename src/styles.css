@@ -2607,6 +2607,12 @@ kbd {
   stroke-linejoin: round;
 }
 
+.rule-preview .end {
+  fill: var(--paper);
+  stroke: var(--active);
+  stroke-width: 1.4;
+}
+
 .rule-preview .link {
   stroke-dasharray: 4 3;
 }

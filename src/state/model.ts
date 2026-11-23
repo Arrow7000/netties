@@ -405,16 +405,18 @@ export function createNetModel(opts: NetModelOptions) {
    * it says (the new ones where their rules put them, the rest where they
    * were), then let it settle into its layout.
    * `before` is how the net was drawn before the change (its columns and
-   * where its loose ends were), so the first frame is routed exactly as the
+   * where its loose ends and loops were), with the loose ends and loops the
+   * step made where it made them (`made`, if any), so the first frame is routed exactly as the
    * step's preview was.
    */
-  function settleFrom(start: Placement, before: { columns?: Map<string, number>; free: Routed["free"] }, duration = 420) {
-    if (mode() === "manual") return noAnimation();
+  function settleFrom(start: Placement, before: { columns?: Map<string, number>; free: Routed["free"]; loops?: ReadonlyMap<WireId, Pt[]>; made?: boolean }, duration = 420) {
+    // In manual layout nothing else has anywhere to settle.
+    if (mode() === "manual" && !before.made) return noAnimation();
     const v = view();
     const final = layout();
     const placement: Placement = new Map();
     for (const [id, p] of final.placement) placement.set(id, start.get(id) ?? p);
-    const routed = routeHoldingEnds(v.net, placement, { columns: before.columns, pins: pins() }, before.free);
+    const routed = routeHoldingEnds(v.net, placement, { columns: before.columns, pins: pins() }, before.free, before.loops);
     animate({ net: v.net.clone(), sys: v.sys, placement, routed }, [], true, duration);
   }
 
@@ -454,11 +456,16 @@ export function createNetModel(opts: NetModelOptions) {
     raf = requestAnimationFrame(tick);
   }
 
+  /** Whether dropping the end held in `g` onto `to` joins a wire's two loose ends, closing it into a loop. */
+  const closes = (g: WireGesture, to: End) =>
+    freePorts.scratch && g.kind === "carry" && g.moving.kind === "free" && g.anchor.kind === "free" && sameEnd(to, g.anchor);
+
   /** What dropping the end held in `g` onto `to` would do. Ends are view ends. */
   function checkDrop(g: WireGesture, to: End): DropCheck {
     const v = view().net;
     const anchor = g.kind === "new" ? g.from : g.anchor;
     if (g.kind === "carry" && sameEnd(to, g.moving)) return { kind: "back" };
+    if (closes(g, to)) return { kind: "ok", join: false };
     if (sameEnd(to, anchor)) {
       return { kind: "refuse", why: g.kind === "new" ? "That's where this wire starts." : "That's the other end of this wire." };
     }
@@ -492,6 +499,10 @@ export function createNetModel(opts: NetModelOptions) {
     const tmp = v.net.clone();
     const placement = new Map(l.placement);
     const anchor = g.kind === "new" ? g.from : g.anchor;
+    if (to && g.kind === "carry" && closes(g, to)) {
+      const pts = l.routed.wires.get(g.wire);
+      return pts && [...pts, pts[0]!];
+    }
     // A loose end has no place of its own until the router puts it on an edge.
     if (anchor.kind === "free") return undefined;
     if (g.kind === "carry") {
@@ -660,6 +671,9 @@ export function createNetModel(opts: NetModelOptions) {
         loose = nextFreeName();
         net.free.set(loose, NONE);
         made = net.connect(anchor, free(loose), reuse);
+      } else if (to && closes(g, to)) {
+        if (anchor.kind === "free") net.free.delete(anchor.name);
+        made = net.addLoop(reuse);
       } else if (to) {
         const t = v.toReal(to);
         const w = net.wireAt(t);
@@ -794,7 +808,7 @@ export function createNetModel(opts: NetModelOptions) {
         if ("group" in it) gs.add(it.group);
         else agents.add(it.agent);
       }
-      setItems(agents, gs, new Set(v.wires.keys()));
+      setItems(agents, gs, new Set([...v.wires.keys(), ...v.loops]));
     },
 
     /**
@@ -1029,7 +1043,7 @@ export function createNetModel(opts: NetModelOptions) {
     copySelection() {
       const s = selection();
       const agents = selectedAgents();
-      const wires = s?.kind === "items" ? [...s.wires].filter((w) => net.wires.has(w)) : [];
+      const wires = s?.kind === "items" ? [...s.wires].filter((w) => net.wires.has(w) || net.loops.has(w)) : [];
       if (!agents.length && !wires.length) return undefined;
       const piece = cutOut(net, groups, agents, wires);
       const shown = mode() === "manual" ? positions : positionsFromAuto(layout().placement);

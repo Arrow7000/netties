@@ -1,3 +1,4 @@
+import { parse } from "./text";
 import { describe, expect, it } from "vitest";
 import { canonical } from "./canon";
 import { examples } from "./examples";
@@ -220,4 +221,20 @@ describe("following the source step by step", () => {
     }
     expect(steps).toBe(4);
   }, 30_000);
+});
+
+describe("closed loops", () => {
+  const s = parse("agent W 1\nW(x) >< W(y) => x ~ y;\n").system;
+  for (const mode of ["general", "restricted"] as const)
+    it(`carries loops over, and makes the same ones (${mode})`, () => {
+      const net = (body: string) => parse("agent W 1\nW(x) >< W(y) => x ~ y;\n" + body).net;
+      expect(translation(s, mode).net(net("l ~ l, m ~ m;")).net.loops.size).toBe(2);
+      commutes(net("W(a) ~ W(a), l ~ l;"), s, mode);
+    });
+  it("carries loops over in the combinators themselves", () => {
+    const c = combinators();
+    const n = new Net();
+    n.addLoop();
+    expect(translation(c).net(n).net.loops.size).toBe(1);
+  });
 });

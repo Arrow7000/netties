@@ -132,7 +132,7 @@ export function createFocus(host: FocusHost) {
     if (s?.kind === "items") {
       const groups = [...s.groups].filter((g) => m.groups.groups.has(g));
       const agents = [...s.agents].filter((x) => m.net.agents.has(x));
-      const wires = [...s.wires].filter((w) => m.view().net.wires.has(w));
+      const wires = [...s.wires].filter((w) => m.view().net.wires.has(w) || m.view().net.loops.has(w));
       if (agents.length + groups.length + wires.length) return { kind: "items", agents, groups, wires };
     }
     // A cell of the rule grid picked in the Rules face shows there, not here.

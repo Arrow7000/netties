@@ -412,7 +412,7 @@ export function SelectionPanel(props: { ed: Editor }) {
     m.rev();
     const groups = [...s.groups].filter((g) => m.groups.groups.has(g));
     const agents = [...s.agents].filter((a) => m.net.agents.has(a));
-    const wires = [...s.wires].filter((w) => m.view().net.wires.has(w));
+    const wires = [...s.wires].filter((w) => m.view().net.wires.has(w) || m.view().net.loops.has(w));
     return agents.length + groups.length + wires.length ? { agents, groups, wires } : undefined;
   };
 

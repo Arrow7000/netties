@@ -50,6 +50,7 @@ export function cutOut(net: Net, groups: Groups, agents: Iterable<AgentId>, wire
     }
   }
   for (const w of wires) {
+    if (net.loops.has(w)) out.addLoop();
     if (taken.has(w) || !net.wires.has(w)) continue;
     taken.add(w);
     const [x, y] = net.wire(w).ends;
@@ -155,6 +156,7 @@ export function graft(net: Net, groups: Groups, sys: System, piece: Net, pieceGr
     return free(name);
   };
   const wires = [...piece.wires.values()].map((w) => net.connect(map(w.ends[0]), map(w.ends[1])));
+  for (const _ of piece.loops) wires.push(net.addLoop());
   const gmap = new Map<GroupId, GroupId>();
   const order = [...pieceGroups.groups.values()].sort((x, y) => pieceGroups.chain(x.id).length - pieceGroups.chain(y.id).length);
   for (const g of order) {

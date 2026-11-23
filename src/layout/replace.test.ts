@@ -1,8 +1,10 @@
+import { parallelStep } from "../core/reduce";
+import { parse } from "../core/text";
 import { describe, expect, it } from "vitest";
 import { examples } from "../core/examples";
-import { type Box, boxOf } from "./geometry";
+import { type Box, boxOf, portPos } from "./geometry";
 import { autoLayout } from "./place";
-import { planSteps, previewSteps, routeHoldingEnds } from "./replace";
+import { planSteps, previewSteps, routeHoldingEnds, stepShapes } from "./replace";
 
 const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
@@ -63,5 +65,51 @@ describe("step plans", () => {
       const ends = [pts[0]!, pts[pts.length - 1]!];
       expect(ends.some((q) => Math.hypot(q.x - at.x, q.y - at.y) < 0.5)).toBe(true);
     }
+  });
+});
+
+describe("loose ends and loops made by a step", () => {
+  const wire = "agent W 1\nW(x) >< W(y) => x ~ y;\n";
+  const drawn = (text: string) => {
+    const { system, net } = parse(wire + text);
+    const l = autoLayout(net);
+    return { system, net, drawn: { placement: l.placement, routed: l.routed, columns: l.columns } };
+  };
+
+  it("leaves a wire between two empty ports where the ports were", () => {
+    const { system, net, drawn: d } = drawn("W(_) ~ W(_);");
+    const ports = [...net.agents.keys()].map((id) => portPos(d.placement.get(id)!, 1, 1));
+    const pv = previewSteps(net, system, d, net.activePairs());
+    expect(pv.ends.map(({ x, y }) => [x, y]).sort()).toEqual(ports.map(({ x, y }) => [x, y]).sort());
+    const ys = pv.strokes.flatMap((s) => s.pts.map((p) => p.y));
+    expect(Math.min(...ys)).toBeCloseTo(Math.min(...ports.map((p) => p.y)));
+    expect(Math.max(...ys)).toBeCloseTo(Math.max(...ports.map((p) => p.y)));
+  });
+
+  it("closes a loop along the wire it continues, across the pair", () => {
+    const { system, net, drawn: d } = drawn("W(a) ~ W(a);");
+    const pv = previewSteps(net, system, d, net.activePairs());
+    expect(pv.kept).toHaveLength(1);
+    expect(pv.strokes.length).toBeGreaterThan(0);
+    const after = net.clone();
+    const { loops } = stepShapes(system, d, parallelStep(after, system));
+    const pts = [...loops.values()][0]!;
+    expect(Math.hypot(pts[0]!.x - pts.at(-1)!.x, pts[0]!.y - pts.at(-1)!.y)).toBeLessThan(1);
+  });
+
+  it("closes a loop that several pairs firing at once make together", () => {
+    const { system, net, drawn: d } = drawn("W(a) ~ W(b), W(a) ~ W(b);");
+    const after = net.clone();
+    const { loops } = stepShapes(system, d, parallelStep(after, system));
+    expect(loops.size).toBe(1);
+    const pts = [...loops.values()][0]!;
+    // It passes along every aux wire, without jumps: the longest straight stretch is an old wire's or a link's.
+    const longest = d.routed.bounds.y1 - d.routed.bounds.y0 + (d.routed.bounds.x1 - d.routed.bounds.x0);
+    for (let i = 1; i < pts.length; i++) expect(Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y)).toBeLessThan(longest);
+    for (const a of net.agents.keys()) {
+      const q = portPos(d.placement.get(a)!, 1, 1);
+      expect(Math.min(...pts.map((p) => Math.hypot(p.x - q.x, p.y - q.y)))).toBeLessThan(1);
+    }
+    expect(Math.hypot(pts[0]!.x - pts.at(-1)!.x, pts[0]!.y - pts.at(-1)!.y)).toBeLessThan(1);
   });
 });

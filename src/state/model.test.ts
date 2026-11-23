@@ -173,3 +173,46 @@ describe("net model gesture boundary", () => {
     });
   });
 });
+
+describe("closing a loop by hand", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+  });
+
+  it("joins a wire's two loose ends, undoably, and the loop can be deleted and copied", () => {
+    createRoot((dispose) => {
+      const model = createNetModel({ system: () => new System() });
+      const net = new Net();
+      const w = net.connect(free("a"), free("b"));
+      model.setNet(net);
+      const g = model.gestureAt(free("a"));
+      expect(model.checkDrop(g, free("a")).kind).toBe("back");
+      expect(model.checkDrop(g, free("b")).kind).toBe("ok");
+      expect(model.previewWire(g, free("b"), { x: 0, y: 0 })).toBeDefined();
+      model.finishGesture(g, free("b"));
+      expect([...model.net.loops]).toEqual([w]);
+      expect([model.net.wires.size, model.net.free.size]).toEqual([0, 0]);
+      model.selectAll();
+      expect(model.copySelection()?.net.loops.size).toBe(1);
+      model.deleteSelection();
+      expect(model.net.loops.size).toBe(0);
+      model.undo();
+      expect(model.net.loops.size).toBe(1);
+      model.undo();
+      expect(model.net.partner(free("a"))).toEqual(free("b"));
+      dispose();
+    });
+  });
+
+  it("still refuses the other end of a wire from a port, and a rule's interface ends", () => {
+    createRoot((dispose) => {
+      const net = new Net();
+      net.connect(free("L1"), free("R1"));
+      const model = createNetModel({ system: () => new System(), surface: "rule" });
+      model.setNet(net);
+      expect(model.checkDrop(model.gestureAt(free("L1")), free("R1")).kind).toBe("refuse");
+      dispose();
+    });
+  });
+});

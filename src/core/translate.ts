@@ -631,6 +631,8 @@ export function translation(sys: System, mode: Mode = "general"): Translation {
       b.tag = undefined;
       for (const [name, w] of source.free) if (w !== NONE) b.link({ f: name }, holeOf(w));
       const { net, ids } = b.toNet();
+      // A closed loop has no agents on it, so it's its own translation.
+      for (const _ of source.loops) net.addLoop();
       const tagOf = new Map<AgentId, AgentId>();
       b.cells.forEach((c, i) => c.tag !== undefined && tagOf.set(ids[i]!, c.tag));
       // Find the cell port inside each source agent's translation that each source wire reaches.

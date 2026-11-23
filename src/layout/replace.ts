@@ -1,5 +1,5 @@
 import { type AgentId, type End, type Net, NONE, type WireId, free, port, sameEnd } from "../core/net";
-import { type StepRecord, interact, isActive } from "../core/reduce";
+import { type Made, type PairPort, type StepRecord, interact, isActive } from "../core/reduce";
 import { ifaceName, interfacePins, ruleToNet } from "../core/ruleNet";
 import type { Rule, System } from "../core/system";
 import { flattenPath } from "../render/path";
@@ -334,6 +334,8 @@ export interface StepPreview {
   kept: Pt[][];
   /** The new stretches of wire: dashed outside a frame, solid inside one. */
   strokes: { pts: Pt[]; dashed: boolean }[];
+  /** Where the steps leave new loose ends. */
+  ends: Pt[];
   /**
    * Frames round pairs whose rule creates nothing, where they are now, so
    * each disappearance reads as a rule of its own rather than a side effect.
@@ -370,7 +372,8 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], 
       if (boxes.length) vanishing.push(grow(union(boxes), 8));
     }
   }
-  const routed = routeHoldingEnds(tmp, placement, { columns: drawn.columns, pins: drawn.pins }, drawn.routed.free);
+  const made = stepShapes(sys, drawn, recs);
+  const routed = routeHoldingEnds(tmp, placement, { columns: drawn.columns, pins: drawn.pins }, new Map([...drawn.routed.free, ...made.ends]));
 
   // Which old wires each new wire continues, across every step.
   const origin = new Map<WireId, WireId[]>();
@@ -411,19 +414,94 @@ export function previewSteps(net: Net, sys: System, drawn: Drawn, ws: WireId[], 
     const fresh = slice(path, shared[0]!, len - shared[1]!);
     strokes.push(...splitByFrames(fresh, frames));
   }
+  // A loop keeps its old wires as they're drawn, and closes across where the pair was.
+  for (const parts of made.parts.values())
+    for (const p of parts) {
+      if (p.old) kept.push(p.pts);
+      else strokes.push(...splitByFrames(p.pts, frames));
+    }
   const gone = new Set(agents);
   const fading = [...net.wires.values()]
     .filter((x) => x.ends.some((e) => e.kind === "port" && gone.has(e.agent)))
     .map((x) => x.id);
-  return { plans, wires: fired, agents, fading, kept, strokes, vanishing };
+  return { plans, wires: fired, agents, fading, kept, strokes, ends: [...made.ends.values()], vanishing };
+}
+
+/** A stretch of a loop: an old wire as it was drawn, or a new link across the pair that fired. */
+interface Part {
+  pts: Pt[];
+  old: boolean;
+}
+
+/**
+ * Where steps leave what would otherwise have no place of its own yet: a new
+ * loose end takes the place of the empty port it stands in for, and a loop
+ * runs along the old wires it continues, with straight links across the pair.
+ */
+export function stepShapes(sys: System, drawn: Drawn, recs: StepRecord[]) {
+  const ends = new Map<string, Terminal>();
+  const parts = new Map<WireId, Part[]>();
+  /** Wires joined by steps so far, which a later step (of a parallel one) can close into a loop. */
+  const joined = new Map<WireId, Part[]>();
+  for (const rec of recs) {
+    const at = (p: PairPort): Terminal | undefined => {
+      const placed = drawn.placement.get(p.agent);
+      const type = rec.removed[0] === p.agent ? rec.rule.left : rec.rule.right;
+      return placed && portPos(placed, sys.type(type).arity, p.slot);
+    };
+    for (const f of rec.createdFree) {
+      const t = at(f.port);
+      if (t) ends.set(f.name, t);
+    }
+    const old = (id: WireId): Part[] => {
+      const known = joined.get(id);
+      if (known) return known;
+      const pts = drawn.routed.wires.get(id);
+      return pts ? [{ pts: flattenPath(pts, G.radius), old: true }] : [];
+    };
+    /** An old wire's stretches, run so as to start (or, failing that, end) at a port. */
+    const run = (id: WireId, start?: Pt, end?: Pt): Part[] => {
+      const ps = old(id);
+      const first = ps[0]?.pts[0];
+      const last = ps.at(-1)?.pts.at(-1);
+      if (!first || !last) return start && end ? [{ pts: [start, end], old: false }] : [];
+      const backwards = start ? dist(last, start) < dist(first, start) : !!end && dist(first, end) < dist(last, end);
+      return backwards ? ps.map((p) => ({ ...p, pts: [...p.pts].reverse() })).reverse() : ps;
+    };
+    /** Links across the pair, with the old wires between them. */
+    const across = ({ from, ports }: Made): Part[] | undefined => {
+      const ts = ports.map(at);
+      const out: Part[] = [];
+      for (let i = 0; i + 1 < ts.length; i += 2) {
+        const [a, b] = [ts[i], ts[i + 1]];
+        if (!a || !b) return undefined;
+        out.push({ pts: [a, b], old: false });
+        if (i + 2 < ts.length) out.push(...run(from[i / 2 + 1]!, b, ts[i + 2]));
+      }
+      return out;
+    };
+    for (const l of rec.createdLoops) {
+      const links = across(l);
+      if (links) parts.set(l.id, [...links, ...run(l.from[0]!, at(l.ports.at(-1)!), at(l.ports[0]!))]);
+    }
+    for (const w of rec.createdWires) {
+      // Only a wire joining old wires at both ends can be closed into a loop by another pair.
+      if (!w.ports.length || w.from.length !== w.ports.length / 2 + 1) continue;
+      const links = across(w);
+      if (links) joined.set(w.id, [...run(w.from[0]!, undefined, at(w.ports[0]!)), ...links, ...run(w.from.at(-1)!, at(w.ports.at(-1)!))]);
+    }
+  }
+  const loops = new Map([...parts].map(([id, ps]): [WireId, Pt[]] => [id, ps.flatMap((p) => p.pts)]));
+  return { ends, parts, loops };
 }
 
 /**
  * Route a net with its loose ends held where they're drawn now, rather than
  * on the lines above and below the net where routing would put them. Each
  * held end stands in as a tiny agent at its place, facing back into the net.
+ * Closed loops can be held too, as they're given.
  */
-export function routeHoldingEnds(net: Net, placement: Placement, opts: RouteOptions, ends: Map<string, Terminal>): Routed {
+export function routeHoldingEnds(net: Net, placement: Placement, opts: RouteOptions, ends: Map<string, Terminal>, loops?: ReadonlyMap<WireId, Pt[]>): Routed {
   const tmp = net.clone();
   const pl = new Map(placement);
   const held = new Map<string, Terminal>();
@@ -442,6 +520,7 @@ export function routeHoldingEnds(net: Net, placement: Placement, opts: RouteOpti
   }
   const routed = route(tmp, pl, opts);
   for (const [name, at] of held) routed.free.set(name, at);
+  for (const [id, pts] of loops ?? []) if (net.loops.has(id)) routed.wires.set(id, pts);
   return routed;
 }
 

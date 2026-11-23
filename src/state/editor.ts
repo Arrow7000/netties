@@ -21,7 +21,7 @@ import {
 } from "../core/types";
 import type { Placement, Pt } from "../layout/geometry";
 import { autoLayout } from "../layout/place";
-import { type Drawn, type StepPlan, type StepPreview, placeCreated, planSteps, previewSteps } from "../layout/replace";
+import { type Drawn, type StepPlan, type StepPreview, placeCreated, planSteps, previewSteps, stepShapes } from "../layout/replace";
 import { type Attach, createNetModel } from "./model";
 import { type Doc, decode, saveLocal } from "./persist";
 
@@ -233,6 +233,22 @@ export function createEditor(initial: Doc | undefined) {
     return start;
   };
 
+  /** How the net was drawn before some steps, with the loose ends and loops they made where they made them. */
+  const heldAfter = (was: Drawn, loopsBefore: Iterable<WireId>, recs: StepRecord[]) => {
+    const made = stepShapes(system, was, recs);
+    const loops = new Map(made.loops);
+    for (const id of loopsBefore) {
+      const pts = was.routed.wires.get(id);
+      if (pts) loops.set(id, pts);
+    }
+    return {
+      columns: was.columns,
+      free: new Map([...was.routed.free, ...made.ends]),
+      loops,
+      made: made.ends.size + made.loops.size > 0,
+    };
+  };
+
   const fire = (w: WireId) => {
     const net = model.net;
     if (!net.wires.has(w) || !isActive(net, w)) return;
@@ -240,7 +256,8 @@ export function createEditor(initial: Doc | undefined) {
     const recs: StepRecord[] = [];
     model.checkpoint();
     const before = model.layout().placement;
-    const drawnBefore = { columns: model.layout().columns, free: model.layout().routed.free };
+    const was = drawn();
+    const loopsBefore = [...model.net.loops];
     const plans = plan([w]);
     try {
       const rec = interact(net, system, w);
@@ -264,7 +281,7 @@ export function createEditor(initial: Doc | undefined) {
     batch(() => {
       model.clearSelection();
       model.bump();
-      model.settleFrom(start, drawnBefore, stepDuration());
+      model.settleFrom(start, heldAfter(was, loopsBefore, recs), stepDuration());
     });
   };
 
@@ -278,7 +295,8 @@ export function createEditor(initial: Doc | undefined) {
     const fromExample = inExampleRun();
     if (record) model.checkpoint();
     const before = model.layout().placement;
-    const drawnBefore = { columns: model.layout().columns, free: model.layout().routed.free };
+    const was = drawn();
+    const loopsBefore = [...model.net.loops];
     const plans = plan([...model.activeWires()]);
     const s: Stats = { ...stats(), byRule: new Map(stats().byRule) };
     const recs = parallelStep(model.net, system, s);
@@ -293,7 +311,7 @@ export function createEditor(initial: Doc | undefined) {
     batch(() => {
       model.clearSelection();
       model.bump();
-      model.settleFrom(start, drawnBefore, stepDuration());
+      model.settleFrom(start, heldAfter(was, loopsBefore, recs), stepDuration());
     });
     return recs.length > 0;
   };
@@ -897,7 +915,7 @@ export function createEditor(initial: Doc | undefined) {
       const pieceGroups = "v" in src ? Groups.fromJSON(src.groups) : src.groups?.clone() ?? new Groups();
       const rel = new Map("v" in src ? src.positions : []);
       const components = "v" in src ? src.components : src.components ?? [];
-      if (!piece.agents.size && !piece.wires.size) return "There's nothing to paste.";
+      if (!piece.agents.size && !piece.wires.size && !piece.loops.size) return "There's nothing to paste.";
       const plan = mergePlan(system, from);
       if ("error" in plan) return plan.error;
       // Instances of components that are neither here nor in the clip become plain agents.

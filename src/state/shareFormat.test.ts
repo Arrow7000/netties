@@ -30,6 +30,14 @@ describe("text share format", () => {
     }
   });
 
+  it("keeps closed loops", () => {
+    const net = new Net();
+    net.addLoop();
+    net.addLoop();
+    const doc = document(arithmetic(), net);
+    expect(Net.fromJSON(readSharePayload(sharePayload(doc)).net).loops.size).toBe(2);
+  });
+
   it("numbers agents by first appearance, including nested terms and active pairs", () => {
     const sys = arithmetic();
     const net = new Net();

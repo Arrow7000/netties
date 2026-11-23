@@ -799,7 +799,8 @@ export function Canvas(props: CanvasProps) {
     }
     const d = wireDrag();
     if (d) {
-      if (sameEnd(e, d.g.kind === "new" ? d.g.from : d.g.anchor)) return "origin";
+      // A wire's other loose end can be where it starts and where it goes, closing it into a loop.
+      if (sameEnd(e, d.g.kind === "new" ? d.g.from : d.g.anchor) && ed.checkDrop(d.g, e).kind !== "ok") return "origin";
       if (d.target && sameEnd(e, d.target)) {
         const k = d.check?.kind;
         return k === "ok" ? "target" : k === "back" ? "empty" : "refuse";
@@ -1286,6 +1287,7 @@ function RulePreview(props: { preview: StepPreview; system: () => System }) {
       <For each={plans()}>{(p) => frame(p.frame)}</For>
       <For each={props.preview.kept}>{(pts) => <path class="kept" d={polylinePath(pts)} />}</For>
       <For each={props.preview.strokes}>{(st) => <path class={st.dashed ? "link" : "inner"} d={polylinePath(st.pts)} />}</For>
+      <For each={props.preview.ends}>{(p) => <circle class="end" cx={p.x} cy={p.y} r={2.4} />}</For>
       <For each={plans()}>{(plan) => <PlannedAgents plan={plan} system={props.system} />}</For>
     </g>
   );

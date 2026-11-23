@@ -16,9 +16,26 @@ export interface StepRecord {
    * continues; a wire that reuses an old id keeps that id here and does not
    * appear in `removedWires`.
    */
-  createdWires: { id: WireId; from: WireId[] }[];
+  createdWires: Made[];
   /** Closed loops made by the step, with the old wires each one continues, like `createdWires`. */
-  createdLoops: { id: WireId; from: WireId[] }[];
+  createdLoops: Made[];
+  /** Loose ends made by the step, each with the empty port of the pair it stands in for. */
+  createdFree: { name: string; port: PairPort }[];
+}
+
+/** A port of the pair that fired. */
+export interface PairPort {
+  agent: AgentId;
+  slot: number;
+}
+
+/** A wire or loop made by a step. */
+export interface Made {
+  id: WireId;
+  /** The old wires it continues, in order. */
+  from: WireId[];
+  /** The pair's ports it ran through, in order. */
+  ports: PairPort[];
 }
 
 export class NoRuleError extends Error {
@@ -81,7 +98,7 @@ export function interact(net: Net, sys: System, w: WireId): StepRecord {
   for (const [x, y] of rule.wires) {
     const hx = resolve(x);
     const hy = resolve(y);
-    if ("end" in hx && "end" in hy) createdWires.push({ id: net.connect(hx.end, hy.end), from: [] });
+    if ("end" in hx && "end" in hy) createdWires.push({ id: net.connect(hx.end, hy.end), from: [], ports: [] });
     else {
       if ("node" in hx) inner.set(hx.node, hy);
       if ("node" in hy) inner.set(hy.node, hx);
@@ -95,18 +112,30 @@ export function interact(net: Net, sys: System, w: WireId): StepRecord {
   // new loose ends. A chain with no ends at all is a closed loop.
   const visited = new Set<string>();
   type Stop = { end: End } | { open: true } | { loop: true };
-  const follow = (first: string, via: "inner" | "outer"): { from: WireId[]; stop: Stop } => {
+  interface Chain {
+    from: WireId[];
+    ports: PairPort[];
+    stop: Stop;
+  }
+  const portOf = (node: string): PairPort => {
+    const [s, slot] = node.split(":").map(Number) as [0 | 1, number];
+    return { agent: side[s], slot };
+  };
+  const follow = (first: string, via: "inner" | "outer"): Chain => {
     const from: WireId[] = [];
+    const ports: PairPort[] = [];
+    const stopped = (stop: Stop): Chain => ({ from: [...new Set(from)], ports, stop });
     let node = first;
     let dir = via;
     for (;;) {
       visited.add(node);
+      ports.push(portOf(node));
       const old = oldWire.get(node);
       if (old !== undefined) from.push(old);
       dir = dir === "inner" ? "outer" : "inner";
       const hop = (dir === "inner" ? inner : outer).get(node)!;
-      if (!("node" in hop)) return { from: [...new Set(from)], stop: hop };
-      if (visited.has(hop.node)) return { from: [...new Set(from)], stop: { loop: true } };
+      if (!("node" in hop)) return stopped(hop);
+      if (visited.has(hop.node)) return stopped({ loop: true });
       node = hop.node;
     }
   };
@@ -115,32 +144,35 @@ export function interact(net: Net, sys: System, w: WireId): StepRecord {
     if (id !== undefined) removedWires.delete(id);
     return id;
   };
-  const join = (a: End, b: End, from: WireId[]) => createdWires.push({ id: net.connect(a, b, reuse(from)), from });
-  const loose = (): End => {
+  const join = (a: End, b: End, { from, ports }: Chain) => createdWires.push({ id: net.connect(a, b, reuse(from)), from, ports });
+  const createdFree: StepRecord["createdFree"] = [];
+  const loose = (at: PairPort): End => {
     const name = net.freshFree();
     net.free.set(name, NONE);
+    createdFree.push({ name, port: at });
     return free(name);
   };
   const createdLoops: StepRecord["createdLoops"] = [];
   const fromEnd = (start: End, k: string, via: "inner" | "outer") => {
     if (visited.has(k)) return;
-    const { from, stop } = follow(k, via);
-    if ("end" in stop) join(start, stop.end, from);
-    else if (start.kind === "free") join(start, loose(), from);
+    const c = follow(k, via);
+    if ("end" in c.stop) join(start, c.stop.end, c);
+    else if (start.kind === "free") join(start, loose(c.ports.at(-1)!), c);
   };
   for (const [k, hop] of outer) if ("end" in hop) fromEnd(hop.end, k, "outer");
   for (const [k, hop] of inner) if ("end" in hop) fromEnd(hop.end, k, "inner");
   for (const [k, hop] of outer) {
     if (!("open" in hop) || visited.has(k)) continue;
-    join(loose(), loose(), follow(k, "outer").from);
+    const c = follow(k, "outer");
+    join(loose(c.ports[0]!), loose(c.ports.at(-1)!), c);
   }
   for (const k of outer.keys()) {
     if (visited.has(k)) continue;
-    const { from } = follow(k, "outer");
-    createdLoops.push({ id: net.addLoop(reuse(from)), from });
+    const { from, ports } = follow(k, "outer");
+    createdLoops.push({ id: net.addLoop(reuse(from)), from, ports });
   }
 
-  return { wire: w, rule, removed: side, created, removedWires: [...removedWires], createdWires, createdLoops };
+  return { wire: w, rule, removed: side, created, removedWires: [...removedWires], createdWires, createdLoops, createdFree };
 }
 
 export interface Stats {

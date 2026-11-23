@@ -577,7 +577,9 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       free.set(name, { x: bareX, y: bottom, dir: "down" });
       bareX += G.portGap;
     }
-    // Closed loops sit in the same row, as small circles.
+    // Closed loops sit in the same row, as small circles,
+    // past any wire that comes round the side.
+    if (net.loops.size) for (const pts of wires.values()) for (const p of pts) bareX = Math.max(bareX, p.x + G.portGap);
     for (const id of net.loops) {
       const c = { x: bareX + LOOP_R, y: bottom - G.layerH / 4 };
       wires.set(id, loopPoints(c));

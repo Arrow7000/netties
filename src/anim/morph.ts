@@ -261,7 +261,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     srcs.forEach((s) => used.add(s));
     const pieces = srcs.map(oldShape).filter((p): p is Pt[] => !!p && p.length > 0);
     const from = pieces.length ? chain(pieces, pieces[0]![0]!) : to;
-    wires.push({ id: String(id), from: resample(from, SAMPLES), to, fade: false });
+    wires.push({ id: String(id), from: alignLoop(resample([...from, from[0]!], SAMPLES), to), to, fade: false });
   }
   for (const [id, r] of before.routed.wires) {
     if (after.net.wires.has(id) || after.net.loops.has(id) || used.has(id)) continue;
@@ -349,6 +349,22 @@ function chain(pieces: Pt[][], start: Pt): Pt[] {
     cur = pts[pts.length - 1]!;
   }
   return out;
+}
+
+/** A closed polyline, started where and run the way round that keeps it from twisting on its way to `to`. */
+function alignLoop(from: Pt[], to: Pt[]): Pt[] {
+  const n = from.length - 1;
+  const mid = (ps: Pt[]) => ({ x: ps.slice(1).reduce((s, p) => s + p.x, 0) / n, y: ps.slice(1).reduce((s, p) => s + p.y, 0) / n });
+  const [a, b] = [mid(from), mid(to)];
+  let best = from;
+  let least = Infinity;
+  for (const ring of [from.slice(0, n), from.slice(1).reverse()])
+    for (let k = 0; k < n; k++) {
+      const turned = [...ring.slice(k), ...ring.slice(0, k + 1)];
+      const cost = turned.reduce((s, p, i) => s + Math.hypot(p.x - a.x - to[i]!.x + b.x, p.y - a.y - to[i]!.y + b.y) ** 2, 0);
+      if (cost < least) [best, least] = [turned, cost];
+    }
+  return best;
 }
 
 /** A polyline cut in two at half its length, both halves running the same way as it. */
