@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { AgentType } from "../core/net";
 import { pairKey } from "../core/system";
 import { type PortSpec, portName, portsFor, typingOn } from "../core/types";
@@ -285,32 +285,32 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
               <span>Type</span>
             </Show>
           </div>
-          <For each={ports()}>
+          <Index each={ports()}>
             {(p, i) => (
-              <div class="port-row" onPointerEnter={() => setHotPort(i())}>
-                <span class="slot-tag">{i() === 0 ? "P" : i()}</span>
+              <div class="port-row" onPointerEnter={() => setHotPort(i)}>
+                <span class="slot-tag">{i === 0 ? "P" : i}</span>
                 <input
                   class="input"
-                  value={p.label ?? ""}
-                  placeholder={i() === 0 ? "e.g. the list" : i() === 1 ? "e.g. the first item" : "e.g. the rest"}
-                  aria-label={`Label for the ${portName(i())}`}
-                  onInput={(e) => setPort(i(), { label: e.currentTarget.value })}
+                  value={p().label ?? ""}
+                  placeholder={i === 0 ? "e.g. the list" : i === 1 ? "e.g. the first item" : "e.g. the rest"}
+                  aria-label={`Label for the ${portName(i)}`}
+                  onInput={(e) => setPort(i, { label: e.currentTarget.value })}
                 />
                 <Show when={typing().dirs !== "off"}>
-                  <DirectionControl value={p.pol} level={typing().dirs} onChange={(v) => setPort(i(), { pol: v })} />
+                  <DirectionControl value={p().pol} level={typing().dirs} onChange={(v) => setPort(i, { pol: v })} />
                 </Show>
                 <Show when={typing().types !== "off"}>
                   <TypeControl
-                    value={p.type}
+                    value={p().type}
                     names={typing().names}
                     level={typing().types}
-                    onChange={(v) => setPort(i(), { type: v })}
+                    onChange={(v) => setPort(i, { type: v })}
                     onNew={(n) => ed.addTypeName(n)}
                   />
                 </Show>
               </div>
             )}
-          </For>
+          </Index>
         </div>
       </div>
       <div class="te-bottom">
