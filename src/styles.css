@@ -246,6 +246,8 @@ textarea {
 
 .transport {
   padding: 5px;
+  /* As far apart as they are from the edge. */
+  gap: 5px;
 }
 
 .brand {
