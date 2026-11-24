@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
+import { For, type JSX, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { SPEEDS, createEditor } from "./state/editor";
 import { type Doc, arrival, fromShareHash, loadInitialDoc, SHARE_LOAD_ERROR, sharePushes } from "./state/persist";
 import { Canvas, type Pad, createCamera } from "./ui/Canvas";
@@ -31,10 +31,10 @@ import { typingOn } from "./core/types";
 
 const THEME_KEY = "netties:theme";
 type ThemeChoice = "system" | "light" | "dark";
-const THEMES: [ThemeChoice, string][] = [
-  ["system", "System"],
-  ["light", "Light"],
-  ["dark", "Dark"],
+const THEMES: [ThemeChoice, string, () => JSX.Element][] = [
+  ["system", "System", I.Monitor],
+  ["light", "Light", I.Sun],
+  ["dark", "Dark", I.Moon],
 ];
 
 /** The speed the clock button goes to. */
@@ -65,14 +65,15 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
     safeSet(THEME_KEY, t);
   };
   const themes = () => (
-    <div class="seg" role="group" aria-label="Theme">
+    <div class="seg theme-seg" role="group" aria-label="Theme">
       <For each={THEMES}>
-        {([t, label]) => (
+        {([t, label, Icon]) => (
           <button
             aria-pressed={theme() === t}
             onClick={() => pickTheme(t)}
             title={t === "system" ? "Follow the system's light or dark setting" : undefined}
           >
+            <Icon />
             {label}
           </button>
         )}
@@ -577,9 +578,10 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           <Menu label={<I.Theme />} title="Light, dark, or as the system is" class="icon" menuClass="theme-menu" bare>
             {(close) => (
               <For each={THEMES}>
-                {([t, label]) => (
+                {([t, label, Icon]) => (
                   <MenuItem
-                    lead={theme() === t ? <I.Check /> : <span class="mi-blank" />}
+                    lead={<Icon />}
+                    trail={theme() === t ? <I.Check /> : undefined}
                     title={label}
                     note={t === "system" ? "Follows your computer's setting" : undefined}
                     onClick={() => {

@@ -567,9 +567,14 @@ kbd {
   color: var(--muted);
 }
 
-.mi-lead {
+.mi-lead,
+.mi-trail {
   display: flex;
   color: var(--ink);
+}
+
+.mi-trail {
+  margin-left: auto;
 }
 
 .menu hr {
@@ -3859,6 +3864,18 @@ button.select.open {
   .menu-row .seg button {
     height: 36px;
     padding: 0 14px;
+  }
+
+  .menu-row .theme-seg button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+  }
+
+  .theme-seg .icon {
+    width: 14px;
+    height: 14px;
   }
 
   .menu-row .btn {

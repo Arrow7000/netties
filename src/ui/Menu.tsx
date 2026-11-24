@@ -100,6 +100,7 @@ export function MenuItem(props: {
   current?: boolean;
   disabled?: boolean;
   lead?: JSX.Element;
+  trail?: JSX.Element;
 }) {
   return (
     <button
@@ -118,6 +119,9 @@ export function MenuItem(props: {
           <span class="mi-note">{props.note}</span>
         </Show>
       </span>
+      <Show when={props.trail}>
+        <span class="mi-trail">{props.trail}</span>
+      </Show>
     </button>
   );
 }

@@ -18,6 +18,20 @@ export const Theme = icon(() =>
     <path d="M8 2.5a5.5 5.5 0 010 11z" fill="currentColor" />
   </>,
 );
+/** The themes: the system's, light and dark. */
+export const Monitor = icon(() =>
+  <>
+    <rect x="2" y="2.8" width="12" height="8" rx="1.5" {...line} stroke-width={1.4} />
+    <path d="M8 10.8v2.4M5.5 13.2h5" {...line} stroke-width={1.4} />
+  </>,
+);
+export const Sun = icon(() =>
+  <>
+    <circle cx="8" cy="8" r="2.7" {...line} stroke-width={1.4} />
+    <path d="M8 1.7v1.2M8 13.1v1.2M1.7 8h1.2M13.1 8h1.2M3.55 3.55l.85.85M11.6 11.6l.85.85M3.55 12.45l.85-.85M11.6 4.4l.85-.85" {...line} stroke-width={1.4} />
+  </>,
+);
+export const Moon = icon(() => <path d="M13.5 9.6A5.8 5.8 0 1 1 6.4 2.5A5.3 5.3 0 0 0 13.5 9.6z" {...line} stroke-width={1.4} />);
 /** Step: →, one reduction step. */
 export const Step = icon(() => <path d="M2.5 8H13M9.5 4.5L13 8l-3.5 3.5" {...line} />);
 /** Parallel step: ⇉, parallel reduction, every active pair at once. */
