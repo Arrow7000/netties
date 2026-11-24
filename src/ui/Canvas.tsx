@@ -7,7 +7,7 @@ import { type Box, G, type Placed, type Pt, type Terminal, boxOf, distanceToSegm
 import type { StepPlan, StepPreview } from "../layout/replace";
 import { dashedOutline, dashRound } from "../render/dashes";
 import { flattenPath, midway, polylinePath, resample, roundedPath } from "../render/path";
-import { STROKE, agentOutline, arrowPoints, labelPos } from "../render/svg";
+import { PORT_ARROW, STROKE, agentOutline, arrowPoints, labelPos, portArrow } from "../render/svg";
 import type { NetModel, Plug, WireGesture } from "../state/model";
 import { onEscapeCancels } from "./escape";
 import { type Effect, type Gesture, HOLD, type Hit, type Input, type Msg, type Near, REACH, type View, reach, update, zoomAbout } from "./gesture";
@@ -986,6 +986,8 @@ export function Canvas(props: CanvasProps) {
                   seeThrough={firing()?.agents}
                   joining={joining() === id}
                   pre={preselectedWires().has(id)}
+                  endState={endState}
+                  ifaceEnds={iface()}
                 />
               )}
             </For>
@@ -1241,11 +1243,16 @@ function IfaceEnd(props: { ed: NetModel; name: string; at: { x: number; y: numbe
   const out = () => (props.at.dir === "up" ? -1 : 1);
   const arrow = () => {
     const pol = props.ed.specAt(free(props.name)).pol;
-    if (!pol || !empty() || props.state === "target" || props.state === "refuse") return undefined;
+    if (!pol || props.state === "target" || props.state === "refuse") return undefined;
+    if (!empty()) {
+      const h = props.ed.hover();
+      const a = props.state === "hover" && h?.kind === "free" && h.name === props.name ? hoveredArrow(props.ed, free(props.name), IFACE_ARROW) : undefined;
+      return a && { at: a.at, dx: a.dx, dy: a.dy, scale: PORT_ARROW.scale, class: "port-arrow" };
+    }
     // An end that gives sends its wire into the result.
     const into = -out();
     const tone = props.state === "candidate" ? "ok" : props.state === "blocked" ? "dim" : "";
-    return { at: { x: props.at.x, y: props.at.y + into * 11 }, dx: 0, dy: pol === "give" ? into : -into, scale: 0.82, class: `port-arrow ${tone}` };
+    return { at: { x: props.at.x, y: props.at.y + into * IFACE_ARROW }, dx: 0, dy: pol === "give" ? into : -into, scale: PORT_ARROW.scale, class: `port-arrow ${tone}` };
   };
   const c = (cls: string, r: number, dash?: number) => <circle class={cls} pathLength={dash} cx={props.at.x} cy={props.at.y} r={r} />;
   return (
@@ -1487,6 +1494,27 @@ function wireFlow(ed: NetModel, id: WireId): number {
   return 0;
 }
 
+/** The arrow for an end with a wire, while it's pointed at (see `portArrow`). */
+function hoveredArrow(ed: NetModel, e: End, out?: number) {
+  const pol = ed.specAt(e).pol;
+  const v = ed.view().net;
+  const w = v.wireAt(e);
+  const at = endPos(ed, e);
+  if (!pol || w === NONE || !at || !v.wires.has(w)) return undefined;
+  let flat = flattenPath(ed.layout().routed.wires.get(w) ?? [], G.radius);
+  const far = (p: Pt) => Math.hypot(p.x - at.x, p.y - at.y);
+  if (flat.length < 2) return undefined;
+  if (far(flat[flat.length - 1]!) < far(flat[0]!)) flat = flat.reverse();
+  const flow = wireFlow(ed, w);
+  const first = sameEnd(v.wire(w).ends[0], e);
+  return portArrow(flat, pol === "give", midway(flat)!.len < OWN_ARROW_MIN ? 0 : first ? flow : -flow, out);
+}
+
+/** Wires shorter than this have no arrow. */
+const OWN_ARROW_MIN = 8;
+/** How far from a rule's interface end its arrow sits. */
+const IFACE_ARROW = 11;
+
 /** The type a wire carries, from whichever end has one. */
 function wireType(ed: NetModel, id: WireId): string | undefined {
   const v = ed.view().net;
@@ -1531,6 +1559,9 @@ function Wire(props: {
   seeThrough?: ReadonlySet<AgentId>;
   /** A loose end's wire that the wire being dragged would join. */
   joining?: boolean;
+  endState?: (e: End) => EndState;
+  /** Whether loose ends are a rule's interface, which show directions as ports do. */
+  ifaceEnds?: boolean;
 }) {
   const ed = props.ed;
   const pts = () => ed.layout().routed.wires.get(props.id) ?? [];
@@ -1560,13 +1591,13 @@ function Wire(props: {
     return seeThroughClip({ x0: b.x0 - m, y0: b.y0 - m, x1: b.x1 + m, y1: b.y1 + m }, outlines, at);
   });
   /** The arrowhead halfway along, pointing from the end that gives to the end that takes. */
-  const arrow = () => {
+  const arrow = createMemo(() => {
     if (!ed.view().net.wires.has(props.id)) return undefined;
     const flow = wireFlow(ed, props.id);
     if (!flow) return undefined;
     const flat = flattenPath(pts(), G.radius);
     const m = midway(flat);
-    if (!m || m.len < 8) return undefined;
+    if (!m || m.len < OWN_ARROW_MIN) return undefined;
     // Paths can run either way between the ends; check which end they start at.
     const start = endPos(ed, ed.view().net.wire(props.id).ends[0]);
     const p0 = flat[0]!;
@@ -1574,6 +1605,15 @@ function Wire(props: {
     const forward = !start || Math.hypot(p0.x - start.x, p0.y - start.y) <= Math.hypot(q0.x - start.x, q0.y - start.y);
     const sgn = forward ? flow : -flow;
     return { at: m.at, dx: m.dx * sgn, dy: m.dy * sgn };
+  });
+  /** An end being pointed at shows its own arrow, right next to this one. */
+  const givesWay = () => {
+    const h = ed.hover();
+    if (h?.kind !== "port" && h?.kind !== "free") return false;
+    const e = h.kind === "port" ? h.end : free(h.name);
+    if (!props.endState || !ends().some((x) => sameEnd(x, e)) || props.endState(e) !== "hover") return false;
+    if (e.kind === "free") return !!props.ifaceEnds && !!hoveredArrow(ed, e, IFACE_ARROW)?.instead;
+    return !!hoveredArrow(ed, e)?.instead;
   };
   const xray = () => {
     const h = ed.hover();
@@ -1614,7 +1654,7 @@ function Wire(props: {
       </Show>
       <path class="mark" d={markD()} clip-path={clip() ? `url(#${clipId})` : undefined} />
       <path class="line" d={d()} />
-      <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
+      <Show when={!givesWay() && arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
       <path class="hit" d={d()} />
     </g>
   );
@@ -1753,25 +1793,31 @@ function Agent(props: {
             const empty = () => ed.view().net.wireAt(port(props.id, slot)) === NONE;
             /**
              * On an empty port with a direction, a little arrow says whether it gives (out) or takes (in).
+             * A port with a wire shows its arrow too, along the wire, while it's pointed at.
              * While a wire is dragged it turns accent on ports it could go to and faint on ports it can't.
              */
             const arrow = () => {
               const pol = spec().pol;
-              if (!pol || !empty()) return undefined;
+              if (!pol) return undefined;
               const state = props.endState(port(props.id, slot));
+              if (!empty()) {
+                const a = state === "hover" ? hoveredArrow(ed, port(props.id, slot)) : undefined;
+                return a && { at: a.at, dx: a.dx, dy: a.dy, scale: PORT_ARROW.scale, class: "port-arrow" };
+              }
               if (state === "origin" || state === "target" || state === "refuse") return undefined;
               const out = pos().dir === "down" ? 1 : -1;
               const dy = pol === "give" ? out : -out;
               const tone = state === "candidate" ? "ok" : state === "blocked" ? "dim" : "";
-              return { at: { x: pos().x, y: pos().y + out * 7.2 }, dx: 0, dy, scale: 0.82, class: `port-arrow ${tone}` };
+              return { at: { x: pos().x, y: pos().y + out * PORT_ARROW.out }, dx: 0, dy, scale: PORT_ARROW.scale, class: `port-arrow ${tone}` };
             };
+            const pointedAt = () => props.endState(port(props.id, slot)) === "hover";
             const xray = () => {
               const h = ed.hover();
               return h?.kind === "porttype" && spec().type === h.name;
             };
             return (
               <g class="port">
-                <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
+                <Show when={!pointedAt() && arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
                 <Show when={xray()}>
                   <circle class="port-xray" cx={pos().x} cy={pos().y} r={5} />
                 </Show>
@@ -1779,6 +1825,8 @@ function Agent(props: {
                   <circle class="port-need" pathLength={dashRound(5.4, 3.6)} cx={pos().x} cy={pos().y} r={5.4} />
                 </Show>
                 <EndMark at={pos()} state={props.endState(port(props.id, slot))} />
+                {/* Over the ring, which would hide half of it. */}
+                <Show when={pointedAt() && arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
                 <circle class="hit" data-port={`${props.id}:${slot}`} cx={pos().x} cy={pos().y} r={6.5} />
               </g>
             );

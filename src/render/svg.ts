@@ -28,6 +28,46 @@ export function arrowPoints(at: Pt, dx: number, dy: number, scale = 1): string {
   return `${f(tip)} ${f({ x: back.x - dy * w, y: back.y + dx * w })} ${f(notch)} ${f({ x: back.x + dy * w, y: back.y - dx * w })}`;
 }
 
+/** Where an empty port's arrow sits: how far out from the port, and how big. */
+export const PORT_ARROW = { out: 7.2, scale: 0.82 };
+
+export interface PortArrow {
+  at: Pt;
+  dx: number;
+  dy: number;
+  /** The wire's own arrow would be all but touching this one, so it gives way to it. */
+  instead: boolean;
+}
+
+/**
+ * The arrow a port that has a wire shows while it's pointed at: as far from
+ * the port as an empty port's arrow, but along the wire, given as a polyline
+ * from the port. `own` says which way the wire's own arrow, halfway along,
+ * points: 1 away from the port, -1 towards it, 0 if it has none. None if that
+ * arrow already sits right there, saying the same.
+ */
+export function portArrow(wire: Pt[], gives: boolean, own: number, out = PORT_ARROW.out): PortArrow | undefined {
+  let len = 0;
+  for (let i = 1; i < wire.length; i++) len += Math.hypot(wire[i]!.x - wire[i - 1]!.x, wire[i]!.y - wire[i - 1]!.y);
+  if (len < 5) return undefined;
+  const s = Math.min(out, len / 2);
+  const apart = len / 2 - s;
+  const sgn = gives ? 1 : -1;
+  if (own === sgn && apart < 2.5) return undefined;
+  let left = s;
+  for (let i = 1; i < wire.length; i++) {
+    const a = wire[i - 1]!;
+    const b = wire[i]!;
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    if (l > 0 && left <= l) {
+      const at = { x: a.x + ((b.x - a.x) * left) / l, y: a.y + ((b.y - a.y) * left) / l };
+      return { at, dx: ((b.x - a.x) / l) * sgn, dy: ((b.y - a.y) / l) * sgn, instead: own !== 0 && apart < 9 };
+    }
+    left -= l;
+  }
+  return undefined;
+}
+
 /**
  * Outline of an agent: a triangle with its tip on the principal port, or a
  * circle when it has no aux ports. Collapsed components are boxes with the
@@ -137,7 +177,7 @@ export function toSVG(net: Net, sys: System, placement: Placement, routed: Route
       if (!pol || a.wires[slot] !== NONE) continue;
       const at = portPos(p, arity, slot);
       const dir = at.dir === "down" ? 1 : -1;
-      head({ x: at.x, y: at.y + dir * 7.2 }, 0, pol === "give" ? dir : -dir, 0.82);
+      head({ x: at.x, y: at.y + dir * PORT_ARROW.out }, 0, pol === "give" ? dir : -dir, PORT_ARROW.scale);
     }
   }
   out.push(...heads);
