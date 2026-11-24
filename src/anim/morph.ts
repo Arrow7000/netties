@@ -45,6 +45,8 @@ export interface WireFrame {
   id: string;
   pts: Pt[];
   opacity: number;
+  /** For a closed loop, how far its weld, at its first point, has appeared. */
+  weld?: number;
 }
 
 export interface FreeFrame {
@@ -83,6 +85,8 @@ interface WireTrack {
   from: Pt[];
   to: Pt[];
   fade: boolean;
+  /** A closed loop: whether its weld was there already, or appears. */
+  weld?: "kept" | "new";
 }
 
 const SAMPLES = 40;
@@ -261,12 +265,20 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     srcs.forEach((s) => used.add(s));
     const pieces = srcs.map(oldShape).filter((p): p is Pt[] => !!p && p.length > 0);
     const from = pieces.length ? chain(pieces, pieces[0]![0]!) : to;
-    wires.push({ id: String(id), from: alignLoop(resample([...from, from[0]!], SAMPLES), to), to, fade: false });
+    // An edit that closes a wire brings its two ends together.
+    const open = !origin.has(id) && dist(from[0]!, from[from.length - 1]!) > 1;
+    wires.push({
+      id: String(id),
+      from: open ? alignOpen(resample(from, SAMPLES), to) : alignLoop(resample([...from, from[0]!], SAMPLES), to),
+      to,
+      fade: false,
+      weld: before.net.loops.has(id) ? "kept" : "new",
+    });
   }
   for (const [id, r] of before.routed.wires) {
     if (after.net.wires.has(id) || after.net.loops.has(id) || used.has(id)) continue;
     const pts = resample(flattenPath(r, G.radius), SAMPLES);
-    wires.push({ id: `gone-${id}`, from: pts, to: pts, fade: true });
+    wires.push({ id: `gone-${id}`, from: pts, to: pts, fade: true, weld: before.net.loops.has(id) ? "kept" : undefined });
   }
 
   const free = [...after.routed.free].map(([name, f]) => ({ name, from: before.routed.free.get(name) ?? freeStart.get(name) ?? f, to: f }));
@@ -307,7 +319,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
             p.y += da.y * ka + db.y * kb;
           });
         }
-        return { id: w.id, pts, opacity: w.fade ? 1 - t : 1 };
+        return { id: w.id, pts, opacity: w.fade ? 1 - t : 1, weld: w.weld && (w.weld === "kept" ? 1 : t) };
       });
       return {
         agents,
@@ -365,6 +377,13 @@ function alignLoop(from: Pt[], to: Pt[]): Pt[] {
       if (cost < least) [best, least] = [turned, cost];
     }
   return best;
+}
+
+/** A wire about to be closed, run the way round that moves it least on its way to the loop `to`. */
+function alignOpen(from: Pt[], to: Pt[]): Pt[] {
+  const back = [...from].reverse();
+  const cost = (ps: Pt[]) => ps.reduce((s, p, i) => s + dist(p, to[i]!) ** 2, 0);
+  return cost(back) < cost(from) ? back : from;
 }
 
 /** A polyline cut in two at half its length, both halves running the same way as it. */

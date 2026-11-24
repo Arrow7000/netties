@@ -30,9 +30,12 @@ export type Gesture =
   /**
    * A button or finger is down on a port or an agent, but hasn't moved far
    * enough to drag it. `tapped` is what a tap leaves hovered; `end`, the end
-   * pressed, which a tap in the phone layout can start a wire from.
+   * pressed, which a tap in the phone layout can start a wire from. Or it's
+   * down on a closed loop's weld (`weld` is the loop), which a click or tap
+   * only selects and a drag pulls apart.
    */
-  | { kind: "press"; on: "wire"; pointer: number; input: Input; g: WireGesture; start: Pt; tapped: Hover; end: End }
+  | { kind: "press"; on: "wire"; pointer: number; input: Input; g: WireGesture; start: Pt; tapped: Hover; end: End; weld?: undefined }
+  | { kind: "press"; on: "wire"; pointer: number; input: Input; g: WireGesture; start: Pt; tapped: Hover; weld: WireId }
   /**
    * `waiting`: a finger in the phone layout on an agent, whose selecting
    * waits to see what the finger does. Lifted, it selects the agent; held,
@@ -99,6 +102,8 @@ export type Hit =
   | { kind: "collapse"; group: GroupId }
   | { kind: "group"; group: GroupId }
   | { kind: "wire"; id: WireId }
+  /** A closed loop's weld. */
+  | { kind: "weld"; id: WireId }
   | { kind: "none" };
 
 /**
@@ -167,6 +172,8 @@ export type Effect =
 export interface Ctx {
   readonly: boolean;
   gestureAt(e: End): WireGesture;
+  /** What dragging from a closed loop's weld would do. */
+  gestureAtWeld(id: WireId): WireGesture;
   checkDrop(g: WireGesture, to: End): DropCheck;
   isSelected(id: AgentId): boolean;
   /** Whether the wire is an active pair that clicking fires, or one with no rule that clicking opens. */
@@ -238,6 +245,8 @@ export interface Near {
   ends: { end: End; d: number }[];
   agents: { id: AgentId; d: number }[];
   wires: { id: WireId; d: number }[];
+  /** Closed loops' welds, which count as ends. */
+  welds?: { id: WireId; d: number }[];
 }
 
 /**
@@ -254,10 +263,11 @@ export function reach(near: Near, k: number): Hit | undefined {
   const consider = (h: Hit, d: number) => {
     if (d < score) [best, score] = [h, d];
   };
-  for (const e of near.ends) {
-    if (e.d > REACH.end || (wire && e.d > END_SIZE * k + END_GRACE)) continue;
-    consider({ kind: "end", end: e.end }, e.d - endPull(k));
-  }
+  const end = (h: Hit, d: number) => {
+    if (d <= REACH.end && !(wire && d > END_SIZE * k + END_GRACE)) consider(h, d - endPull(k));
+  };
+  for (const e of near.ends) end({ kind: "end", end: e.end }, e.d);
+  for (const w of near.welds ?? []) end({ kind: "weld", id: w.id }, w.d);
   for (const a of near.agents) if (a.d <= REACH.agent) consider({ kind: "agent", id: a.id }, a.d);
   for (const w of near.wires) if (w.d <= REACH.wire) consider({ kind: "wire", id: w.id }, w.d);
   return best;
@@ -313,6 +323,8 @@ function down(msg: Extract<Msg, { kind: "down" }>, ctx: Ctx): Out {
       const tapped: Hover = hit.end.kind === "port" ? { kind: "port", end: hit.end } : { kind: "free", name: hit.end.name };
       return [{ kind: "press", on: "wire", pointer, input, g: ctx.gestureAt(hit.end), start: screen, tapped, end: hit.end }, fx()];
     }
+    case "weld":
+      return [{ kind: "press", on: "wire", pointer, input, g: ctx.gestureAtWeld(hit.id), start: screen, tapped: { kind: "wire", id: hit.id }, weld: hit.id }, fx()];
     case "agent":
       if (holdable.length) return [{ ...pressMove({ kind: "agent", id: hit.id }), waiting: hit.id }, holdable];
       return [pressMove({ kind: "agent", id: hit.id }), !ctx.isSelected(hit.id) || msg.shift ? fx({ kind: "pick", id: hit.id, additive: msg.shift }) : fx()];
@@ -464,6 +476,12 @@ function up(s: Gesture, msg: Extract<Msg, { kind: "up" }>, ctx: Ctx): Out {
   switch (s.kind) {
     case "press": {
       if (msg.pointer !== s.pointer) return [s, []];
+      // A click or tap on a weld selects its loop, as on the rest of the loop.
+      if (s.on === "wire" && s.weld !== undefined) {
+        const select: Effect = { kind: "select-wire", id: s.weld };
+        if (s.input !== "touch") return [undefined, [select]];
+        return [undefined, [...disarm(ctx), select, { kind: "hover", hover: s.tapped }, { kind: "tapped", screen: s.start, time: msg.time, empty: false }]];
+      }
       // Pressing a port and letting go leaves its wire alone. A tap leaves what it tapped hovered.
       if (s.input !== "touch") return [undefined, []];
       const hover: Effect = { kind: "hover", hover: s.tapped };

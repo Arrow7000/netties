@@ -1,6 +1,6 @@
 import { For, type JSX, Show, createMemo, createSignal } from "solid-js";
 import type { GroupId } from "../core/groups";
-import { type AgentId, type End, NONE, type WireId } from "../core/net";
+import { type AgentId, type End, NONE, type WireId, sameEnd } from "../core/net";
 import { pairKey } from "../core/system";
 import { type Effective, canMeet, clash, clashText, endSpec, specOf } from "../core/types";
 import type { Editor } from "../state/editor";
@@ -207,6 +207,8 @@ export function hoverInfo(ed: Editor, opts: { hints?: boolean; m?: NetModel; fre
             ],
           };
         }
+        if (v.net.loops.has(h.id))
+          return { title: "Loop", lines: [{ text: "A wire joined to itself, with no ends." }, { text: "Drag the dot where its ends meet to pull it apart.", tone: h.weld ? "accent" : undefined }] };
         const w = v.net.wires.get(h.id);
         if (!w) return undefined;
         const [a, b] = w.ends;
@@ -229,7 +231,7 @@ export function hoverInfo(ed: Editor, opts: { hints?: boolean; m?: NetModel; fre
       }
       case "drag": {
         const g = h.gesture;
-        const title = g.kind === "new" ? "Drawing a wire" : "Moving a wire end";
+        const title = g.kind === "new" ? "Drawing a wire" : g.loop ? "Pulling a loop apart" : "Moving a wire end";
         const c = h.check;
         if (h.target && c?.kind === "refuse") {
           const pol = c.clash?.kind === "pol" ? c.clash.pol : undefined;
@@ -240,6 +242,7 @@ export function hoverInfo(ed: Editor, opts: { hints?: boolean; m?: NetModel; fre
           // The ends the wire would join, facing: the one that stays, and the one
           // under the pointer (for a loose end, the port at the far end of its wire).
           const anchor = g.kind === "new" ? g.from : g.anchor;
+          if (sameEnd(h.target, anchor)) return { title, lines: [{ text: g.kind === "carry" && g.loop ? "Let go to leave it a loop." : "Let go to close it into a loop.", tone: "accent" }] };
           const far = h.target.kind === "free" ? v.net.partner(h.target) : h.target;
           const left = m.specAt(anchor).pol;
           const right = far ? m.specAt(far).pol : undefined;
@@ -495,7 +498,7 @@ export function SelectionPanel(props: { ed: Editor }) {
       m.rev();
       if (m.net.loops.has(s.id))
         return {
-          info: { title: "Loop", lines: [{ text: <>A wire joined to itself, with no ends. Nothing can reach it, so it never changes.</> }] } as Info,
+          info: { title: "Loop", lines: [{ text: <>A wire joined to itself, with no ends. No rule can reach it, so it never changes by itself. Drag the dot where its ends meet to pull it apart.</> }] } as Info,
           actions: [{ label: "Delete", run: () => ed.dispatch({ kind: "selection/delete" }) }] as Action[],
         };
       if (!m.net.wires.has(s.id)) return undefined;

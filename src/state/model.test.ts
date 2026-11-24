@@ -1,6 +1,6 @@
 import { createRoot } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Net, free, port } from "../core/net";
+import { Net, NONE, free, port } from "../core/net";
 import { interfaceNet, interfacePins, parseIface } from "../core/ruleNet";
 import { System } from "../core/system";
 import { flip, specOf } from "../core/types";
@@ -212,6 +212,85 @@ describe("closing a loop by hand", () => {
       const model = createNetModel({ system: () => new System(), surface: "rule" });
       model.setNet(net);
       expect(model.checkDrop(model.gestureAt(free("L1")), free("R1")).kind).toBe("refuse");
+      dispose();
+    });
+  });
+});
+
+describe("pulling a loop apart at its weld", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+  });
+
+  const start = (mode: "auto" | "manual" = "auto") => {
+    const system = new System();
+    system.addType({ id: "D", name: "D", symbol: "D", arity: 1 });
+    const model = createNetModel({ system: () => system });
+    const net = new Net();
+    const d = net.addAgent(system.type("D"));
+    const loop = net.addLoop();
+    const other = net.addLoop();
+    net.free.set("a", NONE);
+    model.setNet(net);
+    if (mode === "manual") model.setMode("manual");
+    return { model, d, loop, other };
+  };
+  const pt = { x: 200, y: 90 };
+
+  it("leaves two loose ends when let go over nothing, in one undoable edit", () => {
+    for (const mode of ["auto", "manual"] as const)
+      createRoot((dispose) => {
+        const { model, loop, other } = start(mode);
+        const weld = model.weldAt(loop)!;
+        const g = model.gestureAtWeld(loop);
+        // Only held so far: it's still a loop, and the wire runs from its weld.
+        expect(model.net.loops.has(loop)).toBe(true);
+        expect(model.previewWire(g, undefined, pt)!.map(({ x, y }) => [x, y])).toContainEqual([weld.x, weld.y]);
+        const undos = model.historySize().undo;
+        model.finishGesture(g, undefined, { path: model.previewWire(g, undefined, pt), at: pt });
+        expect([...model.net.loops]).toEqual([other]);
+        expect(model.net.wire(loop).ends).toEqual([free("b"), free("c")]);
+        expect(model.historySize().undo).toBe(undos + 1);
+        model.undo();
+        expect([...model.net.loops]).toEqual([loop, other]);
+        expect([...model.net.free.keys()]).toEqual(["a"]);
+        expect(model.weldAt(loop)).toEqual(weld);
+        dispose();
+      });
+  });
+
+  it("connects to a port or joins another loose end", () => {
+    createRoot((dispose) => {
+      const { model, d, loop, other } = start();
+      model.finishGesture(model.gestureAtWeld(loop), port(d, 1));
+      expect(model.net.partner(port(d, 1))).toEqual(free("b"));
+      const g = model.gestureAtWeld(other);
+      expect(model.checkDrop(g, free("b"))).toEqual({ kind: "ok", join: true });
+      model.finishGesture(g, free("b"));
+      expect(model.net.partner(port(d, 1))).toEqual(free("c"));
+      expect([model.net.loops.size, model.net.wires.size]).toEqual([0, 1]);
+      model.undo();
+      model.undo();
+      expect(model.net.loops.size).toBe(2);
+      dispose();
+    });
+  });
+
+  it("stays a loop when dropped back on its other end, called off, or dropped where it can't go", () => {
+    createRoot((dispose) => {
+      const { model, d, loop, other } = start();
+      model.finishGesture(model.gestureAtWeld(other), port(d, 0));
+      const undos = model.historySize().undo;
+      const g = model.gestureAtWeld(loop);
+      const anchor = g.kind === "carry" ? g.anchor : free("?");
+      expect(model.checkDrop(g, anchor)).toEqual({ kind: "ok", join: false });
+      model.finishGesture(g, anchor);
+      model.returnWire(g, { path: model.previewWire(g, undefined, pt), at: pt });
+      expect(model.checkDrop(g, port(d, 0)).kind).toBe("refuse");
+      model.finishGesture(g, port(d, 0));
+      expect([...model.net.loops]).toEqual([loop]);
+      expect(model.historySize().undo).toBe(undos);
       dispose();
     });
   });

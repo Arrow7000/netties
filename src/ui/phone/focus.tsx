@@ -225,7 +225,7 @@ export function createFocus(host: FocusHost) {
         };
       }
       case "wire": {
-        if (m.net.loops.has(f.wire)) return { title: "Loop", lines: [{ text: <>A wire joined to itself, with no ends. Nothing can reach it, so it never changes.</> }] };
+        if (m.net.loops.has(f.wire)) return { title: "Loop", lines: [{ text: <>A wire joined to itself, with no ends. No rule can reach it, so it never changes by itself. Drag the dot where its ends meet to pull it apart.</> }] };
         const w = m.view().net.wires.get(f.wire);
         return { title: "Wire", lines: w ? [{ text: <>From {endName(w.ends[0])} to {endName(w.ends[1])}.</> }] : [] };
       }

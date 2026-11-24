@@ -915,6 +915,14 @@ kbd {
   pointer-events: none;
 }
 
+/* A loose end's dot filled in: where a closed loop's two ends meet. */
+.weld-dot {
+  fill: var(--ink);
+  stroke: var(--ink);
+  stroke-width: 1.1;
+  pointer-events: none;
+}
+
 .port-hover {
   fill: none;
   stroke: var(--accent);

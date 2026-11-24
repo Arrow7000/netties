@@ -115,14 +115,18 @@ const JOG = 12;
 /** The radius of a closed loop's circle. */
 export const LOOP_R = 10;
 
-/** A closed loop drawn as a circle round `c`, as a closed polyline starting and ending at the top. */
+/** A closed loop drawn as a circle round `c`, as a closed polyline starting and ending at its weld, at the bottom. */
 export function loopPoints(c: Pt, r = LOOP_R): Pt[] {
   const n = 32;
   return Array.from({ length: n + 1 }, (_, i) => {
     const a = (i / n) * Math.PI * 2;
-    return { x: c.x + r * Math.sin(a), y: c.y - r * Math.cos(a) };
+    return { x: c.x - r * Math.sin(a), y: c.y + r * Math.cos(a) };
   });
 }
+
+/** Where a closed loop's two ends meet, and it can be pulled apart, given its points. */
+export const weldOf = (pts: readonly Pt[]): Pt | undefined => pts[0];
+
 /** How far wires keep from agents they don't connect to. Wires are drawn on a halo about this wide either side. */
 const CLEARANCE = 4;
 
@@ -577,11 +581,11 @@ export function route(net: Net, placement: Placement, opts: RouteOptions = {}): 
       free.set(name, { x: bareX, y: bottom, dir: "down" });
       bareX += G.portGap;
     }
-    // Closed loops sit in the same row, as small circles,
-    // past any wire that comes round the side.
+    // Closed loops sit in the same row, as small circles, their welds level with
+    // the loose ends, past any wire that comes round the side.
     if (net.loops.size) for (const pts of wires.values()) for (const p of pts) bareX = Math.max(bareX, p.x + G.portGap);
-    for (const id of net.loops) {
-      const c = { x: bareX + LOOP_R, y: bottom - G.layerH / 4 };
+    for (const id of [...net.loops].sort((a, b) => a - b)) {
+      const c = { x: bareX + LOOP_R, y: bottom - LOOP_R };
       wires.set(id, loopPoints(c));
       bareX += LOOP_R * 2 + G.portGap;
     }

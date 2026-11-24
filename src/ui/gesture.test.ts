@@ -6,6 +6,7 @@ import { DOUBLE, END_GRACE, END_SIZE, type Ctx, type Effect, type Gesture, type 
 const ctx = (over: Partial<Ctx> = {}): Ctx => ({
   readonly: false,
   gestureAt: (e) => ({ kind: "new", from: e }),
+  gestureAtWeld: (id) => ({ kind: "carry", wire: id, moving: free("b"), anchor: free("a"), loop: true }),
   checkDrop: () => ({ kind: "ok", join: false }),
   isSelected: () => false,
   clickable: () => undefined,
@@ -527,5 +528,30 @@ describe("what a finger reaches", () => {
   it("keeps a port pressed at normal zoom for dragging its wire out, even with the finger on the wire", () => {
     expect(reach({ ends: [{ end: p, d: 3 }], agents: [{ id: 1, d: 2 }], wires: [{ id: 2, d: 1 }] }, 1.5)).toEqual({ kind: "end", end: p });
     expect(reach({ ends: [{ end: p, d: 12 }], agents: [], wires: [{ id: 2, d: 6 }] }, 1.5)).toEqual({ kind: "end", end: p });
+  });
+});
+
+describe("a closed loop's weld", () => {
+  const weld = { kind: "weld", id: 4 } as const;
+  const g: WireGesture = { kind: "carry", wire: 4, moving: free("b"), anchor: free("a"), loop: true };
+
+  it("selects the loop when clicked or tapped", () => {
+    expect(run([down(weld), up()]).fx).toEqual([{ kind: "select-wire", id: 4 }]);
+    expect(run([touch(10, weld), lift(10)]).fx).toEqual([{ kind: "select-wire", id: 4 }]);
+    expect(run([touch(10, weld), lift(10)], ctx({ phone: { armed: () => undefined } })).fx).toEqual([{ kind: "select-wire", id: 4 }]);
+  });
+
+  it("pulls the loop apart when dragged, like a loose end", () => {
+    const p = port(1, 1);
+    expect(run([down(weld), move(20, 0), up()]).fx).toEqual([{ kind: "finish-wire", g }]);
+    expect(run([down(weld), move(20, 0, p), up()]).fx).toEqual([{ kind: "finish-wire", g, to: p }]);
+    expect(run([down(weld), move(20, 0), { kind: "cancel" }]).fx).toEqual([{ kind: "return-wire", g }]);
+    expect(run([touch(10, weld), slide(10, 140, 100), lift(10)], ctx({ near: () => [free("a")] })).fx).toEqual([{ kind: "finish-wire", g, to: free("a") }]);
+  });
+
+  it("is taken before the loop it's on, by a finger that's on it", () => {
+    const at = (d: number) => reach({ ends: [], agents: [], wires: [{ id: 4, d: 0 }], welds: [{ id: 4, d }] }, 1.5);
+    expect(at(3)).toEqual(weld);
+    expect(at(25)).toEqual({ kind: "wire", id: 4 });
   });
 });

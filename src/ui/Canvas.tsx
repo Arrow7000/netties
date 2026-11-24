@@ -366,6 +366,8 @@ export function Canvas(props: CanvasProps) {
     if (!el || !svg.contains(el)) return undefined;
     const end = endAt(el);
     if (end) return end.kind === "port" ? { kind: "port" as const, end } : { kind: "free" as const, name: end.name };
+    const weld = el.closest("[data-weld]");
+    if (weld) return { kind: "wire" as const, id: Number(weld.getAttribute("data-weld")), weld: true };
     const a = el.closest("[data-agent]");
     if (a) return { kind: "agent" as const, id: Number(a.getAttribute("data-agent")) };
     const w = el.closest("[data-wire]");
@@ -379,6 +381,8 @@ export function Canvas(props: CanvasProps) {
   const hitAt = (target: Element): Hit => {
     const end = endAt(target);
     if (end) return { kind: "end", end };
+    const weldEl = target.closest("[data-weld]");
+    if (weldEl) return { kind: "weld", id: Number(weldEl.getAttribute("data-weld")) };
     const agentEl = target.closest("[data-agent]");
     if (agentEl) return { kind: "agent", id: Number(agentEl.getAttribute("data-agent")) };
     const collapseEl = target.closest("[data-collapse]");
@@ -389,6 +393,14 @@ export function Canvas(props: CanvasProps) {
     if (wireEl) return { kind: "wire", id: Number(wireEl.getAttribute("data-wire")) };
     return { kind: "none" };
   };
+
+  /** The closed loops whose welds can be pulled apart. */
+  const welds = createMemo(() => (props.readonly || iface() || tooBig() ? [] : [...ed.view().net.loops]));
+  /** The loop being pulled apart, whose weld is now one of its loose ends. */
+  const opening = createMemo(() => {
+    const d = drag();
+    return d?.kind === "wire" && d.g.kind === "carry" && d.g.loop ? d.g : undefined;
+  });
 
   /** Every end drawn on the canvas, and where. */
   const endSpots = createMemo(() => {
@@ -402,6 +414,9 @@ export function Canvas(props: CanvasProps) {
       for (let slot = 0; slot <= arity; slot++) out.push({ end: port(id, slot), at: portPos(p, arity, slot) });
     }
     for (const [name, at] of l.routed.free) out.push({ end: free(name), at });
+    const opened = opening();
+    const weld = opened && ed.weldAt(opened.wire);
+    if (opened && weld) out.push({ end: opened.anchor, at: weld });
     return out;
   });
 
@@ -438,6 +453,10 @@ export function Canvas(props: CanvasProps) {
       for (let i = 1; i < f.length; i++) d = Math.min(d, distanceToSegment(at, f[i - 1]!, f[i]!));
       if (d * v.k <= REACH.wire) near.wires.push({ id, d: d * v.k });
     }
+    near.welds = welds().flatMap((id) => {
+      const p = ed.weldAt(id);
+      return p ? [{ id, d: Math.hypot(p.x - at.x, p.y - at.y) * v.k }] : [];
+    });
     // Nothing near: a component's outline, or nothing.
     return reach(near, v.k) ?? hitAt(target);
   };
@@ -447,6 +466,7 @@ export function Canvas(props: CanvasProps) {
       return !!props.readonly;
     },
     gestureAt: ed.gestureAt,
+    gestureAtWeld: ed.gestureAtWeld,
     checkDrop: ed.checkDrop,
     isSelected: ed.isSelected,
     clickable: (id: WireId) =>
@@ -915,7 +935,7 @@ export function Canvas(props: CanvasProps) {
         aria-label="Net canvas"
       >
         <g transform={`translate(${view().x} ${view().y}) scale(${view().k})`}>
-          <Show when={ed.frame()}>{(f) => <Animated frame={f()} freeLabel={props.freeLabel} iface={iface()} />}</Show>
+          <Show when={ed.frame()}>{(f) => <Animated frame={f()} freeLabel={props.freeLabel} iface={iface()} welds={!props.readonly} />}</Show>
           <g style={{ display: ed.frame() ? "none" : undefined }}>
             <For each={hulls()}>
               {(h) => (
@@ -1035,6 +1055,47 @@ export function Canvas(props: CanvasProps) {
                 );
               }}
             </For>
+            <For each={welds()}>
+              {(id) => {
+                const opened = () => {
+                  const g = opening();
+                  return g?.wire === id && g.anchor.kind === "free" ? g.anchor.name : undefined;
+                };
+                const hovered = () => {
+                  const h = ed.hover();
+                  return h?.kind === "wire" && h.id === id && !!h.weld;
+                };
+                return (
+                  <Show when={ed.weldAt(id)}>
+                    {(p) => (
+                      <g class="free-end">
+                        <Show
+                          when={opened()}
+                          fallback={
+                            <>
+                              <EndMark at={p()} state={hovered() ? "hover" : "none"} />
+                              <circle class="weld-dot" cx={p().x} cy={p().y} r={2.4} />
+                              <circle class="hit" data-weld={id} cx={p().x} cy={p().y} r={7} />
+                            </>
+                          }
+                        >
+                          {(name) => (
+                            <>
+                              <EndMark at={p()} state={endState(free(name()))} />
+                              <circle class="end-dot" cx={p().x} cy={p().y} r={2.4} />
+                              <text class="free-label" x={p().x} y={p().y + 13} text-anchor="middle">
+                                {props.freeLabel?.(name()) ?? name()}
+                              </text>
+                              <circle class="hit" data-free={name()} cx={p().x} cy={p().y} r={7} />
+                            </>
+                          )}
+                        </Show>
+                      </g>
+                    )}
+                  </Show>
+                );
+              }}
+            </For>
             <Show when={iface()}>
               <For each={ifaceTypes()}>
                 {(t) => (
@@ -1131,6 +1192,7 @@ const gestureAnchor = (g: WireGesture): End => (g.kind === "new" ? g.from : g.an
 function dragStart(ed: NetModel, g: WireGesture): Pt | undefined {
   const e = g.kind === "new" ? g.from : g.anchor;
   const l = ed.layout();
+  if (g.kind === "carry" && g.loop) return ed.weldAt(g.wire);
   if (e.kind === "free") return l.routed.free.get(e.name);
   const p = l.placement.get(e.agent);
   return p ? portPos(p, ed.view().net.agent(e.agent).wires.length - 1, e.slot) : undefined;
@@ -1724,7 +1786,7 @@ function Agent(props: {
 }
 
 /** One frame of a change being animated. */
-function Animated(props: { frame: Frame; freeLabel?: (name: string) => string; iface: boolean }) {
+function Animated(props: { frame: Frame; freeLabel?: (name: string) => string; iface: boolean; welds: boolean }) {
   return (
     <g class="animated" style={{ "pointer-events": "none" }}>
       <Index each={props.frame.wires}>
@@ -1773,6 +1835,9 @@ function Animated(props: { frame: Frame; freeLabel?: (name: string) => string; i
             </g>
           );
         }}
+      </Index>
+      <Index each={props.welds ? props.frame.wires.filter((w) => w.weld !== undefined) : []}>
+        {(w) => <circle class="weld-dot" cx={w().pts[0]!.x} cy={w().pts[0]!.y} r={2.4} style={{ opacity: w().weld! * w().opacity }} />}
       </Index>
       <Index each={props.frame.free}>
         {(f) => {

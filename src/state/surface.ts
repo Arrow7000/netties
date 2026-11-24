@@ -15,7 +15,7 @@ export type Surface = "main" | "rule";
 
 /** What letting go of a held wire end over empty canvas does. */
 export type DropOnNothing =
-  /** The wire is left with a loose end there. */
+  /** The wire is left with a loose end there; a loop, with two. */
   | "loose"
   /** The held loose end goes back where it was. */
   | "back"
@@ -38,7 +38,7 @@ export const FREE_PORTS: Record<Surface, FreePorts> = {
   main: {
     surface: "main",
     scratch: true,
-    dropOnNothing: (g) => (g.kind === "carry" && g.moving.kind === "free" ? "back" : "loose"),
+    dropOnNothing: (g) => (g.kind === "carry" && g.moving.kind === "free" && !g.loop ? "back" : "loose"),
   },
   rule: {
     surface: "rule",

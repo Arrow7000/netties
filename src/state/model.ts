@@ -9,7 +9,7 @@ import { type Clash, type Effective, clash, clashText, endSpec, specOf } from ".
 import { G, type Placed, type Placement, type Pt, type Terminal, boxOf, portPos } from "../layout/geometry";
 import { autoLayout, columnOffsets, columnsAt } from "../layout/place";
 import { routeHoldingEnds } from "../layout/replace";
-import { type Pins, type Routed, route } from "../layout/route";
+import { type Pins, type Routed, route, weldOf } from "../layout/route";
 import { FREE_PORTS, type Surface } from "./surface";
 
 export type LayoutMode = "auto" | "manual";
@@ -57,10 +57,13 @@ interface Snapshot {
  * Dragging a wire end. From an empty end it draws a new wire; from an end
  * that has a wire, it unplugs that end and carries it, leaving the end it
  * came from empty. The other end of the wire, the anchor, stays put.
+ *
+ * From a closed loop's weld (`loop`), it pulls the loop apart: the ends are
+ * the two loose ends it would have, which aren't in the net until it's let go.
  */
 export type WireGesture =
   | { kind: "new"; from: End }
-  | { kind: "carry"; wire: WireId; moving: End; anchor: End };
+  | { kind: "carry"; wire: WireId; moving: End; anchor: End; loop?: boolean };
 
 /** What letting go of a wire end over some end would do. */
 export type DropCheck =
@@ -73,7 +76,8 @@ export type Hover =
   | { kind: "agent"; id: AgentId }
   | { kind: "port"; end: End }
   | { kind: "free"; name: string }
-  | { kind: "wire"; id: WireId }
+  /** `weld`: on the weld of a closed loop. */
+  | { kind: "wire"; id: WireId; weld?: boolean }
   | { kind: "group"; id: GroupId }
   | { kind: "drag"; gesture: WireGesture; target?: End; check?: DropCheck }
   | { kind: "type"; id: string }
@@ -101,6 +105,15 @@ export interface Plug {
 
 /** How near an end a new agent has to be let go, when it isn't over the end's agent, to plug into it. */
 const REACH = 22;
+
+/** A curve between two points that leaves and arrives vertically. */
+const curve = (a: Pt, b: Pt): Pt[] => {
+  const n = 24;
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const t = i / n;
+    return { x: a.x + (b.x - a.x) * t * t * (3 - 2 * t), y: a.y + (b.y - a.y) * t * (1.5 - 1.5 * t + t * t) };
+  });
+};
 
 const HISTORY_LIMIT = 200;
 const noDefs: Defs = new Map();
@@ -342,10 +355,10 @@ export function createNetModel(opts: NetModelOptions) {
     return new Set(net.activePairs().filter((w) => !live.has(w)));
   });
 
-  const nextFreeName = () => {
+  const nextFreeName = (besides?: string) => {
     for (let i = 0; ; i++) {
       const name = looseName(i);
-      if (!net.free.has(name)) return name;
+      if (!net.free.has(name) && name !== besides) return name;
     }
   };
 
@@ -456,7 +469,7 @@ export function createNetModel(opts: NetModelOptions) {
     raf = requestAnimationFrame(tick);
   }
 
-  /** Whether dropping the end held in `g` onto `to` joins a wire's two loose ends, closing it into a loop. */
+  /** Whether dropping the end held in `g` onto `to` joins a wire's two loose ends, closing it into a loop (or leaving it one). */
   const closes = (g: WireGesture, to: End) =>
     freePorts.scratch && g.kind === "carry" && g.moving.kind === "free" && g.anchor.kind === "free" && sameEnd(to, g.anchor);
 
@@ -478,6 +491,17 @@ export function createNetModel(opts: NetModelOptions) {
     if (c) return { kind: "refuse", why: clashText(c), clash: c };
     return { kind: "ok", join: w !== NONE };
   }
+
+  /** Where a closed loop's weld is drawn. */
+  const weldAt = (id: WireId): Pt | undefined => (net.loops.has(id) ? weldOf(layout().routed.wires.get(id) ?? []) : undefined);
+
+  /** Where a view end is drawn. */
+  const spotOf = (e: End): Pt | undefined => {
+    const l = layout();
+    if (e.kind === "free") return l.routed.free.get(e.name);
+    const p = l.placement.get(e.agent);
+    return p && portPos(p, view().net.agent(e.agent).wires.length - 1, e.slot);
+  };
 
   /** What a view end carries. */
   function specAt(e: End): Effective {
@@ -502,6 +526,27 @@ export function createNetModel(opts: NetModelOptions) {
     if (to && g.kind === "carry" && closes(g, to)) {
       const pts = l.routed.wires.get(g.wire);
       return pts && [...pts, pts[0]!];
+    }
+    // A wire with no agent to route it from runs in a curve from its other loose end.
+    if (g.kind === "carry" && g.moving.kind === "free" && g.anchor.kind === "free") {
+      const from = g.loop ? weldAt(g.wire) : l.routed.free.get(g.anchor.name);
+      const end = to && checkDrop(g, to).kind === "ok" ? spotOf(to) : undefined;
+      if (!from) return undefined;
+      if (to?.kind !== "port" || !end) return curve(from, end ?? pt);
+      // Into a port, it's routed, from that end held where it is.
+      if (g.loop) {
+        tmp.loops.delete(g.wire);
+        tmp.free.set(g.anchor.name, NONE);
+      } else tmp.disconnect(g.wire);
+      tmp.free.delete(g.moving.name);
+      try {
+        const id = tmp.connect(g.anchor, to);
+        const columns = new Map(l.columns);
+        columns.delete(endKey(to));
+        return routeHoldingEnds(tmp, placement, { columns, pins: pins() }, new Map([...l.routed.free, [g.anchor.name, { ...from, dir: "down" as const }]])).wires.get(id);
+      } catch {
+        return curve(from, end);
+      }
     }
     // A loose end has no place of its own until the router puts it on an edge.
     if (anchor.kind === "free") return undefined;
@@ -538,10 +583,11 @@ export function createNetModel(opts: NetModelOptions) {
 
   /**
    * Start the animation of a wire edit from how the drag drew it: the wire
-   * along `shown.path`, and a loose end it made where it was let go. `made`
-   * is the wire as it is now; `joined`, a loose end's wire it took in.
+   * along `shown.path`, and a loose end it made where it was let go.
+   * `made` is the wire as it is now; `joined`, a loose end's wire it took in;
+   * `opened`, the loose end a loop pulled apart leaves at its weld.
    */
-  function animateFromDrag(shown: { path?: Pt[]; at: Pt }, carried: WireId | undefined, made: WireId | undefined, loose?: string, joined?: WireId) {
+  function animateFromDrag(shown: { path?: Pt[]; at: Pt }, carried: WireId | undefined, made: WireId | undefined, loose?: string, joined?: WireId, opened?: { name: string; at: Pt }) {
     if (!pending) return;
     const wires = new Map(pending.routed.wires);
     const ends = new Map(pending.routed.free);
@@ -560,6 +606,7 @@ export function createNetModel(opts: NetModelOptions) {
     const id = made ?? carried;
     if (path && id !== undefined) wires.set(id, path);
     if (loose) ends.set(loose, { x: shown.at.x, y: shown.at.y, dir: "down" });
+    if (opened) ends.set(opened.name, { ...opened.at, dir: "down" });
     pending = { ...pending, routed: { ...pending.routed, wires, free: ends } };
   }
 
@@ -578,7 +625,7 @@ export function createNetModel(opts: NetModelOptions) {
   function returnWire(g: WireGesture, shown?: { path?: Pt[]; at: Pt }) {
     if (g.kind !== "carry" || !shown?.path) return;
     pending = animSnapshot();
-    const loose = g.moving.kind === "free" && freePorts.scratch ? g.moving.name : undefined;
+    const loose = g.moving.kind === "free" && freePorts.scratch && !g.loop ? g.moving.name : undefined;
     animateFromDrag(shown, g.wire, g.wire, loose);
     animate(pending!, [], true);
   }
@@ -644,6 +691,14 @@ export function createNetModel(opts: NetModelOptions) {
       return { kind: "carry", wire: w, moving: e, anchor: v.partner(e)! };
     },
 
+    weldAt,
+
+    /** What dragging from a closed loop's weld would do. */
+    gestureAtWeld(id: WireId): WireGesture {
+      const anchor = nextFreeName();
+      return { kind: "carry", wire: id, moving: free(nextFreeName(anchor)), anchor: free(anchor), loop: true };
+    },
+
     /**
      * Let go of a wire end: over an end, or over empty canvas (`to` unset).
      * `shown` is the wire as the drag drew it, and where it was let go: the
@@ -653,12 +708,22 @@ export function createNetModel(opts: NetModelOptions) {
       if (to && checkDrop(g, to).kind !== "ok") return returnWire(g, shown);
       const nothing = to ? undefined : freePorts.dropOnNothing(g);
       if (nothing === "back" || nothing === "nothing") return returnWire(g, shown);
+      const loop = g.kind === "carry" && !!g.loop;
+      // A loop dropped back on its weld, or gone meanwhile, is left as it is.
+      if (g.kind === "carry" && loop && ((to && closes(g, to)) || !net.loops.has(g.wire))) return returnWire(g, shown);
       const v = view();
+      const weld = g.kind === "carry" && loop ? weldAt(g.wire) : undefined;
       checkpoint();
-      const anchor = v.toReal(g.kind === "new" ? g.from : g.anchor);
+      let anchor = v.toReal(g.kind === "new" ? g.from : g.anchor);
       // Carrying keeps the wire's identity, so it's animated as the same wire moving.
       let reuse: WireId | undefined;
-      if (g.kind === "carry") {
+      if (g.kind === "carry" && loop) {
+        net.loops.delete(g.wire);
+        reuse = g.wire;
+        // The name it was to have, unless it has been taken since.
+        if (anchor.kind === "free" && net.free.has(anchor.name)) anchor = free(nextFreeName());
+        if (anchor.kind === "free") net.free.set(anchor.name, NONE);
+      } else if (g.kind === "carry") {
         const moving = v.toReal(g.moving);
         net.disconnect(g.wire);
         reuse = g.wire;
@@ -687,7 +752,7 @@ export function createNetModel(opts: NetModelOptions) {
           joined = w;
         }
       }
-      if (shown) animateFromDrag(shown, reuse, made, loose, joined);
+      if (shown) animateFromDrag(shown, reuse, made, loose, joined, weld && anchor.kind === "free" ? { name: anchor.name, at: weld } : undefined);
       setSelection(undefined);
       bump();
     },
