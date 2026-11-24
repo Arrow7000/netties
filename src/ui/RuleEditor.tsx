@@ -318,7 +318,8 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
 
   /**
    * Paste into the result, at `at` in it, or else under the pointer or in the
-   * middle: only agents this system has, with any loose ends left as empty ports.
+   * middle: only agents this system has, with any loose ends left as empty ports
+   * and closed loops left out.
    */
   const paste = (src: Clip | { system: System; net: Net }, at?: Pt) => {
     const from = "v" in src ? System.fromJSON(src.system) : src.system;
@@ -333,6 +334,8 @@ export function RuleEditor(props: { ed: Editor; left: string; right: string; pho
       if (w !== NONE) piece.disconnect(w);
       piece.free.delete(name);
     }
+    // A rule can't make a closed loop.
+    piece.loops.clear();
     const r = afterEl.getBoundingClientRect();
     const c = pointer && rcam.contains(pointer.x, pointer.y) ? pointer : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     rhs.checkpoint();

@@ -856,6 +856,7 @@ export function createEditor(initial: Doc | undefined) {
       for (const w of net.wires.values()) {
         if (w.ends[0].kind === "free" && w.ends[1].kind === "free") return "Interface ports can't be wired straight to each other.";
       }
+      if (net.loops.size) return "A component can't hold a closed loop: pull it apart or delete it.";
       commitSystemEdit(() => {
         const names = [...net.free.keys()];
         const iface = [...old.iface.filter((n) => names.includes(n)), ...names.filter((n) => !old.iface.includes(n))];
