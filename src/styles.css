@@ -1753,6 +1753,29 @@ kbd {
   grid-template-columns: 210px 1fr;
 }
 
+/* In the agent editor and the directions sheet, the drawing, labels and controls don't select as text; the notes, warnings and inputs do. */
+.te-preview,
+.te-head,
+.te-ports,
+.type-editor .field,
+.type-editor button,
+.ts-head,
+.ts-table,
+.types-sheet button,
+.popover .mi,
+.type-form .menu-head {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.type-editor input,
+.types-sheet input,
+.col-note,
+.type-form-note {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .te-ports,
 .te-bottom {
   grid-column: 1 / -1;
