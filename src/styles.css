@@ -392,6 +392,21 @@ textarea {
   height: 14px;
 }
 
+/* A chevron is drawn well inside its box, so a button takes the room at its sides back, to space it as it looks. */
+.btn > .chevron {
+  margin: 0 -3px;
+}
+
+.btn.small > .chevron {
+  margin: 0 -2.5px;
+}
+
+/* An icon with a chevron: wider than one alone, with as much room on the left as on the right. */
+.btn.icon:has(> .chevron) {
+  width: auto;
+  padding: 0 9px 0 8px;
+}
+
 .seg {
   display: inline-flex;
   background: var(--chrome-2);
@@ -3770,11 +3785,6 @@ button.select.open {
   .island .btn.icon {
     width: 40px;
     height: 40px;
-  }
-
-  .top-left .btn {
-    padding: 0 8px 0 10px;
-    gap: 3px;
   }
 
   .brand {

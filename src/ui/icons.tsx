@@ -1,15 +1,15 @@
 import type { JSX } from "solid-js";
 
 /** Small line icons, drawn on a 16-unit grid in the current text colour. */
-const icon = (body: () => JSX.Element) => () => (
-  <svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+const icon = (body: () => JSX.Element, also = "") => () => (
+  <svg class={`icon ${also}`} viewBox="0 0 16 16" aria-hidden="true">
     {body()}
   </svg>
 );
 
 const line = { fill: "none", stroke: "currentColor", "stroke-width": 1.5, "stroke-linecap": "round", "stroke-linejoin": "round" } as const;
 
-export const Chevron = icon(() => <path d="M4 6l4 4 4-4" {...line} />);
+export const Chevron = icon(() => <path d="M4 6l4 4 4-4" {...line} />, "chevron");
 export const Undo = icon(() => <path d="M6 4L3 7l3 3M3.5 7H10a3 3 0 010 6H8" {...line} />);
 export const Redo = icon(() => <path d="M10 4l3 3-3 3M12.5 7H6a3 3 0 000 6h2" {...line} />);
 export const Theme = icon(() =>
