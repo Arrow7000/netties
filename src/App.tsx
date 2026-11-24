@@ -5,6 +5,7 @@ import { Canvas, type Pad, createCamera } from "./ui/Canvas";
 import { CHAT_WIDTH, ChatPanel } from "./ui/Chat";
 import { createChat } from "./ui/chatStore";
 import { compact, fingers, heightAtRest, sideways } from "./ui/compact";
+import { fitBar } from "./ui/fitBar";
 import { ComponentEditor } from "./ui/ComponentEditor";
 import { ExamplesMenu } from "./ui/ExamplesMenu";
 import { AboutDialog } from "./ui/About";
@@ -597,7 +598,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           <HoverPanel ed={ed} />
           <SelectionPanel ed={ed} />
         </div>
-        <div class="bottom-bar">
+        <div class="bottom-bar" ref={fitBar}>
           <Counters ed={ed} />
 
           <div class="island transport" aria-label="Run">
@@ -610,7 +611,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
               title="Apply the rule to one active pair (S)"
             >
               <I.Step />
-              Step
+              <span class="bar-label">Step</span>
             </button>
             <button
               class="btn outline"
@@ -621,7 +622,7 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
               title="Apply the rules to every active pair at once (A)"
             >
               <I.ParallelStep />
-              Parallel step
+              <span class="bar-label">Parallel step</span>
             </button>
             <button
               class="btn run"
@@ -637,7 +638,9 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
             </button>
             <Show when={ed.canResetExample()}>
               <button class="btn outline" onClick={ed.resetExample} title={ed.resetsChat() ? "Restore the net the chat loaded to how it started. You can undo this." : "Restore the loaded example to its starting net. You can undo this."}>
-                {ed.resetsChat() ? "Reset net" : "Reset example"}
+                <span>
+                  Reset<span class="bar-label">{ed.resetsChat() ? " net" : " example"}</span>
+                </span>
               </button>
             </Show>
             <span class="sep" />
@@ -647,18 +650,18 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
           <div class="island view-controls">
             {layout()}
             <span class="sep" />
-            <button class="btn icon" onClick={() => camera.zoomBy(1 / 1.25)} title="Zoom out">
+            <button class="btn icon zoom-step" onClick={() => camera.zoomBy(1 / 1.25)} title="Zoom out">
               <I.Minus />
             </button>
             <button class="btn zoom" onClick={() => camera.zoomTo(1)} title="Zoom to 100%">
               {Math.round(camera.view().k * 100)}%
             </button>
-            <button class="btn icon" onClick={() => camera.zoomBy(1.25)} title="Zoom in">
+            <button class="btn icon zoom-step" onClick={() => camera.zoomBy(1.25)} title="Zoom in">
               <I.Plus />
             </button>
             <button class="btn" onClick={camera.fit} title="Fit the net in view (F)">
               <I.Fit />
-              Fit
+              <span class="fit-label">Fit</span>
             </button>
             <span class="sep" />
             <Menu label={<I.Eye />} title="View options" class="icon up">

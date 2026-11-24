@@ -473,6 +473,22 @@ textarea {
   color: var(--muted);
 }
 
+.bottom-bar[data-tight~="1"] .fit-label,
+.bottom-bar[data-tight~="2"] .bar-label,
+.bottom-bar[data-tight~="3"] .zoom,
+.bottom-bar[data-tight~="3"] .zoom-step,
+.bottom-bar[data-tight~="4"] .counters:not(:has(.warn)),
+.bottom-bar[data-tight~="4"] .chip:not(.warn),
+.bottom-bar[data-tight~="5"] .counters,
+.bottom-bar[data-tight~="6"] .transport > .sep,
+.bottom-bar[data-tight~="6"] .speed {
+  display: none;
+}
+
+.bottom-bar[data-tight~="1"] .speed input {
+  width: 64px;
+}
+
 .speed input {
   width: 96px;
   accent-color: var(--text);
@@ -480,7 +496,8 @@ textarea {
 
 /* The speed, which goes back to 1× when pressed: as wide as any speed needs, so the bar keeps its size. */
 .btn.speed-now {
-  width: 52px;
+  width: 46px;
+  margin-left: -5px;
   padding: 0;
   color: var(--text);
   font-variant-numeric: tabular-nums;
