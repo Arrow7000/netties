@@ -31,6 +31,9 @@ export function arrowPoints(at: Pt, dx: number, dy: number, scale = 1): string {
 /** Where an empty port's arrow sits: how far out from the port, and how big. */
 export const PORT_ARROW = { out: 7.2, scale: 0.82 };
 
+/** How far out from a port with a wire its arrow sits: right outside the port, rather than across the ring around it. */
+const WIRED_ARROW = 3.4;
+
 export interface PortArrow {
   at: Pt;
   dx: number;
@@ -40,11 +43,10 @@ export interface PortArrow {
 }
 
 /**
- * The arrow a port that has a wire shows while it's pointed at: as far from
- * the port as an empty port's arrow, but along the wire, given as a polyline
- * from the port. `own` says whether the wire has an arrow of its own, halfway along.
+ * The arrow a port that has a wire shows while it's pointed at: along
+ * the wire, given as a polyline from the port. `own` says whether the wire has an arrow of its own, halfway along.
  */
-export function portArrow(wire: Pt[], gives: boolean, own: boolean, out = PORT_ARROW.out): PortArrow | undefined {
+export function portArrow(wire: Pt[], gives: boolean, own: boolean, out = WIRED_ARROW): PortArrow | undefined {
   let len = 0;
   for (let i = 1; i < wire.length; i++) len += Math.hypot(wire[i]!.x - wire[i - 1]!.x, wire[i]!.y - wire[i - 1]!.y);
   if (len < 5) return undefined;
@@ -57,7 +59,7 @@ export function portArrow(wire: Pt[], gives: boolean, own: boolean, out = PORT_A
     const l = Math.hypot(b.x - a.x, b.y - a.y);
     if (l > 0 && left <= l) {
       const at = { x: a.x + ((b.x - a.x) * left) / l, y: a.y + ((b.y - a.y) * left) / l };
-      return { at, dx: ((b.x - a.x) / l) * sgn, dy: ((b.y - a.y) / l) * sgn, instead: own && len / 2 - s < 9 };
+      return { at, dx: ((b.x - a.x) / l) * sgn, dy: ((b.y - a.y) / l) * sgn, instead: own && len / 2 - s < 10 };
     }
     left -= l;
   }
