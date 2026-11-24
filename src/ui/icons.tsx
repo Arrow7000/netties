@@ -38,11 +38,9 @@ export const Step = icon(() => <path d="M2.5 8H13M9.5 4.5L13 8l-3.5 3.5" {...lin
 export const ParallelStep = icon(() => <path d="M2.5 4.5H13M10.5 2L13 4.5 10.5 7M2.5 11.5H13M10.5 9l2.5 2.5-2.5 2.5" {...line} />);
 export const Play = icon(() => <path d="M4.5 3l8 5-8 5z" fill="currentColor" />);
 export const Stop = icon(() => <rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" />);
-export const Slow = icon(() =>
-  <>
-    <circle cx="8" cy="8.5" r="5.5" {...line} stroke-width={1.4} />
-    <path d="M8 5.5v3l2 1.5M6.5 1.8h3" {...line} stroke-width={1.4} />
-  </>,
+/** Speed: a gauge with its needle. */
+export const Speed = icon(() =>
+  <path d="M3 12.3A5.75 5.75 0 1 1 13 12.3M8 9.4l2.5-2.5" {...line} stroke-width={1.4} />,
 );
 export const Minus = icon(() => <path d="M3.5 8h9" {...line} />);
 export const Plus = icon(() => <path d="M3.5 8h9M8 3.5v9" {...line} />);

@@ -470,7 +470,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 6px 0 2px;
+  color: var(--muted);
 }
 
 .speed input {
@@ -478,11 +478,19 @@ textarea {
   accent-color: var(--text);
 }
 
-.speed output {
-  min-width: 40px;
-  text-align: right;
-  color: var(--muted);
+/* The speed, which goes back to 1× when pressed: as wide as any speed needs, so the bar keeps its size. */
+.btn.speed-now {
+  width: 52px;
+  padding: 0;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+
+.btn.speed-now[aria-disabled="true"] {
+  background: none;
+  color: var(--muted);
+  opacity: 1;
+  cursor: default;
 }
 
 kbd {

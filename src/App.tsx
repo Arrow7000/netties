@@ -37,9 +37,6 @@ const THEMES: [ThemeChoice, string, () => JSX.Element][] = [
   ["dark", "Dark", I.Moon],
 ];
 
-/** The speed the clock button goes to. */
-const SLOW = 0.25;
-
 /** Room the desktop chrome takes round the canvas: the bars, and the palette on the right. */
 const DESKTOP_PAD: Pad = { t: 72, r: 270, b: 90, l: 48 };
 
@@ -345,22 +342,10 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
     URL.revokeObjectURL(a.href);
   };
 
-  // Speed: the slider goes through the speeds there are; the clock button toggles slow motion.
-  let beforeSlow = 1;
-  const slow = () => ed.speed() <= SLOW + 1e-6;
-  const toggleSlow = () => {
-    if (slow()) ed.setSpeed(beforeSlow);
-    else {
-      beforeSlow = ed.speed();
-      ed.setSpeed(SLOW);
-    }
-  };
   // Pieces of the bottom bar that move into the view menu on a phone.
   const speed = () => (
     <div class="speed">
-      <button class="btn icon" aria-pressed={slow()} classList={{ on: slow() }} onClick={toggleSlow} title="Slow motion">
-        <I.Slow />
-      </button>
+      <I.Speed />
       <input
         type="range"
         min={0}
@@ -371,7 +356,16 @@ export function App(props: { initial?: Doc; fromLink?: boolean; initialError?: s
         aria-label="Animation speed"
         aria-valuetext={`${ed.speed()} times`}
       />
-      <output>{ed.speed()}×</output>
+      {/* Still focusable at 1×, so pressing it doesn't lose the keyboard's place. */}
+      <button
+        class="btn speed-now"
+        aria-disabled={ed.speed() === 1}
+        aria-label={ed.speed() === 1 ? "Speed 1×" : `Speed ${ed.speed()}×, back to 1×`}
+        title={ed.speed() === 1 ? undefined : "Back to 1×"}
+        onClick={() => ed.setSpeed(1)}
+      >
+        {ed.speed()}×
+      </button>
     </div>
   );
   const layout = () => (

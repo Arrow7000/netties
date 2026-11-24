@@ -104,7 +104,7 @@ function Desktop(props: { set: Set }) {
         <span class="sep" />
         <div class="speed">
           <button class="btn icon">
-            <I.Slow />
+            <I.Speed />
           </button>
           <input type="range" min={-2} max={2} step={0.25} value={0} />
           <output>1×</output>
