@@ -12,6 +12,8 @@ import { Close, Minus, Plus } from "./icons";
 const MAX_AUX = 8;
 /** Length of the wire stubs on the preview's ports. */
 const STUB = 13;
+/** How near a port or its stub the pointer has to be in the preview, in the preview's own units. */
+const NEAR = 16;
 
 /**
  * Create or edit an agent, with a live drawing of it. Symbol and fill only
@@ -29,7 +31,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
   const [error, setError] = createSignal<string>();
   const [bump, setBump] = createSignal(0);
   const [ports, setPorts] = createSignal<PortSpec[]>(initial ? portsFor(initial) : portsFor({ id: "", name: "", symbol: "", arity: 2 }));
-  /** The port row under the pointer, to light it up in the drawing. */
+  /** The port under the pointer, in the list or in the drawing, lit up in both. */
   const [hotPort, setHotPort] = createSignal<number>();
   const typing = () => (ed.rev(), ed.system.typing);
 
@@ -77,6 +79,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
     setArity((n) => Math.max(0, Math.min(MAX_AUX, n + d)));
     setPorts((ps) => Array.from({ length: arity() + 1 }, (_, i) => ps[i] ?? {}));
     setBump((b) => b + 1);
+    setHotPort(undefined);
   };
 
   const save = (e?: Event) => {
@@ -125,10 +128,35 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
     return { n, o, k, ports: Array.from({ length: n + 1 }, (_, i) => portPos(p, n, i)), label: labelPos(p, n) };
   };
 
+  /** The preview's port nearest the pointer, if one is near enough. */
+  const portAt = (e: PointerEvent & { currentTarget: SVGSVGElement }) => {
+    const m = e.currentTarget.getScreenCTM();
+    if (!m) return undefined;
+    const at = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    const v = preview();
+    let best: number | undefined;
+    let dist = NEAR;
+    v.ports.forEach((q, i) => {
+      // How far the pointer is from the port's stub, which starts at the port.
+      const out = q.dir === "down" ? 1 : -1;
+      const along = Math.max(0, Math.min(STUB * v.k, (at.y - q.y * v.k) * out));
+      const d = Math.hypot(at.x - q.x * v.k, at.y - q.y * v.k - out * along);
+      if (d < dist) [best, dist] = [i, d];
+    });
+    return best;
+  };
+
   return (
     <form ref={form} class="pop type-editor" role="dialog" aria-label="Agent" onSubmit={save}>
       <div class="te-preview">
-        <svg viewBox="-95 -80 190 160" class="te-stage" classList={{ filled: filled() }} aria-hidden="true">
+        <svg
+          viewBox="-95 -80 190 160"
+          class="te-stage"
+          classList={{ filled: filled() }}
+          aria-hidden="true"
+          onPointerMove={(e) => setHotPort(portAt(e))}
+          onPointerLeave={() => setHotPort(undefined)}
+        >
           {(() => {
             bump();
             const v = preview();
@@ -275,7 +303,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
           classList={{ dirs: typing().dirs !== "off", types: typing().types !== "off" }}
           onPointerLeave={() => setHotPort(undefined)}
         >
-          <div class="port-row port-head">
+          <div class="port-row port-head" onPointerEnter={() => setHotPort(undefined)}>
             <span />
             <span>Label</span>
             <Show when={typing().dirs !== "off"}>
@@ -287,7 +315,7 @@ export function TypeEditor(props: { ed: Editor; id: string | "new"; onClose: () 
           </div>
           <Index each={ports()}>
             {(p, i) => (
-              <div class="port-row" onPointerEnter={() => setHotPort(i)}>
+              <div class="port-row" classList={{ hot: hotPort() === i }} onPointerEnter={() => setHotPort(i)}>
                 <span class="slot-tag">{i === 0 ? "P" : i}</span>
                 <input
                   class="input"

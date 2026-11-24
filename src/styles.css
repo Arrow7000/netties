@@ -1812,7 +1812,18 @@ kbd {
 }
 
 .port-row {
-  display: contents;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  border-radius: 8px;
+}
+
+/* The row of the port under the pointer, here or in the drawing. The shadow takes it half way to the next row. */
+.port-row.hot {
+  --row-hot: color-mix(in srgb, var(--accent-soft) 50%, transparent);
+  background: var(--row-hot);
+  box-shadow: 0 0 0 3px var(--row-hot);
 }
 
 .port-row .input {
