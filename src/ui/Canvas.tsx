@@ -5,6 +5,7 @@ import { type AgentId, type End, NONE, type WireId, endKey, free, port, sameEnd 
 import { type System, pairKey } from "../core/system";
 import { type Box, G, type Placed, type Pt, type Terminal, boxOf, distanceToSegment, insidePolygon, portPos, segmentHitsBox, shape } from "../layout/geometry";
 import type { StepPlan, StepPreview } from "../layout/replace";
+import { dashedOutline, dashRound } from "../render/dashes";
 import { flattenPath, midway, polylinePath, resample, roundedPath } from "../render/path";
 import { STROKE, agentOutline, arrowPoints, labelPos } from "../render/svg";
 import type { NetModel, Plug, WireGesture } from "../state/model";
@@ -1246,13 +1247,13 @@ function IfaceEnd(props: { ed: NetModel; name: string; at: { x: number; y: numbe
     const tone = props.state === "candidate" ? "ok" : props.state === "blocked" ? "dim" : "";
     return { at: { x: props.at.x, y: props.at.y + into * 11 }, dx: 0, dy: pol === "give" ? into : -into, scale: 0.82, class: `port-arrow ${tone}` };
   };
-  const c = (cls: string, r: number) => <circle class={cls} cx={props.at.x} cy={props.at.y} r={r} />;
+  const c = (cls: string, r: number, dash?: number) => <circle class={cls} pathLength={dash} cx={props.at.x} cy={props.at.y} r={r} />;
   return (
     <g class="free-end iface-end">
-      <circle class="iface-ring" classList={{ need: empty() }} cx={props.at.x} cy={props.at.y} r={6.6} />
+      <circle class="iface-ring" classList={{ need: empty() }} pathLength={dashRound(6.6, 3.9)} cx={props.at.x} cy={props.at.y} r={6.6} />
       <Show when={props.state === "hover"}>{c("iface-hover", 9.6)}</Show>
       <Show when={props.state === "candidate"}>{c("port-candidate", 9.6)}</Show>
-      <Show when={props.state === "blocked"}>{c("port-blocked", 8)}</Show>
+      <Show when={props.state === "blocked"}>{c("port-blocked", 8, dashRound(8, 3))}</Show>
       <Show when={props.state === "target"}>{c("port-target", 9.6)}</Show>
       <Show when={props.state === "refuse"}>{c("port-refuse", 9.6)}</Show>
       <Show when={arrow()}>{(a) => <Arrowhead {...a()} />}</Show>
@@ -1267,14 +1268,14 @@ function IfaceEnd(props: { ed: NetModel; name: string; at: { x: number; y: numbe
 }
 
 function EndMark(props: { at: Pt; state: EndState }) {
-  const c = (cls: string, r: number) => <circle class={cls} cx={props.at.x} cy={props.at.y} r={r} />;
+  const c = (cls: string, r: number, dash?: number) => <circle class={cls} pathLength={dash} cx={props.at.x} cy={props.at.y} r={r} />;
   return (
     <>
       <Show when={props.state === "empty"}>{c("port-empty", 2.6)}</Show>
       <Show when={props.state === "hover"}>{c("port-hover", 5.2)}</Show>
       <Show when={props.state === "origin"}>{c("port-origin", 4.2)}</Show>
       <Show when={props.state === "candidate"}>{c("port-candidate", 6.5)}</Show>
-      <Show when={props.state === "blocked"}>{c("port-blocked", 4.6)}</Show>
+      <Show when={props.state === "blocked"}>{c("port-blocked", 4.6, dashRound(4.6, 3))}</Show>
       <Show when={props.state === "target"}>{c("port-target", 6.5)}</Show>
       <Show when={props.state === "refuse"}>
         {c("port-refuse", 6)}
@@ -1727,7 +1728,10 @@ function Agent(props: {
         data-agent={props.id}
       >
         <Show when={selected() || props.pre}>
-          {shapeEl("sel-outer")}
+          {/* Dashed by its path rather than by a style, so the dashes fit the shape. */}
+          <Show when={props.pre && !selected()} fallback={shapeEl("sel-outer")}>
+            <path class="sel-outer" d={dashedOutline(outline()!, p()!, 2.6)} />
+          </Show>
           {shapeEl("sel-inner")}
         </Show>
         {shapeEl("body")}
@@ -1772,7 +1776,7 @@ function Agent(props: {
                   <circle class="port-xray" cx={pos().x} cy={pos().y} r={5} />
                 </Show>
                 <Show when={props.need && empty() && props.endState(port(props.id, slot)) === "empty"}>
-                  <circle class="port-need" cx={pos().x} cy={pos().y} r={5.4} />
+                  <circle class="port-need" pathLength={dashRound(5.4, 3.6)} cx={pos().x} cy={pos().y} r={5.4} />
                 </Show>
                 <EndMark at={pos()} state={props.endState(port(props.id, slot))} />
                 <circle class="hit" data-port={`${props.id}:${slot}`} cx={pos().x} cy={pos().y} r={6.5} />
@@ -1845,7 +1849,7 @@ function Animated(props: { frame: Frame; freeLabel?: (name: string) => string; i
           // Drawn as on the canvas, so ends don't change look while things move.
           return props.iface ? (
             <g class="free-end iface-end">
-              <circle class="iface-ring" cx={f().x} cy={f().y} r={6.6} />
+              <circle class="iface-ring" pathLength={dashRound(6.6, 3.9)} cx={f().x} cy={f().y} r={6.6} />
               <circle class="iface-dot" cx={f().x} cy={f().y} r={3.8} />
               <text class="iface-label" x={f().x} y={f().y + (f().dir === "up" ? -IFACE_LABEL : IFACE_LABEL)}>
                 {label()}

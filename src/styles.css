@@ -895,7 +895,6 @@ kbd {
 }
 
 .agent.pre .sel-outer {
-  stroke-dasharray: 3 2;
   opacity: 0.75;
 }
 
