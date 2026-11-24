@@ -2,7 +2,7 @@ import { type AgentId, type End, type Net, NONE, type WireId, free, port, sameEn
 import { type Made, type PairPort, type StepRecord, interact, isActive } from "../core/reduce";
 import { ifaceName, interfacePins, ruleToNet } from "../core/ruleNet";
 import type { Rule, System } from "../core/system";
-import { flattenPath } from "../render/path";
+import { flattenPath, resampleAt } from "../render/path";
 import { type Box, G, type Placed, type Placement, type Pt, type Terminal, boxOf, portPos } from "./geometry";
 import { autoLayout } from "./place";
 import { type Pins, type RouteOptions, type Routed, crossings, length as pathLength, route } from "./route";
@@ -538,9 +538,11 @@ function commonLength(a: Pt[], b: Pt[]): number {
   const lb = length(b);
   const end = Math.min(la, lb);
   const STEP = 1.5;
-  let s = 0;
-  for (; s <= end; s += STEP) if (dist(pointAt(a, s), pointAt(b, s)) > 1) return Math.max(0, s - STEP);
-  return end;
+  const steps = Array.from({ length: Math.floor(end / STEP) + 1 }, (_, i) => i * STEP);
+  const at = (pts: Pt[], len: number) => resampleAt(pts, steps.map((s) => s / (len || 1)));
+  const [pa, pb] = [at(a, la), at(b, lb)];
+  const apart = steps.findIndex((_, i) => dist(pa[i]!, pb[i]!) > 0.3);
+  return apart < 0 ? end : Math.max(0, steps[apart]! - STEP);
 }
 
 function length(pts: Pt[]): number {

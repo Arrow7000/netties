@@ -77,7 +77,16 @@ export function roundedPath(points: Pt[], radius: number): string {
   return d;
 }
 
-/** The drawn shape of a route as a dense polyline, for animation. */
+/** How far a flattened curve may stray from the curve itself: too little to see, even zoomed in. */
+const FLAT = 0.02;
+
+/** How many straight pieces a curve needs to pass for one (Wang's formula): more for a long, strong curve than for a small corner. */
+function pieces(a: Pt, c1: Pt, c2: Pt, b: Pt): number {
+  const bend = Math.max(Math.hypot(a.x - 2 * c1.x + c2.x, a.y - 2 * c1.y + c2.y), Math.hypot(c1.x - 2 * c2.x + b.x, c1.y - 2 * c2.y + b.y));
+  return Math.max(1, Math.ceil(Math.sqrt((0.75 * bend) / FLAT)));
+}
+
+/** The drawn shape of a route as a dense polyline, for animation, previews and measuring. */
 export function flattenPath(points: Pt[], radius: number): Pt[] {
   const g = segments(points, radius);
   if (!g) return [];
@@ -86,7 +95,7 @@ export function flattenPath(points: Pt[], radius: number): Pt[] {
   for (const s of g.segs) {
     if (s.kind === "L") out.push(s.to);
     else {
-      const n = 8;
+      const n = pieces(cur, s.c1, s.c2, s.to);
       for (let i = 1; i <= n; i++) {
         const t = i / n;
         const u = 1 - t;
@@ -101,17 +110,28 @@ export function flattenPath(points: Pt[], radius: number): Pt[] {
   return out;
 }
 
-/** `n` points evenly spaced along a polyline. */
-export function resample(pts: Pt[], n: number): Pt[] {
-  if (pts.length === 0) return [];
-  if (pts.length === 1) return Array.from({ length: n }, () => ({ ...pts[0]! }));
+/** How far along a polyline each of its points is. */
+function distances(pts: Pt[]): number[] {
   const cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1]! + Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y));
+  return cum;
+}
+
+/** `n` points evenly spaced along a polyline. */
+export function resample(pts: Pt[], n: number): Pt[] {
+  return resampleAt(pts, Array.from({ length: n }, (_, i) => i / (n - 1)));
+}
+
+/** The points at some fractions, in order, of a polyline's length. */
+export function resampleAt(pts: Pt[], fractions: number[]): Pt[] {
+  if (pts.length === 0) return [];
+  if (pts.length === 1) return fractions.map(() => ({ ...pts[0]! }));
+  const cum = distances(pts);
   const total = cum[cum.length - 1]!;
   const out: Pt[] = [];
   let j = 1;
-  for (let i = 0; i < n; i++) {
-    const d = (total * i) / (n - 1);
+  for (const u of fractions) {
+    const d = total * u;
     while (j < pts.length - 1 && cum[j]! < d) j++;
     const seg = cum[j]! - cum[j - 1]! || 1;
     const t = Math.min(1, Math.max(0, (d - cum[j - 1]!) / seg));
@@ -119,6 +139,23 @@ export function resample(pts: Pt[], n: number): Pt[] {
     const b = pts[j]!;
     out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
   }
+  return out;
+}
+
+/**
+ * Fractions of their lengths at which to sample polylines so that each keeps
+ * its shape: at every one of their points, and evenly between, at `n` places at least.
+ */
+export function sampling(shapes: Pt[][], n: number): number[] {
+  const all = Array.from({ length: n }, (_, i) => i / (n - 1));
+  for (const pts of shapes) {
+    const cum = distances(pts);
+    const total = cum[cum.length - 1];
+    if (total) for (const c of cum) all.push(c / total);
+  }
+  all.sort((a, b) => a - b);
+  const out: number[] = [];
+  for (const u of all) if (!out.length || u - out[out.length - 1]! > 1e-6) out.push(u);
   return out;
 }
 

@@ -3,7 +3,7 @@ import type { StepRecord } from "../core/reduce";
 import type { System } from "../core/system";
 import { G, type Orient, type Placed, type Placement, type Pt, portPos } from "../layout/geometry";
 import type { Routed } from "../layout/route";
-import { flattenPath, resample } from "../render/path";
+import { flattenPath, resampleAt, sampling } from "../render/path";
 
 /**
  * Animating a reduction step as a rewiring rather than a cross-fade.
@@ -84,12 +84,26 @@ interface WireTrack {
   ends?: [End, End];
   from: Pt[];
   to: Pt[];
+  /** How far along each point is, as a fraction of the wire's length. */
+  u: number[];
   fade: boolean;
   /** A closed loop: whether its weld was there already, or appears. */
   weld?: "kept" | "new";
 }
 
-const SAMPLES = 40;
+/** Points along a wire at the least; its own points come on top, so it starts and ends just as it's drawn at rest. */
+const SAMPLES = 24;
+/** Points along a closed loop, which is turned point by point to line up with where it goes: close enough together to keep its corners. */
+const loopSamples = (a: Pt[], b: Pt[]) => {
+  const len = (ps: Pt[]) => ps.reduce((s, p, i) => (i ? s + dist(ps[i - 1]!, p) : 0), 0);
+  return Math.min(240, Math.max(40, Math.ceil(Math.max(len(a), len(b)) / 2)));
+};
+
+/** A wire's shapes before and after, sampled alike. */
+function track(from: Pt[], to: Pt[]): Pick<WireTrack, "from" | "to" | "u"> {
+  const u = sampling([from, to], SAMPLES);
+  return { from: resampleAt(from, u), to: resampleAt(to, u), u };
+}
 const angleOf = (o: Orient) => (o === "down" ? 0 : Math.PI);
 const pose = (p: Placed, scale = 1, opacity = 1): Pose => ({ x: p.x, y: p.y, angle: angleOf(p.orient), scale, opacity });
 
@@ -234,7 +248,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
   for (const [id, w] of after.net.wires) {
     const r = after.routed.wires.get(id);
     if (!r) continue;
-    const to = resample(flattenPath(r, G.radius), SAMPLES);
+    const to = flattenPath(r, G.radius);
     const srcs = (origin.get(id) ?? [id]).filter((o) => before.routed.wires.has(o));
     srcs.forEach((s) => used.add(s));
     const s0 = startOf(w.ends[0]);
@@ -254,31 +268,35 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
     w.ends.forEach((e, k) => {
       if (e.kind === "free" && !(k === 0 ? s0 : s1)) freeStart.set(e.name, k === 0 ? from[0]! : from[from.length - 1]!);
     });
-    wires.push({ id: String(id), ends: w.ends, from: resample(from, SAMPLES), to, fade: false });
+    wires.push({ id: String(id), ends: w.ends, ...track(from, to), fade: false });
   }
   // A closed loop draws itself in from the old wires it continues, end to end.
   for (const id of after.net.loops) {
     const r = after.routed.wires.get(id);
     if (!r) continue;
-    const to = resample(flattenPath(r, G.radius), SAMPLES);
+    const goes = flattenPath(r, G.radius);
     const srcs = (origin.get(id) ?? [id]).filter((o) => before.routed.wires.has(o));
     srcs.forEach((s) => used.add(s));
     const pieces = srcs.map(oldShape).filter((p): p is Pt[] => !!p && p.length > 0);
-    const from = pieces.length ? chain(pieces, pieces[0]![0]!) : to;
+    const from = pieces.length ? chain(pieces, pieces[0]![0]!) : goes;
+    const n = loopSamples(from, goes);
+    const u = Array.from({ length: n }, (_, i) => i / (n - 1));
+    const to = resampleAt(goes, u);
     // An edit that closes a wire brings its two ends together.
     const open = !origin.has(id) && dist(from[0]!, from[from.length - 1]!) > 1;
     wires.push({
       id: String(id),
-      from: open ? alignOpen(resample(from, SAMPLES), to) : alignLoop(resample([...from, from[0]!], SAMPLES), to),
+      from: open ? alignOpen(resampleAt(from, u), to) : alignLoop(resampleAt([...from, from[0]!], u), to),
       to,
+      u,
       fade: false,
       weld: before.net.loops.has(id) ? "kept" : "new",
     });
   }
   for (const [id, r] of before.routed.wires) {
     if (after.net.wires.has(id) || after.net.loops.has(id) || used.has(id)) continue;
-    const pts = resample(flattenPath(r, G.radius), SAMPLES);
-    wires.push({ id: `gone-${id}`, from: pts, to: pts, fade: true, weld: before.net.loops.has(id) ? "kept" : undefined });
+    const pts = flattenPath(r, G.radius);
+    wires.push({ id: `gone-${id}`, ...track(pts, pts), fade: true, weld: before.net.loops.has(id) ? "kept" : undefined });
   }
 
   const free = [...after.routed.free].map(([name, f]) => ({ name, from: before.routed.free.get(name) ?? freeStart.get(name) ?? f, to: f }));
@@ -312,7 +330,7 @@ export function buildMorph(before: Snapshot, after: Snapshot, records: StepRecor
           const da = a ? { x: a.x - pts[0]!.x, y: a.y - pts[0]!.y } : { x: 0, y: 0 };
           const db = b ? { x: b.x - pts[n]!.x, y: b.y - pts[n]!.y } : { x: 0, y: 0 };
           pts.forEach((p, i) => {
-            const u = i / n;
+            const u = w.u[i]!;
             const ka = (1 - u) * (1 - u);
             const kb = u * u;
             p.x += da.x * ka + db.x * kb;
