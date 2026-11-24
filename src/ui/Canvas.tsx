@@ -1505,9 +1505,7 @@ function hoveredArrow(ed: NetModel, e: End, out?: number) {
   const far = (p: Pt) => Math.hypot(p.x - at.x, p.y - at.y);
   if (flat.length < 2) return undefined;
   if (far(flat[flat.length - 1]!) < far(flat[0]!)) flat = flat.reverse();
-  const flow = wireFlow(ed, w);
-  const first = sameEnd(v.wire(w).ends[0], e);
-  return portArrow(flat, pol === "give", midway(flat)!.len < OWN_ARROW_MIN ? 0 : first ? flow : -flow, out);
+  return portArrow(flat, pol === "give", wireFlow(ed, w) !== 0 && (midway(flat)?.len ?? 0) >= OWN_ARROW_MIN, out);
 }
 
 /** Wires shorter than this have no arrow. */
