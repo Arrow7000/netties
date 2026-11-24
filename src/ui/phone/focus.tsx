@@ -324,8 +324,10 @@ export function createFocus(host: FocusHost) {
     }
   });
 
+  // Functions, rather than constants, as `actions` needs them at once if something's already selected.
+
   /** What applies to a selected wire of what an agent can have done to it. */
-  const wireActions = (w: WireId, all: Action): Action[] => {
+  function wireActions(w: WireId, all: Action): Action[] {
     const ends = agentsOf(w);
     const none = ends.length ? undefined : m.net.loops.has(w) ? "A loop has no ends." : "Both its ends are loose.";
     return [
@@ -334,9 +336,9 @@ export function createFocus(host: FocusHost) {
       { id: "connected", label: "Select connected", short: "Connected", icon: I.Connected, run: () => host.selectConnected(ends), why: none },
       all,
     ];
-  };
+  }
 
-  const itemActions = (f: Extract<Focus, { kind: "items" }>, paste: Action, all: Action): Action[] => {
+  function itemActions(f: Extract<Focus, { kind: "items" }>, paste: Action, all: Action): Action[] {
     const { agents, groups } = f;
     const sys = ed.system;
     const arities = [...new Set(agents.map((a) => m.net.agent(a).wires.length - 1))];
@@ -404,10 +406,10 @@ export function createFocus(host: FocusHost) {
     const making = host.setMaking;
     if (making) out.push({ id: "component", label: "Make component", icon: I.Component, run: () => making(true) });
     return [...out, ...groupActions(groups, allCollapsed, false)];
-  };
+  }
 
   /** What selected components have done to them: one alone is edited, as its main action. */
-  const groupActions = (groups: GroupId[], allCollapsed: boolean, alone: boolean): Action[] => {
+  function groupActions(groups: GroupId[], allCollapsed: boolean, alone: boolean): Action[] {
     if (!groups.length) return [];
     const out: Action[] = [];
     if (groups.length === 1 && alone) {
@@ -419,7 +421,7 @@ export function createFocus(host: FocusHost) {
       { id: "apart", label: "Break apart", icon: I.Apart, run: ed.breakApart },
     );
     return out;
-  };
+  }
 
   return { focus, label, info, actions, say };
 }
