@@ -32,6 +32,8 @@
   --dot: rgba(0, 0, 0, 0.1);
   --scrim: rgba(10, 12, 16, 0.28);
   --shadow: 0 1px 2px rgba(16, 20, 28, 0.06), 0 8px 24px rgba(16, 20, 28, 0.08);
+  /* Over a scrim, where the one above would hardly show. */
+  --shadow-modal: 0 2px 6px rgba(16, 20, 28, 0.14), 0 20px 56px rgba(16, 20, 28, 0.34);
   /* Tiles are a flat, quiet fill, a shade off the panel, as Apple fills grouped controls. */
   --tile-bg: color-mix(in srgb, var(--ink) 5%, var(--chrome));
   --tile-hover: color-mix(in srgb, var(--ink) 9%, var(--chrome));
@@ -72,6 +74,7 @@
     --dot: rgba(255, 255, 255, 0.13);
     --scrim: rgba(0, 0, 0, 0.5);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
+    --shadow-modal: 0 2px 6px rgba(0, 0, 0, 0.5), 0 20px 56px rgba(0, 0, 0, 0.75);
     color-scheme: dark;
   }
 }
@@ -95,6 +98,7 @@
   --dot: rgba(255, 255, 255, 0.13);
   --scrim: rgba(0, 0, 0, 0.5);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 2px 6px rgba(0, 0, 0, 0.5), 0 20px 56px rgba(0, 0, 0, 0.75);
   color-scheme: dark;
 }
 
@@ -2303,7 +2307,7 @@ kbd {
   background: var(--chrome);
   border: 1px solid var(--line);
   border-radius: var(--r-pop);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-modal);
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -2392,7 +2396,7 @@ kbd {
   background: var(--chrome);
   border: 1px solid var(--line);
   border-radius: var(--r-pop);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-modal);
 }
 
 .about:focus {
