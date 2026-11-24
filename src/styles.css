@@ -4682,6 +4682,11 @@ button.select.open {
   color: var(--muted);
 }
 
+/* Only the model's name gives way: anything else squeezed would lose its padding. */
+.chat-model > .btn {
+  flex: none;
+}
+
 .chat-model .btn > span {
   overflow: hidden;
   text-overflow: ellipsis;
