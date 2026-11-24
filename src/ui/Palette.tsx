@@ -39,6 +39,9 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
   };
   const setEditing = (id: string | undefined) => (id ? canLeave() && ed.openAgent(id) : ed.closeAgent());
   const [carry, setCarry] = createSignal<Carry>();
+  /** The tile held down, while it's pressed and while one is dragged from it. */
+  const [pressed, setPressed] = createSignal<Carry["what"]>();
+  const isPressed = (kind: Carry["what"]["kind"], id: string) => pressed()?.kind === kind && pressed()?.id === id;
   let cancelCarry: (() => void) | undefined;
   const stopCarry = () => { cancelCarry?.(); };
   onCleanup(onThaw(stopCarry));
@@ -69,6 +72,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
     const x0 = e.clientX;
     const y0 = e.clientY;
     let dragging = false;
+    setPressed(what);
     // While a rule editor is open, new agents go into it, and only there.
     const sub = subEditor();
     const into = sub ?? { m, camera: props.camera };
@@ -115,6 +119,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", stopCarry);
+      setPressed(undefined);
       setCarry(undefined);
       into.m.setPlacing(undefined);
       cancelCarry = undefined;
@@ -152,7 +157,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
               {(t) => (
                 <button
                   class="tile"
-                  classList={{ editing: editing() === t.id }}
+                  classList={{ editing: editing() === t.id, pressed: isPressed("type", t.id) }}
                   onPointerDown={press({ kind: "type", id: t.id }, () => setEditing(t.id))}
                   onPointerEnter={() => m.setHover({ kind: "type", id: t.id })}
                   onPointerLeave={() => m.setHover(undefined)}
@@ -185,6 +190,7 @@ export function Palette(props: { ed: Editor; camera: Camera }) {
                 {(d) => (
                   <button
                     class="tile component"
+                    classList={{ pressed: isPressed("component", d.id) }}
                     onPointerDown={press({ kind: "component", id: d.id }, () => ed.openComponent(d.id))}
                     onPointerEnter={() => m.setHover({ kind: "component", id: d.id })}
                     onPointerLeave={() => m.setHover(undefined)}

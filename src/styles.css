@@ -35,6 +35,7 @@
   /* Tiles are a flat, quiet fill, a shade off the panel, as Apple fills grouped controls. */
   --tile-bg: color-mix(in srgb, var(--ink) 5%, var(--chrome));
   --tile-hover: color-mix(in srgb, var(--ink) 9%, var(--chrome));
+  --tile-pressed: color-mix(in srgb, var(--ink) 15%, var(--chrome));
   /*
    * Roles in the interface, coloured the way an editor colours code: ports,
    * types and directions each get a colour of their own. Agents, symbols
@@ -1253,6 +1254,12 @@ kbd {
 
 .tile.component:hover {
   --glyph-paper: var(--chrome-2);
+}
+
+/* Held down, and while one is dragged out of it. */
+.tile.pressed,
+.tile.component.pressed {
+  --glyph-paper: var(--tile-pressed);
 }
 
 .tile-name {
